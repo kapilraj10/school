@@ -4,39 +4,32 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\AcademicTermResource\Pages;
 use App\Models\AcademicTerm;
-use BackedEnum;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Select;
-use Filament\Schemas\Components\TextInput;
-use Filament\Schemas\Components\Toggle;
-use Filament\Schemas\Components\DatePicker;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables;
 use Filament\Tables\Table;
-use UnitEnum;
 
 class AcademicTermResource extends Resource
 {
     protected static ?string $model = AcademicTerm::class;
     
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendar;
+    protected static ?string $navigationIcon = 'heroicon-o-calendar';
     
     protected static ?string $navigationLabel = 'Academic Terms';
     
-    protected static UnitEnum|string|null $navigationGroup = 'Academic Management';
+    protected static ?string $navigationGroup = 'Academic Management';
     
     protected static ?int $navigationSort = 4;
 
-    public static function form(Schema $schema): Schema
+    public static function form(Form $form): Form
     {
-        return $schema->components([
+        return $form->schema([
             Section::make('Term Information')
                 ->description('Enter the basic information for the academic term')
                 ->schema([
@@ -129,12 +122,12 @@ class AcademicTermResource extends Resource
                     ]),
             ])
             ->actions([
-                EditAction::make(),
-                DeleteAction::make(),
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
     }

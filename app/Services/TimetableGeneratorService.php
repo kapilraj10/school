@@ -23,11 +23,16 @@ class TimetableGeneratorService
         5 => 'Friday',
     ];
 
+    private const PERIODS_PER_DAY = 8;
+    private const MAX_SUBJECT_CONSECUTIVE = 1; // Max consecutive periods for same subject
+    private const MAX_SUBJECT_PER_DAY = 2; // Max periods per subject per day
+
     private array $errors = [];
     private array $warnings = [];
     private Collection $constraints;
-    private array $teacherSchedule = []; // [teacher_id][day] => period_count
+    private array $teacherSchedule = []; // [teacher_id][day][period] => slot_info
     private array $subjectDistribution = []; // [class_id][subject_id] => periods_assigned
+    private array $classSchedule = []; // [class_id][day][period] => slot_info
 
     public function __construct()
     {
@@ -43,14 +48,17 @@ class TimetableGeneratorService
         $this->warnings = [];
         $this->teacherSchedule = [];
         $this->subjectDistribution = [];
+        $this->classSchedule = [];
 
         try {
             DB::beginTransaction();
 
-            // Clear existing timetable for these classes
-            TimetableSlot::whereIn('class_room_id', $classIds)
-                ->where('academic_term_id', $termId)
-                ->delete();
+            // Clear existing timetable for these classes if option is set
+            if ($options['clear_existing'] ?? true) {
+                TimetableSlot::whereIn('class_room_id', $classIds)
+                    ->where('academic_term_id', $termId)
+                    ->delete();
+            }
 
             $classes = ClassRoom::whereIn('id', $classIds)->get();
             $term = AcademicTerm::findOrFail($termId);
@@ -58,9 +66,9 @@ class TimetableGeneratorService
             // Step 1: Place combined periods first
             $this->placeCombinedPeriods($classes, $term);
 
-            // Step 2: Generate for each class
+            // Step 2: Generate for each class using improved algorithm
             foreach ($classes as $class) {
-                $this->generateForClass($class, $term, $options);
+                $this->generateForClassImproved($class, $term, $options);
             }
 
             // Step 3: Validate all constraints
@@ -127,77 +135,395 @@ class TimetableGeneratorService
     }
 
     /**
-     * Generate timetable for a single class
+     * Generate timetable for a single class using improved algorithm
+     * Based on the sophisticated algorithm from Algorithm.php
      */
-    private function generateForClass(ClassRoom $class, AcademicTerm $term, array $options): void
+    private function generateForClassImproved(ClassRoom $class, AcademicTerm $term, array $options): void
     {
-        // Get applicable subjects for this class level
-        $subjects = Subject::active()
-            ->forLevel($class->level)
-            ->orderBy('weekly_periods', 'desc')
-            ->get();
+        // Initialize class schedule tracker
+        $this->classSchedule[$class->id] = [];
+        for ($day = 0; $day < 6; $day++) {
+            $this->classSchedule[$class->id][$day] = array_fill(1, self::PERIODS_PER_DAY, null);
+        }
 
         // Get existing slots (combined periods)
         $existingSlots = TimetableSlot::where('class_room_id', $class->id)
             ->where('academic_term_id', $term->id)
-            ->get()
-            ->groupBy('day')
-            ->map(fn($slots) => $slots->pluck('period')->toArray())
-            ->toArray();
+            ->get();
+
+        // Mark existing slots in schedule
+        foreach ($existingSlots as $slot) {
+            $this->classSchedule[$class->id][$slot->day][$slot->period] = [
+                'subject_id' => $slot->subject_id,
+                'teacher_id' => $slot->teacher_id,
+                'is_combined' => $slot->is_combined,
+            ];
+        }
+
+        // Get applicable subjects for this class level
+        $subjects = Subject::active()
+            ->forLevel($class->level)
+            ->get();
+
+        // Sort subjects by priority (core subjects first, then by weekly_periods desc)
+        $subjects = $subjects->sort(function($a, $b) {
+            $priorityA = $this->getSubjectPriority($a);
+            $priorityB = $this->getSubjectPriority($b);
+            
+            if ($priorityA !== $priorityB) {
+                return $priorityA - $priorityB;
+            }
+            
+            return $b->weekly_periods <=> $a->weekly_periods;
+        })->values();
 
         // Initialize subject distribution tracker
         $this->subjectDistribution[$class->id] = [];
-
-        // Calculate total periods needed
-        $totalPeriods = $class->weekly_periods;
-        $days = 6; // Sunday to Friday (0-5)
-        $periodsPerDay = 8;
-
-        // Distribute subjects
         foreach ($subjects as $subject) {
-            $periodsNeeded = $subject->weekly_periods ?? 4;
-            $periodsAssigned = 0;
+            $this->subjectDistribution[$class->id][$subject->id] = 0;
+        }
 
-            // Try to assign periods throughout the week
-            for ($day = 0; $day < $days && $periodsAssigned < $periodsNeeded; $day++) {
-                for ($period = 1; $period <= $periodsPerDay && $periodsAssigned < $periodsNeeded; $period++) {
-                    // Check if slot is already taken
-                    if (isset($existingSlots[$day]) && in_array($period, $existingSlots[$day])) {
-                        continue;
-                    }
+        // === PHASE 1: Assign minimum periods to all subjects ===
+        foreach ($subjects as $subject) {
+            $minPeriods = $this->getMinPeriodsPerWeek($subject);
+            $assigned = $this->assignPeriodsForSubject(
+                $class,
+                $subject,
+                $term,
+                $minPeriods,
+                $options
+            );
 
-                    // Find available teacher
-                    $teacher = $this->findAvailableTeacher($subject, $day, $period, $term->id);
+            if ($assigned < $minPeriods) {
+                $this->warnings[] = "Could only assign {$assigned}/{$minPeriods} minimum periods for {$subject->name} in {$class->full_name}";
+            }
+        }
 
-                    if (!$teacher) {
-                        $this->warnings[] = "No available teacher for {$subject->name} in {$class->full_name} on day $day period $period";
-                        continue;
-                    }
+        // === PHASE 2: Fill remaining slots up to max periods ===
+        foreach ($subjects as $subject) {
+            $maxPeriods = $this->getMaxPeriodsPerWeek($subject);
+            $currentAssigned = $this->subjectDistribution[$class->id][$subject->id];
+            
+            if ($currentAssigned < $maxPeriods) {
+                $additionalNeeded = $maxPeriods - $currentAssigned;
+                $assigned = $this->assignPeriodsForSubject(
+                    $class,
+                    $subject,
+                    $term,
+                    $additionalNeeded,
+                    $options,
+                    false // Don't be strict in phase 2
+                );
+            }
+        }
 
-                    // Create slot
-                    TimetableSlot::create([
-                        'class_room_id' => $class->id,
-                        'subject_id' => $subject->id,
-                        'teacher_id' => $teacher->id,
-                        'day' => $day,
-                        'period' => $period,
-                        'is_combined' => false,
-                        'academic_term_id' => $term->id,
-                    ]);
+        // === PHASE 3: Fill any remaining empty slots ===
+        $this->fillRemainingSlots($class, $subjects, $term, $options);
+    }
 
-                    // Mark slot as taken
-                    $existingSlots[$day][] = $period;
+    /**
+     * Get subject priority for sorting (lower is higher priority)
+     */
+    private function getSubjectPriority(Subject $subject): int
+    {
+        return match($subject->type) {
+            'core' => 0,
+            'compulsory' => 0,
+            'elective' => 1,
+            'co_curricular' => 2,
+            default => 3,
+        };
+    }
 
-                    // Track assignment
-                    $this->trackTeacherAssignment($teacher->id, $day);
-                    $periodsAssigned++;
-                }
+    /**
+     * Get minimum periods per week for a subject
+     */
+    private function getMinPeriodsPerWeek(Subject $subject): int
+    {
+        // Check if subject has min_periods_per_week attribute
+        if (isset($subject->min_periods_per_week)) {
+            return $subject->min_periods_per_week;
+        }
+        
+        // Fallback to weekly_periods or default based on type
+        return $subject->weekly_periods ?? ($subject->type === 'core' ? 4 : 2);
+    }
+
+    /**
+     * Get maximum periods per week for a subject
+     */
+    private function getMaxPeriodsPerWeek(Subject $subject): int
+    {
+        // Check if subject has max_periods_per_week attribute
+        if (isset($subject->max_periods_per_week)) {
+            return $subject->max_periods_per_week;
+        }
+        
+        // Fallback to weekly_periods or slightly higher
+        $base = $subject->weekly_periods ?? 4;
+        return $base + 1; // Allow one extra period if slots available
+    }
+
+    /**
+     * Assign periods for a specific subject
+     */
+    private function assignPeriodsForSubject(
+        ClassRoom $class,
+        Subject $subject,
+        AcademicTerm $term,
+        int $periodsNeeded,
+        array $options,
+        bool $strict = true
+    ): int {
+        $periodsAssigned = 0;
+        $respectTeacherAvail = $options['respect_teacher_availability'] ?? true;
+        $avoidConsecutive = $options['avoid_consecutive_subjects'] ?? true;
+        $balanceDailyLoad = $options['balance_daily_load'] ?? true;
+
+        // Get days in optimal order (distribute throughout week)
+        $days = $balanceDailyLoad ? $this->getOptimalDayOrder($class) : range(0, 5);
+
+        foreach ($days as $day) {
+            if ($periodsAssigned >= $periodsNeeded) {
+                break;
             }
 
-            $this->subjectDistribution[$class->id][$subject->id] = $periodsAssigned;
+            // Check how many periods of this subject already assigned today
+            $todayCount = $this->countSubjectPeriodsOnDay($class->id, $subject->id, $day);
+            
+            if ($todayCount >= self::MAX_SUBJECT_PER_DAY && $strict) {
+                continue; // Limit subject occurrences per day
+            }
 
-            if ($periodsAssigned < $periodsNeeded) {
-                $this->warnings[] = "Only assigned {$periodsAssigned}/{$periodsNeeded} periods for {$subject->name} in {$class->full_name}";
+            // Find available slots for this day
+            for ($period = 1; $period <= self::PERIODS_PER_DAY; $period++) {
+                if ($periodsAssigned >= $periodsNeeded) {
+                    break;
+                }
+
+                // Check if slot is empty
+                if ($this->classSchedule[$class->id][$day][$period] !== null) {
+                    continue;
+                }
+
+                // Check consecutive subjects if option enabled
+                if ($avoidConsecutive && $this->wouldBeConsecutive($class->id, $subject->id, $day, $period)) {
+                    continue;
+                }
+
+                // Find available teacher
+                $teacher = $this->findAvailableTeacherImproved(
+                    $subject,
+                    $day,
+                    $period,
+                    $term->id,
+                    $respectTeacherAvail
+                );
+
+                if (!$teacher) {
+                    if ($strict) {
+                        continue; // Skip this slot if no teacher available
+                    }
+                    // In non-strict mode, we might want to assign anyway
+                    $this->warnings[] = "No available teacher for {$subject->name} in {$class->full_name} on day $day period $period";
+                    continue;
+                }
+
+                // Create the slot
+                $slot = TimetableSlot::create([
+                    'class_room_id' => $class->id,
+                    'subject_id' => $subject->id,
+                    'teacher_id' => $teacher->id,
+                    'day' => $day,
+                    'period' => $period,
+                    'is_combined' => false,
+                    'academic_term_id' => $term->id,
+                ]);
+
+                // Update tracking structures
+                $this->classSchedule[$class->id][$day][$period] = [
+                    'subject_id' => $subject->id,
+                    'teacher_id' => $teacher->id,
+                    'is_combined' => false,
+                ];
+
+                $this->trackTeacherAssignment($teacher->id, $day, $period, $slot);
+                $this->subjectDistribution[$class->id][$subject->id]++;
+                $periodsAssigned++;
+            }
+        }
+
+        return $periodsAssigned;
+    }
+
+    /**
+     * Get optimal day order for balanced distribution
+     */
+    private function getOptimalDayOrder(ClassRoom $class): array
+    {
+        // Calculate current load per day
+        $dailyLoad = [];
+        for ($day = 0; $day < 6; $day++) {
+            $count = 0;
+            foreach ($this->classSchedule[$class->id][$day] as $slot) {
+                if ($slot !== null) {
+                    $count++;
+                }
+            }
+            $dailyLoad[$day] = $count;
+        }
+
+        // Sort days by load (least loaded first)
+        asort($dailyLoad);
+        return array_keys($dailyLoad);
+    }
+
+    /**
+     * Count how many periods of a subject are already on a specific day
+     */
+    private function countSubjectPeriodsOnDay(int $classId, int $subjectId, int $day): int
+    {
+        $count = 0;
+        foreach ($this->classSchedule[$classId][$day] as $slot) {
+            if ($slot && $slot['subject_id'] === $subjectId) {
+                $count++;
+            }
+        }
+        return $count;
+    }
+
+    /**
+     * Check if assigning this subject would create consecutive periods
+     */
+    private function wouldBeConsecutive(int $classId, int $subjectId, int $day, int $period): bool
+    {
+        // Check previous period
+        if ($period > 1) {
+            $prevSlot = $this->classSchedule[$classId][$day][$period - 1];
+            if ($prevSlot && $prevSlot['subject_id'] === $subjectId) {
+                // Check if we already have max consecutive
+                $consecutiveCount = 1;
+                for ($p = $period - 2; $p >= 1; $p--) {
+                    $slot = $this->classSchedule[$classId][$day][$p];
+                    if ($slot && $slot['subject_id'] === $subjectId) {
+                        $consecutiveCount++;
+                    } else {
+                        break;
+                    }
+                }
+                if ($consecutiveCount >= self::MAX_SUBJECT_CONSECUTIVE) {
+                    return true;
+                }
+            }
+        }
+
+        // Check next period
+        if ($period < self::PERIODS_PER_DAY) {
+            $nextSlot = $this->classSchedule[$classId][$day][$period + 1];
+            if ($nextSlot && $nextSlot['subject_id'] === $subjectId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Find an available teacher with improved logic
+     */
+    private function findAvailableTeacherImproved(
+        Subject $subject,
+        int $day,
+        int $period,
+        int $termId,
+        bool $respectAvailability = true
+    ): ?Teacher {
+        // Get teachers who can teach this subject
+        $teachers = Teacher::active()
+            ->whereJsonContains('subject_ids', $subject->id)
+            ->get();
+
+        foreach ($teachers as $teacher) {
+            // Check teacher availability if option enabled
+            if ($respectAvailability && !$teacher->isAvailable($day, $period)) {
+                continue;
+            }
+
+            // Check if teacher is already assigned at this time (in our tracking)
+            if (isset($this->teacherSchedule[$teacher->id][$day][$period])) {
+                continue;
+            }
+
+            // Check daily limit
+            $dailyPeriods = count($this->teacherSchedule[$teacher->id][$day] ?? []);
+            if ($dailyPeriods >= $teacher->max_periods_per_day) {
+                continue;
+            }
+
+            return $teacher;
+        }
+
+        return null;
+    }
+
+    /**
+     * Fill remaining empty slots with any available subjects
+     */
+    private function fillRemainingSlots(ClassRoom $class, Collection $subjects, AcademicTerm $term, array $options): void
+    {
+        $respectTeacherAvail = $options['respect_teacher_availability'] ?? true;
+        $subjectIndex = 0;
+
+        for ($day = 0; $day < 6; $day++) {
+            for ($period = 1; $period <= self::PERIODS_PER_DAY; $period++) {
+                // Check if slot is empty
+                if ($this->classSchedule[$class->id][$day][$period] !== null) {
+                    continue;
+                }
+
+                // Try to find any available subject/teacher combination
+                $attempts = 0;
+                while ($attempts < $subjects->count()) {
+                    $subject = $subjects[$subjectIndex % $subjects->count()];
+                    
+                    // Find teacher
+                    $teacher = $this->findAvailableTeacherImproved(
+                        $subject,
+                        $day,
+                        $period,
+                        $term->id,
+                        $respectTeacherAvail
+                    );
+
+                    if ($teacher) {
+                        // Create the slot
+                        $slot = TimetableSlot::create([
+                            'class_room_id' => $class->id,
+                            'subject_id' => $subject->id,
+                            'teacher_id' => $teacher->id,
+                            'day' => $day,
+                            'period' => $period,
+                            'is_combined' => false,
+                            'academic_term_id' => $term->id,
+                        ]);
+
+                        // Update tracking
+                        $this->classSchedule[$class->id][$day][$period] = [
+                            'subject_id' => $subject->id,
+                            'teacher_id' => $teacher->id,
+                            'is_combined' => false,
+                        ];
+
+                        $this->trackTeacherAssignment($teacher->id, $day, $period, $slot);
+                        $this->subjectDistribution[$class->id][$subject->id]++;
+                        
+                        $subjectIndex++;
+                        break;
+                    }
+
+                    $subjectIndex++;
+                    $attempts++;
+                }
             }
         }
     }
@@ -230,7 +556,11 @@ class TimetableGeneratorService
             }
 
             // Check daily limit
-            $dailyPeriods = $this->teacherSchedule[$teacher->id][$day] ?? 0;
+            $dailyPeriods = TimetableSlot::where('teacher_id', $teacher->id)
+                ->where('academic_term_id', $termId)
+                ->where('day', $day)
+                ->count();
+            
             if ($dailyPeriods >= $teacher->max_periods_per_day) {
                 continue;
             }
@@ -244,17 +574,17 @@ class TimetableGeneratorService
     /**
      * Track teacher assignment
      */
-    private function trackTeacherAssignment(int $teacherId, int $day): void
+    private function trackTeacherAssignment(int $teacherId, int $day, int $period, $slotInfo = null): void
     {
         if (!isset($this->teacherSchedule[$teacherId])) {
             $this->teacherSchedule[$teacherId] = [];
         }
 
         if (!isset($this->teacherSchedule[$teacherId][$day])) {
-            $this->teacherSchedule[$teacherId][$day] = 0;
+            $this->teacherSchedule[$teacherId][$day] = [];
         }
 
-        $this->teacherSchedule[$teacherId][$day]++;
+        $this->teacherSchedule[$teacherId][$day][$period] = $slotInfo;
     }
 
     /**

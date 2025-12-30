@@ -5,43 +5,37 @@ namespace App\Filament\Pages;
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\TimetableSlot;
-use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Pages\Concerns\HasMaxWidth;
-use Filament\Schemas\Schema;
 use Filament\Support\Enums\MaxWidth;
-use Filament\Support\Enums\Width;
-use Filament\Support\Icons\Heroicon;
-use UnitEnum;
 
 class TimetableViewer extends Page implements HasForms
 {
     use InteractsWithForms;
-    use HasMaxWidth;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
+    protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
 
-    protected string $view = 'filament.pages.timetable-viewer';
+    protected static string $view = 'filament.pages.timetable-viewer';
 
     protected static ?string $navigationLabel = 'View Timetable';
 
     protected static ?string $title = 'Timetable Viewer';
 
-    protected static UnitEnum|string|null $navigationGroup = 'Timetable Management';
+    protected static ?string $navigationGroup = 'Timetable Management';
 
     protected static ?int $navigationSort = 2;
 
     public ?array $data = [];
     public $timetableData = null;
 
-    protected function getHeaderWidthClass(): ?string
+    public function getMaxContentWidth(): MaxWidth
     {
-        return Width::Full->value;
+        return MaxWidth::Full;
     }
 
     public function mount(): void
@@ -49,7 +43,6 @@ class TimetableViewer extends Page implements HasForms
         $currentTerm = AcademicTerm::where('is_active', true)->first();
         $firstClass = ClassRoom::active()->first();
 
-        // Check for URL parameters
         $classId = request('class_id');
         $termId = request('term_id');
 
@@ -63,10 +56,10 @@ class TimetableViewer extends Page implements HasForms
         }
     }
 
-    public function form(Schema $schema): Schema
+    public function form(Form $form): Form
     {
-        return $schema
-            ->components([
+        return $form
+            ->schema([
                 Select::make('academic_term_id')
                     ->label('Academic Term')
                     ->options(AcademicTerm::query()->orderBy('year', 'desc')->orderBy('term', 'desc')->pluck('name', 'id'))
@@ -105,9 +98,8 @@ class TimetableViewer extends Page implements HasForms
             ->orderBy('period')
             ->get();
 
-        // Organize by day and period
         $organized = [];
-        for ($day = 1; $day <= 5; $day++) { // Monday to Friday
+        for ($day = 1; $day <= 5; $day++) {
             $organized[$day] = [];
             for ($period = 1; $period <= 8; $period++) {
                 $slot = $slots->where('day', $day)->where('period', $period)->first();

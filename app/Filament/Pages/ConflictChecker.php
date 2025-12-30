@@ -4,31 +4,28 @@ namespace App\Filament\Pages;
 
 use App\Models\AcademicTerm;
 use App\Models\TimetableSlot;
-use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\DB;
-use UnitEnum;
 
 class ConflictChecker extends Page implements HasForms
 {
     use InteractsWithForms;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedExclamationTriangle;
+    protected static ?string $navigationIcon = 'heroicon-o-exclamation-triangle';
 
-    protected string $view = 'filament.pages.conflict-checker';
+    protected static string $view = 'filament.pages.conflict-checker';
 
     protected static ?string $navigationLabel = 'Conflict Checker';
 
     protected static ?string $title = 'Conflict Checker';
 
-    protected static UnitEnum|string|null $navigationGroup = 'Timetable Management';
+    protected static ?string $navigationGroup = 'Timetable Management';
 
     protected static ?int $navigationSort = 4;
 
@@ -48,10 +45,10 @@ class ConflictChecker extends Page implements HasForms
         }
     }
 
-    public function form(Schema $schema): Schema
+    public function form(Form $form): Form
     {
-        return $schema
-            ->components([
+        return $form
+            ->schema([
                 Select::make('academic_term_id')
                     ->label('Academic Term')
                     ->options(AcademicTerm::query()->orderBy('year', 'desc')->orderBy('term', 'desc')->pluck('name', 'id'))
@@ -75,7 +72,6 @@ class ConflictChecker extends Page implements HasForms
 
         $termId = $data['academic_term_id'];
         
-        // Check for teacher conflicts (same teacher, same time, different classes)
         $teacherConflicts = DB::table('timetable_slots as t1')
             ->join('timetable_slots as t2', function($join) use ($termId) {
                 $join->on('t1.teacher_id', '=', 't2.teacher_id')
@@ -83,7 +79,7 @@ class ConflictChecker extends Page implements HasForms
                     ->on('t1.period', '=', 't2.period')
                     ->where('t1.academic_term_id', $termId)
                     ->where('t2.academic_term_id', $termId)
-                    ->whereColumn('t1.id', '<', 't2.id'); // Avoid duplicate pairs
+                    ->whereColumn('t1.id', '<', 't2.id');
             })
             ->join('teachers', 't1.teacher_id', '=', 'teachers.id')
             ->join('class_rooms as c1', 't1.class_room_id', '=', 'c1.id')
@@ -102,7 +98,6 @@ class ConflictChecker extends Page implements HasForms
             )
             ->get();
 
-        // Check for unavailable periods violations
         $unavailableViolations = DB::table('timetable_slots as ts')
             ->join('teachers as t', 'ts.teacher_id', '=', 't.id')
             ->where('ts.academic_term_id', $termId)
@@ -119,7 +114,6 @@ class ConflictChecker extends Page implements HasForms
                 return false;
             });
 
-        // Check for overloaded teachers (exceeding max periods per week)
         $overloadedTeachers = DB::table('timetable_slots as ts')
             ->join('teachers as t', 'ts.teacher_id', '=', 't.id')
             ->where('ts.academic_term_id', $termId)

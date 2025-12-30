@@ -13,12 +13,18 @@ class Subject extends Model
         'code',
         'type',
         'weekly_periods',
+        'min_periods_per_week',
+        'max_periods_per_week',
         'level',
         'status',
+        'class_range',
+        'single_combined',
     ];
 
     protected $casts = [
         'weekly_periods' => 'integer',
+        'min_periods_per_week' => 'integer',
+        'max_periods_per_week' => 'integer',
     ];
 
     /**

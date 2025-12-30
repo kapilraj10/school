@@ -3,20 +3,19 @@
 namespace App\Filament\Resources\Teachers\Schemas;
 
 use App\Models\Subject;
-use Filament\Forms\Components\CheckboxList;
-use Filament\Schemas\Components\Grid;
+use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Repeater;
-use Filament\Schemas\Components\Section;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Schemas\Schema;
+use Filament\Forms\Form;
 
 class TeacherForm
 {
-    public static function configure(Schema $schema): Schema
+    public static function configure(Form $form): Form
     {
-        return $schema
-            ->components([
+        return $form
+            ->schema([
                 Section::make('Personal Information')
                     ->description('Enter the teacher\'s basic information')
                     ->schema([
@@ -109,50 +108,40 @@ class TeacherForm
                             ]),
                     ]),
 
-                Section::make('Unavailable Periods')
-                    ->description('Specify when this teacher is not available')
+                Section::make('Available Periods')
+                    ->description('Specify when this teacher is available to teach')
                     ->schema([
-                        Repeater::make('unavailable_periods')
-                            ->label('Unavailable Time Slots')
-                            ->schema([
-                                Select::make('day')
-                                    ->label('Day')
-                                    ->options([
-                                        1 => 'Monday',
-                                        2 => 'Tuesday',
-                                        3 => 'Wednesday',
-                                        4 => 'Thursday',
-                                        5 => 'Friday',
-                                    ])
-                                    ->required()
-                                    ->native(false)
-                                    ->columnSpan(1),
-
-                                Select::make('period')
-                                    ->label('Period')
-                                    ->options([
-                                        1 => 'Period 1',
-                                        2 => 'Period 2',
-                                        3 => 'Period 3',
-                                        4 => 'Period 4',
-                                        5 => 'Period 5',
-                                        6 => 'Period 6',
-                                        7 => 'Period 7',
-                                        8 => 'Period 8',
-                                    ])
-                                    ->required()
-                                    ->native(false)
-                                    ->columnSpan(1),
+                        Select::make('available_days')
+                            ->label('Available Days')
+                            ->multiple()
+                            ->options([
+                                'Sun' => 'Sunday',
+                                'Mon' => 'Monday',
+                                'Tue' => 'Tuesday',
+                                'Wed' => 'Wednesday',
+                                'Thu' => 'Thursday',
+                                'Fri' => 'Friday',
                             ])
-                            ->columns(2)
-                            ->defaultItems(0)
-                            ->addActionLabel('Add Unavailable Period')
-                            ->collapsible()
-                            ->itemLabel(fn (array $state): ?string => 
-                                isset($state['day'], $state['period']) 
-                                    ? ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][$state['day']] . ' - Period ' . $state['period']
-                                    : null
-                            ),
+                            ->required()
+                            ->native(false)
+                            ->helperText('Select days when teacher is available'),
+
+                        Select::make('available_periods')
+                            ->label('Available Periods')
+                            ->multiple()
+                            ->options([
+                                1 => 'Period 1',
+                                2 => 'Period 2',
+                                3 => 'Period 3',
+                                4 => 'Period 4',
+                                5 => 'Period 5',
+                                6 => 'Period 6',
+                                7 => 'Period 7',
+                                8 => 'Period 8',
+                            ])
+                            ->required()
+                            ->native(false)
+                            ->helperText('Select periods when teacher is available'),
                     ])
                     ->collapsible(),
             ]);

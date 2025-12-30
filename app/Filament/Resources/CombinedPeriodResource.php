@@ -9,38 +9,31 @@ use App\Models\CombinedPeriod;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimetableSlot;
-use BackedEnum;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Schemas\Components\CheckboxList;
-use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Select;
-use Filament\Schemas\Components\TextInput;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables;
 use Filament\Tables\Table;
-use UnitEnum;
 
 class CombinedPeriodResource extends Resource
 {
     protected static ?string $model = CombinedPeriod::class;
     
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
+    protected static ?string $navigationIcon = 'heroicon-o-user-group';
     
     protected static ?string $navigationLabel = 'Combined Periods';
     
-    protected static UnitEnum|string|null $navigationGroup = 'Timetable Management';
+    protected static ?string $navigationGroup = 'Timetable Management';
     
     protected static ?int $navigationSort = 6;
 
-    public static function form(Schema $schema): Schema
+    public static function form(Form $form): Form
     {
-        return $schema->components([
+        return $form->schema([
             Section::make('Combined Period Details')
                 ->description('Setup a combined period for multiple classes')
                 ->schema([
@@ -152,12 +145,12 @@ class CombinedPeriodResource extends Resource
                     ->options(Subject::pluck('name', 'id')),
             ])
             ->actions([
-                EditAction::make(),
-                DeleteAction::make(),
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
     }

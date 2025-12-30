@@ -6,40 +6,34 @@ use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\Subject;
 use App\Services\TimetableGeneratorService;
-use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Actions\Action as FormAction;
 use Filament\Forms\Components\CheckboxList;
-use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\Wizard;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Utilities\Get;
-use Filament\Schemas\Components\Wizard;
-use Filament\Schemas\Schema;
-use Filament\Support\Enums\IconSize;
-use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Log;
-use UnitEnum;
 
 class TimetableGenerator extends Page implements HasForms
 {
     use InteractsWithForms;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSparkles;
+    protected static ?string $navigationIcon = 'heroicon-o-sparkles';
 
-    protected string $view = 'filament.pages.timetable-generator';
+    protected static string $view = 'filament.pages.timetable-generator';
 
     protected static ?string $navigationLabel = 'Generate Timetable';
 
     protected static ?string $title = 'Timetable Generator';
 
-    protected static UnitEnum|string|null $navigationGroup = 'Timetable Management';
+    protected static ?string $navigationGroup = 'Timetable Management';
 
     protected static ?int $navigationSort = 1;
 
@@ -56,15 +50,10 @@ class TimetableGenerator extends Page implements HasForms
         ]);
     }
 
-    /**
-     * Use Schema-style signature (compatible with your installed Filament version).
-     *
-     * Note: InteractsWithForms in your vendor expects Filament\Schemas\Schema.
-     */
-    public function form(Schema $schema): Schema
+    public function form(Form $form): Form
     {
-        return $schema
-            ->components([
+        return $form
+            ->schema([
                 Wizard::make([
                     Wizard\Step::make('Select Classes')
                         ->description('Choose classes to generate timetable for')
@@ -138,7 +127,6 @@ class TimetableGenerator extends Page implements HasForms
                                     $classes = ClassRoom::whereIn('id', $classIds)->get();
                                     $settings = $get();
 
-                                    // Return rendered HTML (keep consistent with Schema placeholder expectations)
                                     return view('filament.components.generation-summary', [
                                         'term' => $term,
                                         'classes' => $classes,
@@ -153,9 +141,6 @@ class TimetableGenerator extends Page implements HasForms
             ->statePath('data');
     }
 
-    /**
-     * Use getFormActions() for Schema-style form actions (keeps parity with older Filament versions).
-     */
     protected function getFormActions(): array
     {
         return [
@@ -218,7 +203,6 @@ class TimetableGenerator extends Page implements HasForms
                     }
                 }
 
-                // Redirect after a short delay (retaining your previous JS approach)
                 $this->js('setTimeout(() => window.location.href = "' . route('filament.admin.resources.timetable-slots.index') . '", 2000)');
             } else {
                 Notification::make()

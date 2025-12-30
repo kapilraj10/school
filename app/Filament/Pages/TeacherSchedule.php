@@ -5,30 +5,27 @@ namespace App\Filament\Pages;
 use App\Models\AcademicTerm;
 use App\Models\Teacher;
 use App\Models\TimetableSlot;
-use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
-use UnitEnum;
 
 class TeacherSchedule extends Page implements HasForms
 {
     use InteractsWithForms;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserCircle;
+    protected static ?string $navigationIcon = 'heroicon-o-user-circle';
 
-    protected string $view = 'filament.pages.teacher-schedule';
+    protected static string $view = 'filament.pages.teacher-schedule';
 
     protected static ?string $navigationLabel = 'Teacher Schedule';
 
     protected static ?string $title = 'Teacher Schedule';
 
-    protected static UnitEnum|string|null $navigationGroup = 'Timetable Management';
+    protected static ?string $navigationGroup = 'Timetable Management';
 
     protected static ?int $navigationSort = 3;
 
@@ -50,10 +47,10 @@ class TeacherSchedule extends Page implements HasForms
         }
     }
 
-    public function form(Schema $schema): Schema
+    public function form(Form $form): Form
     {
-        return $schema
-            ->components([
+        return $form
+            ->schema([
                 Select::make('academic_term_id')
                     ->label('Academic Term')
                     ->options(AcademicTerm::query()->orderBy('year', 'desc')->orderBy('term', 'desc')->pluck('name', 'id'))
@@ -92,9 +89,8 @@ class TeacherSchedule extends Page implements HasForms
             ->orderBy('period')
             ->get();
 
-        // Organize by day and period
         $organized = [];
-        for ($day = 1; $day <= 5; $day++) { // Monday to Friday
+        for ($day = 1; $day <= 5; $day++) {
             $organized[$day] = [];
             for ($period = 1; $period <= 8; $period++) {
                 $slot = $slots->where('day', $day)->where('period', $period)->first();

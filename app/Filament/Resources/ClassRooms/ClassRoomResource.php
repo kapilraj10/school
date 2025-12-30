@@ -8,18 +8,15 @@ use App\Filament\Resources\ClassRooms\Pages\ListClassRooms;
 use App\Filament\Resources\ClassRooms\Schemas\ClassRoomForm;
 use App\Filament\Resources\ClassRooms\Tables\ClassRoomsTable;
 use App\Models\ClassRoom;
-use BackedEnum;
+use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
-use UnitEnum;
 
 class ClassRoomResource extends Resource
 {
     protected static ?string $model = ClassRoom::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
     protected static ?string $recordTitleAttribute = 'name';
 
@@ -29,13 +26,13 @@ class ClassRoomResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Classes';
 
-    protected static UnitEnum|string|null $navigationGroup = 'Academic Management';
+    protected static ?string $navigationGroup = 'Academic Management';
 
     protected static ?int $navigationSort = 1;
 
-    public static function form(Schema $schema): Schema
+    public static function form(Form $form): Form
     {
-        return ClassRoomForm::configure($schema);
+        return ClassRoomForm::configure($form);
     }
 
     public static function table(Table $table): Table

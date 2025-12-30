@@ -16,7 +16,8 @@ class Teacher extends Model
         'subject_ids',
         'max_periods_per_day',
         'max_periods_per_week',
-        'unavailable_periods',
+        'available_days',
+        'available_periods',
         'status',
     ];
 
@@ -24,7 +25,8 @@ class Teacher extends Model
         'subject_ids' => 'array',
         'max_periods_per_day' => 'integer',
         'max_periods_per_week' => 'integer',
-        'unavailable_periods' => 'array',
+        'available_days' => 'array',
+        'available_periods' => 'array',
     ];
 
     /**

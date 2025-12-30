@@ -5,30 +5,28 @@ namespace App\Filament\Pages;
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\Teacher;
-use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
-use UnitEnum;
 
 class PrintCenter extends Page implements HasForms
 {
     use InteractsWithForms;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPrinter;
+    protected static ?string $navigationIcon = 'heroicon-o-printer';
 
-    protected string $view = 'filament.pages.print-center';
+    protected static string $view = 'filament.pages.print-center';
 
     protected static ?string $navigationLabel = 'Print Center';
 
     protected static ?string $title = 'Print Center';
 
-    protected static UnitEnum|string|null $navigationGroup = 'Timetable Management';
+    protected static ?string $navigationGroup = 'Timetable Management';
 
     protected static ?int $navigationSort = 5;
 
@@ -44,10 +42,10 @@ class PrintCenter extends Page implements HasForms
         ]);
     }
 
-    public function form(Schema $schema): Schema
+    public function form(Form $form): Form
     {
-        return $schema
-            ->components([
+        return $form
+            ->schema([
                 Select::make('academic_term_id')
                     ->label('Academic Term')
                     ->options(AcademicTerm::query()->orderBy('year', 'desc')->orderBy('term', 'desc')->pluck('name', 'id'))
@@ -71,16 +69,16 @@ class PrintCenter extends Page implements HasForms
                 Select::make('class_room_id')
                     ->label('Select Class')
                     ->options(ClassRoom::active()->get()->mapWithKeys(fn($c) => [$c->id => $c->full_name]))
-                    ->visible(fn ($get) => $get('print_type') === 'class')
-                    ->required(fn ($get) => $get('print_type') === 'class')
+                    ->visible(fn (Get $get) => $get('print_type') === 'class')
+                    ->required(fn (Get $get) => $get('print_type') === 'class')
                     ->native(false)
                     ->searchable(),
 
                 Select::make('teacher_id')
                     ->label('Select Teacher')
                     ->options(Teacher::active()->pluck('name', 'id'))
-                    ->visible(fn ($get) => $get('print_type') === 'teacher')
-                    ->required(fn ($get) => $get('print_type') === 'teacher')
+                    ->visible(fn (Get $get) => $get('print_type') === 'teacher')
+                    ->required(fn (Get $get) => $get('print_type') === 'teacher')
                     ->native(false)
                     ->searchable(),
 
@@ -103,7 +101,6 @@ class PrintCenter extends Page implements HasForms
     {
         $data = $this->form->getState();
         
-        // Validate required fields based on print type
         if ($data['print_type'] === 'class' && empty($data['class_room_id'])) {
             Notification::make()
                 ->title('Validation Error')
@@ -122,15 +119,12 @@ class PrintCenter extends Page implements HasForms
             return;
         }
 
-        // Show notification that feature is being processed
         Notification::make()
             ->title('Generating Document')
             ->info()
             ->body('Your document is being generated. This feature will be fully implemented soon.')
             ->send();
 
-        // TODO: Implement actual PDF/Excel generation
-        // For now, redirect to appropriate view page
         if ($data['print_type'] === 'class' && isset($data['class_room_id'])) {
             return redirect()->route('filament.admin.pages.timetable-viewer', [
                 'academic_term_id' => $data['academic_term_id'],
