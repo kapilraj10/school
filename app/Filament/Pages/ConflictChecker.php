@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\AcademicTerm;
+use App\Models\Conflict;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -139,13 +140,216 @@ class ConflictChecker extends Page implements HasForms
             ->havingRaw('COUNT(*) > t.max_periods_per_week')
             ->get();
 
-        $this->conflicts = [
-            'teacher_conflicts' => $teacherConflicts,
-            'unavailable_violations' => $unavailableViolations,
-            'overloaded_teachers' => $overloadedTeachers,
-            'total_conflicts' => $teacherConflicts->count() + $unavailableViolations->count() + $overloadedTeachers->count(),
-            'term' => AcademicTerm::find($termId),
+        // Check class subject settings violations
+        $classSubjectViolations = $this->checkClassSubjectSettingsViolations($termId);
+
+        // Truncate old conflicts for this term
+        Conflict::truncateForTerm($termId);
+
+        // Save teacher conflicts
+        foreach ($teacherConflicts as $conflict) {
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'teacher_conflict',
+                'severity' => 'critical',
+                'entity_type' => 'teacher',
+                'entity_id' => $conflict->teacher_id,
+                'data' => (array) $conflict,
+            ]);
+        }
+
+        // Save unavailable violations
+        foreach ($unavailableViolations as $violation) {
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'unavailable_violation',
+                'severity' => 'high',
+                'entity_type' => 'teacher',
+                'entity_id' => null,
+                'data' => (array) $violation,
+            ]);
+        }
+
+        // Save overloaded teachers
+        foreach ($overloadedTeachers as $teacher) {
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'overloaded_teacher',
+                'severity' => 'high',
+                'entity_type' => 'teacher',
+                'entity_id' => $teacher->id,
+                'data' => (array) $teacher,
+            ]);
+        }
+
+        // Save min period violations
+        foreach ($classSubjectViolations['min_period_violations'] as $violation) {
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'min_period_violation',
+                'severity' => 'medium',
+                'entity_type' => 'class_subject',
+                'entity_id' => null,
+                'data' => $violation,
+            ]);
+        }
+
+        // Save max period violations
+        foreach ($classSubjectViolations['max_period_violations'] as $violation) {
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'max_period_violation',
+                'severity' => 'medium',
+                'entity_type' => 'class_subject',
+                'entity_id' => null,
+                'data' => $violation,
+            ]);
+        }
+
+        // Save combined period violations
+        foreach ($classSubjectViolations['combined_period_violations'] as $violation) {
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'combined_period_violation',
+                'severity' => 'medium',
+                'entity_type' => 'class_subject',
+                'entity_id' => null,
+                'data' => $violation,
+            ]);
+        }
+
+        // Load conflicts from database
+        $this->conflicts = Conflict::getGroupedByType($termId);
+        $this->conflicts['term'] = AcademicTerm::find($termId);
+    }
+
+    protected function checkClassSubjectSettingsViolations(int $termId): array
+    {
+        $minPeriodViolations = collect();
+        $maxPeriodViolations = collect();
+        $combinedPeriodViolations = collect();
+
+        // Get all timetable slots grouped by class and subject
+        $slotsByClassSubject = DB::table('timetable_slots as ts')
+            ->join('class_rooms as cr', 'ts.class_room_id', '=', 'cr.id')
+            ->join('subjects as s', 'ts.subject_id', '=', 's.id')
+            ->where('ts.academic_term_id', $termId)
+            ->select(
+                'ts.class_room_id',
+                'ts.subject_id',
+                'cr.name as class_name',
+                'cr.section as class_section',
+                's.name as subject_name',
+                DB::raw('COUNT(*) as assigned_periods')
+            )
+            ->groupBy('ts.class_room_id', 'ts.subject_id', 'cr.name', 'cr.section', 's.name')
+            ->get();
+
+        foreach ($slotsByClassSubject as $slot) {
+            // Get the class subject setting
+            $setting = \App\Models\ClassSubjectSetting::where('class_room_id', $slot->class_room_id)
+                ->where('subject_id', $slot->subject_id)
+                ->where('is_active', true)
+                ->first();
+
+            if (! $setting) {
+                continue;
+            }
+
+            $className = $slot->class_name.($slot->class_section ? ' - '.$slot->class_section : '');
+
+            // Check minimum periods per week
+            if ($slot->assigned_periods < $setting->min_periods_per_week) {
+                $minPeriodViolations->push([
+                    'class_name' => $className,
+                    'subject_name' => $slot->subject_name,
+                    'assigned' => $slot->assigned_periods,
+                    'minimum' => $setting->min_periods_per_week,
+                    'deficit' => $setting->min_periods_per_week - $slot->assigned_periods,
+                ]);
+            }
+
+            // Check maximum periods per week
+            if ($slot->assigned_periods > $setting->max_periods_per_week) {
+                $maxPeriodViolations->push([
+                    'class_name' => $className,
+                    'subject_name' => $slot->subject_name,
+                    'assigned' => $slot->assigned_periods,
+                    'maximum' => $setting->max_periods_per_week,
+                    'excess' => $slot->assigned_periods - $setting->max_periods_per_week,
+                ]);
+            }
+
+            // Check combined period constraints
+            if ($setting->single_combined === 'combined') {
+                // Fetch period details for this specific class-subject combination
+                $periods = DB::table('timetable_slots')
+                    ->where('academic_term_id', $termId)
+                    ->where('class_room_id', $slot->class_room_id)
+                    ->where('subject_id', $slot->subject_id)
+                    ->orderBy('day')
+                    ->orderBy('period')
+                    ->select('day', 'period', 'is_combined')
+                    ->get();
+
+                $violations = $this->checkCombinedPeriodAdjacency($periods);
+
+                if (! empty($violations)) {
+                    $combinedPeriodViolations->push([
+                        'class_name' => $className,
+                        'subject_name' => $slot->subject_name,
+                        'issue' => 'Combined subject must have adjacent periods',
+                        'details' => implode('; ', $violations),
+                    ]);
+                }
+            }
+        }
+
+        return [
+            'min_period_violations' => $minPeriodViolations,
+            'max_period_violations' => $maxPeriodViolations,
+            'combined_period_violations' => $combinedPeriodViolations,
         ];
+    }
+
+    protected function checkCombinedPeriodAdjacency($periods): array
+    {
+        $violations = [];
+        $dayPeriods = [];
+
+        // Group periods by day
+        foreach ($periods as $period) {
+            $day = $period->day;
+            $periodNumber = $period->period;
+
+            if (! isset($dayPeriods[$day])) {
+                $dayPeriods[$day] = [];
+            }
+            $dayPeriods[$day][] = (int) $periodNumber;
+        }
+
+        // Check each day for non-adjacent combined periods
+        foreach ($dayPeriods as $day => $periodNumbers) {
+            if (count($periodNumbers) < 2) {
+                continue;
+            }
+
+            // Sort by period number
+            sort($periodNumbers);
+
+            // Check for gaps between periods on the same day
+            for ($i = 0; $i < count($periodNumbers) - 1; $i++) {
+                $currentPeriod = $periodNumbers[$i];
+                $nextPeriod = $periodNumbers[$i + 1];
+
+                if ($nextPeriod - $currentPeriod > 1) {
+                    $dayName = \App\Models\TimetableSlot::$days[$day] ?? "Day $day";
+                    $violations[] = "Non-adjacent periods on {$dayName}: Period {$currentPeriod} and {$nextPeriod}";
+                }
+            }
+        }
+
+        return $violations;
     }
 
     public function refreshCheck(): void

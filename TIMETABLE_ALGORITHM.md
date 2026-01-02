@@ -170,6 +170,75 @@ Potential improvements:
 - Room capacity constraints
 - Special activity scheduling (assemblies, sports)
 
+## Enhanced Conflict Checker
+
+The conflict checker has been optimized to validate generated timetables against **Class Subject Settings** rules in addition to teacher constraints.
+
+### Validation Categories
+
+#### 1. **Teacher Conflicts** (Critical)
+- Detects when a teacher is assigned to multiple classes at the same time
+- Shows conflicting classes, subjects, and periods
+- Must be resolved for timetable to function
+
+#### 2. **Unavailable Period Violations** (High Priority)
+- Identifies when teachers are scheduled during their unavailable times
+- Checks against teacher's `available_days` and `available_periods`
+- Ensures teacher availability constraints are respected
+
+#### 3. **Overloaded Teachers** (High Priority)
+- Detects teachers assigned more periods than their `max_periods_per_week`
+- Shows how many periods over the limit each teacher is
+- Prevents teacher burnout and excessive workload
+
+#### 4. **Minimum Period Violations** (Class Subject Settings)
+- Validates that each subject in each class meets its minimum period requirement
+- Compares assigned periods against `min_periods_per_week` in class subject settings
+- Shows deficit (how many periods short of minimum)
+- Example: "English in Class 1-A: Assigned 3 periods, Required 5 (Deficit: 2)"
+
+#### 5. **Maximum Period Violations** (Class Subject Settings)
+- Ensures no subject exceeds its maximum allowed periods per week
+- Compares assigned periods against `max_periods_per_week` in class subject settings
+- Shows excess (how many periods over maximum)
+- Example: "Mathematics in Class 2-B: Assigned 8 periods, Maximum 6 (Excess: 2)"
+
+#### 6. **Combined Period Violations** (Class Subject Settings)
+- Validates that combined subjects have adjacent/consecutive periods
+- Checks subjects marked as `single_combined = 'combined'`
+- Ensures periods are scheduled back-to-back for activities requiring longer time
+- Examples: Martial Arts, Lab Work, Project Sessions
+- Reports non-adjacent period issues with specific days and period numbers
+
+### How to Use
+
+1. Navigate to **Timetable Management → Conflict Checker**
+2. Select an academic term from the dropdown
+3. Review the summary statistics showing counts for each violation type
+4. Expand each section to see detailed violation information
+5. Use the **Recheck** button to refresh after making corrections
+6. Export reports when violations need to be shared (coming soon)
+
+### Summary Dashboard
+
+The conflict checker displays a 6-card summary showing:
+- Teacher Conflicts (red)
+- Unavailable Times (orange)
+- Overloaded Teachers (yellow)
+- Below Minimum violations (blue)
+- Above Maximum violations (purple)
+- Combined Period Issues (pink)
+
+### Integration with Class Subject Settings
+
+The enhanced checker uses the **Class Subject Settings Resource** to determine rules:
+- Min/Max periods per week per subject per class
+- Single vs Combined period requirements
+- Active/inactive subject configurations
+- Priority levels for scheduling
+
+This ensures the conflict checker validates against the **exact same rules** used during timetable generation, providing comprehensive validation.
+
 ## Support
 
 For issues or questions:
@@ -177,9 +246,11 @@ For issues or questions:
 2. Review generation warnings in the UI
 3. Verify subject and teacher configuration
 4. Ensure database migrations are run
+5. Use the Conflict Checker to validate generated timetables
 
 ---
 
-**Last Updated**: December 29, 2025
-**Version**: 2.0
+**Last Updated**: January 2, 2026
+**Version**: 2.1
 **Algorithm Source**: Based on `/storage/Algorithm/Algorithm.php`
+**Conflict Checker**: `/app/Filament/Pages/ConflictChecker.php`

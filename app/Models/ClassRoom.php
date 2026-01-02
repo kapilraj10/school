@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ClassRoom extends Model
@@ -13,12 +14,21 @@ class ClassRoom extends Model
         'weekly_periods',
         'total_subjects',
         'status',
+        'class_teacher_id',
     ];
 
     protected $casts = [
         'weekly_periods' => 'integer',
         'total_subjects' => 'integer',
     ];
+
+    /**
+     * Get the class teacher
+     */
+    public function classTeacher(): BelongsTo
+    {
+        return $this->belongsTo(Teacher::class, 'class_teacher_id');
+    }
 
     /**
      * Get the timetable slots for this class

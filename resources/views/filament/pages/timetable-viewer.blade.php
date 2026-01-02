@@ -21,21 +21,21 @@
                     <table class="w-full border-collapse">
                         <thead>
                             <tr class="bg-gray-100 dark:bg-gray-800">
-                                <th class="border border-gray-300 dark:border-gray-600 p-3 text-left font-semibold">Period</th>
-                                @foreach($timetableData['days'] as $dayNum => $dayName)
+                                <th class="border border-gray-300 dark:border-gray-600 p-3 text-left font-semibold">Weekday</th>
+                                @foreach($timetableData['periods'] as $period => $periodLabel)
                                     <th class="border border-gray-300 dark:border-gray-600 p-3 text-center font-semibold">
-                                        {{ $dayName }}
+                                        {{ $periodLabel }}
                                     </th>
                                 @endforeach
                             </tr>
                         </thead>
                         <tbody>
-                            @for($period = 1; $period <= 8; $period++)
+                            @foreach($timetableData['days'] as $dayNum => $dayName)
                                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                     <td class="border border-gray-300 dark:border-gray-600 p-3 font-medium text-center bg-gray-50 dark:bg-gray-800">
-                                        Period {{ $period }}
+                                        {{ $dayName }}
                                     </td>
-                                    @foreach($timetableData['days'] as $dayNum => $dayName)
+                                    @foreach($timetableData['periods'] as $period => $periodLabel)
                                         @php
                                             $slot = $timetableData['slots'][$dayNum][$period] ?? null;
                                         @endphp
@@ -63,7 +63,7 @@
                                         </td>
                                     @endforeach
                                 </tr>
-                            @endfor
+                            @endforeach
                         </tbody>
                     </table>
                 </div>

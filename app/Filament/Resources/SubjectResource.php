@@ -3,6 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\SubjectResource\Pages;
+use App\Models\ClassRange;
 use App\Models\Subject;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Section;
@@ -39,7 +40,7 @@ class SubjectResource extends Resource
                             ->placeholder('e.g., Mathematics'),
                         Select::make('class_range')
                             ->label('Class Range')
-                            ->options([
+                            ->options(fn () => ClassRange::getOptionsArray() ?: [
                                 '1 - 4' => 'Class 1-4',
                                 '5 - 7' => 'Class 5-7',
                                 '8' => 'Class 8',
@@ -133,7 +134,7 @@ class SubjectResource extends Resource
             ->filters([
                 Tables\Filters\SelectFilter::make('class_range')
                     ->label('Class Range')
-                    ->options([
+                    ->options(fn () => ClassRange::getOptionsArray() ?: [
                         '1 - 4' => 'Class 1-4',
                         '5 - 7' => 'Class 5-7',
                         '8' => 'Class 8',

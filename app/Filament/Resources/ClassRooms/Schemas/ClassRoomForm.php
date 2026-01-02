@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ClassRooms\Schemas;
 
+use App\Models\Teacher;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
@@ -38,6 +39,14 @@ class ClassRoomForm
                                     ->required()
                                     ->searchable()
                                     ->native(false)
+                                    ->columnSpan(1),
+
+                                Select::make('class_teacher_id')
+                                    ->label('Class Teacher')
+                                    ->options(fn () => Teacher::active()->pluck('name', 'id'))
+                                    ->searchable()
+                                    ->native(false)
+                                    ->helperText('The class teacher will be assigned Period 1 each day')
                                     ->columnSpan(1),
 
                                 Select::make('status')

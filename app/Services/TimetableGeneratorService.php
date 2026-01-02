@@ -3,22 +3,25 @@
 namespace App\Services;
 
 use App\Models\AcademicTerm;
+use App\Models\ClassRange;
 use App\Models\ClassRoom;
+use App\Models\ClassSubjectSetting;
 use App\Models\CombinedPeriod;
 use App\Models\Subject;
 use App\Models\Teacher;
+use App\Models\TimetableSetting;
 use App\Models\TimetableSlot;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class TimetableGeneratorService
 {
-    // Timetable configuration - matching Algorithm.php exactly
-    private array $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    private array $days;
 
-    private int $periodsPerDay = 8;
+    private int $periodsPerDay;
 
-    // Day name mapping for availability check - matching Algorithm.php
+    private int $maxSameSubjectPerDay;
+
     private array $dayShortMap = [
         'Sunday' => 'Sun',
         'Monday' => 'Mon',
@@ -26,46 +29,48 @@ class TimetableGeneratorService
         'Wednesday' => 'Wed',
         'Thursday' => 'Thu',
         'Friday' => 'Fri',
+        'Saturday' => 'Sat',
     ];
 
-    // Day index to name mapping
-    private array $dayIndexToName = [
-        0 => 'Sunday',
-        1 => 'Monday',
-        2 => 'Tuesday',
-        3 => 'Wednesday',
-        4 => 'Thursday',
-        5 => 'Friday',
-    ];
+    private array $dayIndexToName = [];
 
     private array $errors = [];
 
     private array $warnings = [];
 
-    private array $teacherSchedule = []; // [teacher_id][day][period] => true (busy)
+    private array $teacherSchedule = [];
+
+    public function __construct()
+    {
+        $this->loadSettings();
+    }
 
     /**
-     * Get class range for a class number - matching Algorithm.php exactly
+     * Load settings from database or use defaults
+     */
+    private function loadSettings(): void
+    {
+        // Load school days from settings
+        $schoolDays = TimetableSetting::get('school_days', ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']);
+        $this->days = is_array($schoolDays) ? $schoolDays : ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+        // Build day index to name mapping
+        $this->dayIndexToName = [];
+        foreach ($this->days as $index => $day) {
+            $this->dayIndexToName[$index] = $day;
+        }
+
+        // Load other settings
+        $this->periodsPerDay = (int) TimetableSetting::get('periods_per_day', 8);
+        $this->maxSameSubjectPerDay = (int) TimetableSetting::get('max_same_subject_per_day', 2);
+    }
+
+    /**
+     * Get class range for a class number - uses ClassRange model
      */
     private function getClassRangeForClassNumber(int $classNumber): string
     {
-        if ($classNumber >= 1 && $classNumber <= 4) {
-            return '1 - 4';
-        }
-
-        if ($classNumber >= 5 && $classNumber <= 7) {
-            return '5 - 7';
-        }
-
-        if ($classNumber === 8) {
-            return '8';
-        }
-
-        if ($classNumber >= 9 && $classNumber <= 10) {
-            return '9 - 10';
-        }
-
-        return '1 - 4';
+        return ClassRange::getRangeNameForClass($classNumber);
     }
 
     /**
@@ -81,17 +86,44 @@ class TimetableGeneratorService
     }
 
     /**
-     * Get subjects for a specific class range - matching Algorithm.php
+     * Get subjects for a specific class using ClassSubjectSettings or fallback to Subject table
      */
-    private function getSubjectsForClassRange(string $classRange): Collection
+    private function getSubjectsForClass(ClassRoom $class): Collection
     {
+        // First, try to get from ClassSubjectSettings
+        $classSettings = ClassSubjectSetting::with('subject')
+            ->where('class_room_id', $class->id)
+            ->where('is_active', true)
+            ->orderBy('priority', 'desc')
+            ->get();
+
+        if ($classSettings->isNotEmpty()) {
+            return $classSettings;
+        }
+
+        // Fallback: get subjects by class range
+        $classNumber = $this->extractClassNumber($class->name);
+        $classRange = $this->getClassRangeForClassNumber($classNumber);
+
         return Subject::where('class_range', $classRange)
             ->where('status', 'active')
-            ->get();
+            ->get()
+            ->map(function ($subject) {
+                // Convert to a pseudo-ClassSubjectSetting format for consistency
+                return (object) [
+                    'subject' => $subject,
+                    'subject_id' => $subject->id,
+                    'min_periods_per_week' => $subject->min_periods_per_week ?? 1,
+                    'max_periods_per_week' => $subject->max_periods_per_week ?? 6,
+                    'weekly_periods' => $subject->weekly_periods ?? 4,
+                    'single_combined' => $subject->single_combined ?? 'single',
+                    'priority' => 5,
+                ];
+            });
     }
 
     /**
-     * Get teacher for a subject and class range - matching Algorithm.php
+     * Get teacher for a subject and class range
      * Finds a teacher who teaches this subject for the given class range
      */
     private function getTeacherForSubject(Subject $subject, string $classRange): ?Teacher
@@ -165,6 +197,9 @@ class TimetableGeneratorService
      */
     public function generate(array $classIds, int $termId, array $options = []): array
     {
+        // Reload settings in case they changed
+        $this->loadSettings();
+
         $this->errors = [];
         $this->warnings = [];
         $this->teacherSchedule = [];
@@ -246,17 +281,22 @@ class TimetableGeneratorService
     }
 
     /**
-     * Generate timetable for a single class - matching Algorithm.php generateTimetable() exactly
+     * Generate timetable for a single class - uses ClassSubjectSettings if available
      */
     private function generateTimetableForClass(ClassRoom $class, AcademicTerm $term): void
     {
         $classNumber = $this->extractClassNumber($class->name);
         $classRange = $this->getClassRangeForClassNumber($classNumber);
 
-        // Get subjects for this class range
-        $subjects = $this->getSubjectsForClassRange($classRange);
+        // Get class range settings for periods per day
+        $classRangeModel = ClassRange::getForClassNumber($classNumber);
+        $periodsPerDay = $classRangeModel?->periods_per_day ?? $this->periodsPerDay;
+        $daysCount = count($this->days);
 
-        if ($subjects->isEmpty()) {
+        // Get subjects for this class (from ClassSubjectSettings or fallback)
+        $subjectSettings = $this->getSubjectsForClass($class);
+
+        if ($subjectSettings->isEmpty()) {
             $this->warnings[] = "No subjects found for {$class->full_name} (class range: {$classRange})";
 
             return;
@@ -264,8 +304,8 @@ class TimetableGeneratorService
 
         // Initialize empty timetable [day][period] => null
         $timetable = [];
-        for ($dayIndex = 0; $dayIndex < 6; $dayIndex++) {
-            $timetable[$dayIndex] = array_fill(1, $this->periodsPerDay, null);
+        for ($dayIndex = 0; $dayIndex < $daysCount; $dayIndex++) {
+            $timetable[$dayIndex] = array_fill(1, $periodsPerDay, null);
         }
 
         // Load existing slots (combined periods) into timetable
@@ -280,49 +320,50 @@ class TimetableGeneratorService
             ];
         }
 
-        // Sort subjects by priority (compulsory first) - matching Algorithm.php
-        $subjects = $subjects->sort(function ($a, $b) {
-            $priorityA = $a->type === 'compulsory' ? 0 : 1;
-            $priorityB = $b->type === 'compulsory' ? 0 : 1;
-
-            return $priorityA - $priorityB;
+        // Sort by priority (higher priority first)
+        $subjectSettings = $subjectSettings->sortByDesc(function ($item) {
+            return $item->priority ?? 5;
         })->values();
 
         // Track periods assigned per subject
         $assignedPeriods = [];
-        foreach ($subjects as $subject) {
-            $assignedPeriods[$subject->id] = 0;
+        foreach ($subjectSettings as $setting) {
+            $subjectId = $setting->subject_id ?? $setting->subject->id;
+            $assignedPeriods[$subjectId] = 0;
         }
 
         // === FIRST PASS: Assign minimum periods to all subjects ===
-        foreach ($subjects as $subject) {
-            $targetPeriods = $subject->min_periods_per_week ?? $subject->weekly_periods ?? 4;
+        foreach ($subjectSettings as $setting) {
+            $subject = $setting->subject ?? Subject::find($setting->subject_id);
+            $subjectId = $subject->id;
+
+            $targetPeriods = $setting->min_periods_per_week ?? $subject->min_periods_per_week ?? 1;
             $teacher = $this->getTeacherForSubject($subject, $classRange);
 
-            while ($assignedPeriods[$subject->id] < $targetPeriods) {
+            while ($assignedPeriods[$subjectId] < $targetPeriods) {
                 $assigned = false;
 
-                for ($dayIndex = 0; $dayIndex < 6; $dayIndex++) {
-                    if ($assignedPeriods[$subject->id] >= $targetPeriods) {
+                for ($dayIndex = 0; $dayIndex < $daysCount; $dayIndex++) {
+                    if ($assignedPeriods[$subjectId] >= $targetPeriods) {
                         break;
                     }
 
-                    $dayName = $this->dayIndexToName[$dayIndex];
+                    $dayName = $this->dayIndexToName[$dayIndex] ?? 'Monday';
 
-                    // Check if subject already assigned today (limit 2 per day for main subjects)
+                    // Check if subject already assigned today (use setting from DB)
                     $todayCount = 0;
                     foreach ($timetable[$dayIndex] as $slot) {
-                        if ($slot && $slot['subject_id'] === $subject->id) {
+                        if ($slot && $slot['subject_id'] === $subjectId) {
                             $todayCount++;
                         }
                     }
 
-                    if ($todayCount >= 2) {
+                    if ($todayCount >= $this->maxSameSubjectPerDay) {
                         continue;
                     }
 
                     // Find empty slot where teacher is available
-                    for ($period = 1; $period <= $this->periodsPerDay; $period++) {
+                    for ($period = 1; $period <= $periodsPerDay; $period++) {
                         if ($timetable[$dayIndex][$period] === null) {
                             // Check teacher availability
                             if ($teacher) {
@@ -336,7 +377,7 @@ class TimetableGeneratorService
 
                             // Assign this slot
                             $timetable[$dayIndex][$period] = [
-                                'subject_id' => $subject->id,
+                                'subject_id' => $subjectId,
                                 'teacher_id' => $teacher?->id,
                             ];
 
@@ -345,7 +386,7 @@ class TimetableGeneratorService
                                 $this->markTeacherBusy($teacher->id, $dayIndex, $period);
                             }
 
-                            $assignedPeriods[$subject->id]++;
+                            $assignedPeriods[$subjectId]++;
                             $assigned = true;
                             break;
                         }
@@ -358,40 +399,44 @@ class TimetableGeneratorService
             }
 
             // Warn if couldn't meet minimum
-            if ($assignedPeriods[$subject->id] < $targetPeriods) {
-                $this->warnings[] = "Could only assign {$assignedPeriods[$subject->id]}/{$targetPeriods} minimum periods for {$subject->name} in {$class->full_name}";
+            if ($assignedPeriods[$subjectId] < $targetPeriods) {
+                $reason = $teacher ? 'teacher constraints or no available slots' : 'no teacher assigned';
+                $this->warnings[] = "Could only assign {$assignedPeriods[$subjectId]}/{$targetPeriods} minimum periods for {$subject->name} in {$class->full_name} — {$reason}";
             }
         }
 
         // === SECOND PASS: Fill remaining slots up to max_period_per_week ===
-        foreach ($subjects as $subject) {
-            $maxPeriods = $subject->max_periods_per_week ?? ($subject->weekly_periods ?? 4) + 1;
+        foreach ($subjectSettings as $setting) {
+            $subject = $setting->subject ?? Subject::find($setting->subject_id);
+            $subjectId = $subject->id;
+
+            $maxPeriods = $setting->max_periods_per_week ?? $subject->max_periods_per_week ?? 6;
             $teacher = $this->getTeacherForSubject($subject, $classRange);
 
-            while ($assignedPeriods[$subject->id] < $maxPeriods) {
+            while ($assignedPeriods[$subjectId] < $maxPeriods) {
                 $assigned = false;
 
-                for ($dayIndex = 0; $dayIndex < 6; $dayIndex++) {
-                    if ($assignedPeriods[$subject->id] >= $maxPeriods) {
+                for ($dayIndex = 0; $dayIndex < $daysCount; $dayIndex++) {
+                    if ($assignedPeriods[$subjectId] >= $maxPeriods) {
                         break;
                     }
 
-                    $dayName = $this->dayIndexToName[$dayIndex];
+                    $dayName = $this->dayIndexToName[$dayIndex] ?? 'Monday';
 
-                    // Check if subject already assigned today (limit 2 per day)
+                    // Check if subject already assigned today (limit per day from settings)
                     $todayCount = 0;
                     foreach ($timetable[$dayIndex] as $slot) {
-                        if ($slot && $slot['subject_id'] === $subject->id) {
+                        if ($slot && $slot['subject_id'] === $subjectId) {
                             $todayCount++;
                         }
                     }
 
-                    if ($todayCount >= 2) {
+                    if ($todayCount >= $this->maxSameSubjectPerDay) {
                         continue;
                     }
 
                     // Find empty slot where teacher is available
-                    for ($period = 1; $period <= $this->periodsPerDay; $period++) {
+                    for ($period = 1; $period <= $periodsPerDay; $period++) {
                         if ($timetable[$dayIndex][$period] === null) {
                             // Check teacher availability
                             if ($teacher) {
@@ -404,7 +449,7 @@ class TimetableGeneratorService
                             }
 
                             $timetable[$dayIndex][$period] = [
-                                'subject_id' => $subject->id,
+                                'subject_id' => $subjectId,
                                 'teacher_id' => $teacher?->id,
                             ];
 
@@ -412,7 +457,7 @@ class TimetableGeneratorService
                                 $this->markTeacherBusy($teacher->id, $dayIndex, $period);
                             }
 
-                            $assignedPeriods[$subject->id]++;
+                            $assignedPeriods[$subjectId]++;
                             $assigned = true;
                             break;
                         }
@@ -425,19 +470,20 @@ class TimetableGeneratorService
             }
         }
 
-        // === THIRD PASS: Fill any remaining empty slots (remove 2 per day limit) ===
+        // === THIRD PASS: Fill any remaining empty slots (remove per day limit) ===
+        $settingsList = $subjectSettings->values()->all();
         $subjectIndex = 0;
-        $subjectsList = $subjects->values()->all();
 
-        for ($dayIndex = 0; $dayIndex < 6; $dayIndex++) {
-            $dayName = $this->dayIndexToName[$dayIndex];
+        for ($dayIndex = 0; $dayIndex < $daysCount; $dayIndex++) {
+            $dayName = $this->dayIndexToName[$dayIndex] ?? 'Monday';
 
-            for ($period = 1; $period <= $this->periodsPerDay; $period++) {
+            for ($period = 1; $period <= $periodsPerDay; $period++) {
                 if ($timetable[$dayIndex][$period] === null) {
                     // Try to find an available subject/teacher
                     $attempts = 0;
-                    while ($attempts < count($subjectsList)) {
-                        $subject = $subjectsList[$subjectIndex % count($subjectsList)];
+                    while ($attempts < count($settingsList)) {
+                        $setting = $settingsList[$subjectIndex % count($settingsList)];
+                        $subject = $setting->subject ?? Subject::find($setting->subject_id);
                         $teacher = $this->getTeacherForSubject($subject, $classRange);
 
                         // Check teacher availability
@@ -461,7 +507,7 @@ class TimetableGeneratorService
                                 $this->markTeacherBusy($teacher->id, $dayIndex, $period);
                             }
 
-                            $assignedPeriods[$subject->id]++;
+                            $assignedPeriods[$subject->id] = ($assignedPeriods[$subject->id] ?? 0) + 1;
                             $subjectIndex++;
                             break;
                         }
@@ -474,13 +520,13 @@ class TimetableGeneratorService
         }
 
         // Now save all slots to database
-        $this->saveTimetable($class, $term, $timetable);
+        $this->saveTimetable($class, $term, $timetable, $periodsPerDay, $daysCount);
     }
 
     /**
      * Save generated timetable to database
      */
-    private function saveTimetable(ClassRoom $class, AcademicTerm $term, array $timetable): void
+    private function saveTimetable(ClassRoom $class, AcademicTerm $term, array $timetable, int $periodsPerDay, int $daysCount): void
     {
         // Get existing slot IDs to avoid duplicates
         $existingSlots = TimetableSlot::where('class_room_id', $class->id)
@@ -490,9 +536,9 @@ class TimetableGeneratorService
                 return "{$slot->day}_{$slot->period}";
             });
 
-        for ($dayIndex = 0; $dayIndex < 6; $dayIndex++) {
-            for ($period = 1; $period <= $this->periodsPerDay; $period++) {
-                $slot = $timetable[$dayIndex][$period];
+        for ($dayIndex = 0; $dayIndex < $daysCount; $dayIndex++) {
+            for ($period = 1; $period <= $periodsPerDay; $period++) {
+                $slot = $timetable[$dayIndex][$period] ?? null;
                 $key = "{$dayIndex}_{$period}";
 
                 // Skip if already exists (combined periods)
