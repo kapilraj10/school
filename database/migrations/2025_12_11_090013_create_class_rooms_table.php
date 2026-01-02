@@ -13,9 +13,8 @@ return new class extends Migration
     {
         Schema::create('class_rooms', function (Blueprint $table) {
             $table->id();
-            $table->string('name',100); // Class 1, Class 2, etc.
-            $table->string('section',5); // A, B
-            $table->enum('level', ['basic_1_3', 'basic_4_8', 'secondary_9_10']);
+            $table->string('name', 100); // Class 1, Class 2, etc.
+            $table->string('section', 5); // A, B
             $table->integer('weekly_periods')->default(30);
             $table->integer('total_subjects')->default(7);
             $table->enum('status', ['active', 'inactive'])->default('active');

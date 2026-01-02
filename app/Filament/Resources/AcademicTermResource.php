@@ -18,13 +18,13 @@ use Filament\Tables\Table;
 class AcademicTermResource extends Resource
 {
     protected static ?string $model = AcademicTerm::class;
-    
+
     protected static ?string $navigationIcon = 'heroicon-o-calendar';
-    
+
     protected static ?string $navigationLabel = 'Academic Terms';
-    
+
     protected static ?string $navigationGroup = 'Academic Management';
-    
+
     protected static ?int $navigationSort = 4;
 
     public static function form(Form $form): Form
@@ -87,7 +87,7 @@ class AcademicTermResource extends Resource
                 Tables\Columns\TextColumn::make('year')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('term')
-                    ->formatStateUsing(fn ($state) => match($state) {
+                    ->formatStateUsing(fn ($state) => match ($state) {
                         '1' => 'First Term',
                         '2' => 'Second Term',
                         '3' => 'Third Term',

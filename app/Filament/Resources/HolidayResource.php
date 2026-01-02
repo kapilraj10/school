@@ -18,13 +18,13 @@ use Filament\Tables\Table;
 class HolidayResource extends Resource
 {
     protected static ?string $model = Holiday::class;
-    
+
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
-    
+
     protected static ?string $navigationLabel = 'Holidays';
-    
+
     protected static ?string $navigationGroup = 'Academic Management';
-    
+
     protected static ?int $navigationSort = 5;
 
     public static function form(Form $form): Form

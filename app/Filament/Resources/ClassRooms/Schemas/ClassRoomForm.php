@@ -40,18 +40,6 @@ class ClassRoomForm
                                     ->native(false)
                                     ->columnSpan(1),
 
-                                Select::make('level')
-                                    ->label('Level')
-                                    ->options([
-                                        'basic_1_3' => 'Basic (1-3)',
-                                        'basic_4_8' => 'Basic (4-8)',
-                                        'secondary_9_10' => 'Secondary (9-10)',
-                                    ])
-                                    ->required()
-                                    ->native(false)
-                                    ->helperText('Select the educational level')
-                                    ->columnSpan(1),
-
                                 Select::make('status')
                                     ->label('Status')
                                     ->options([

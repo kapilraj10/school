@@ -4,7 +4,6 @@ namespace App\Filament\Resources\Teachers\Tables;
 
 use App\Models\Subject;
 use Filament\Support\Colors\Color;
-use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\BulkActionGroup;
 use Filament\Tables\Actions\DeleteAction;
 use Filament\Tables\Actions\DeleteBulkAction;
@@ -41,6 +40,7 @@ class TeachersTable
                         $subjects = Subject::whereIn('id', $record->subject_ids)
                             ->pluck('name')
                             ->toArray();
+
                         return implode(', ', $subjects);
                     })
                     ->badge()
@@ -72,9 +72,10 @@ class TeachersTable
                     ->label('Available Days')
                     ->formatStateUsing(function ($record) {
                         $days = $record->available_days;
-                        if (empty($days) || !is_array($days)) {
+                        if (empty($days) || ! is_array($days)) {
                             return 'None';
                         }
+
                         return implode(', ', $days);
                     })
                     ->wrap()
@@ -85,10 +86,11 @@ class TeachersTable
                     ->label('Available Periods')
                     ->formatStateUsing(function ($record) {
                         $periods = $record->available_periods;
-                        if (empty($periods) || !is_array($periods)) {
+                        if (empty($periods) || ! is_array($periods)) {
                             return 'None';
                         }
-                        return 'P' . implode(', P', $periods);
+
+                        return 'P'.implode(', P', $periods);
                     })
                     ->wrap()
                     ->color(Color::Blue)
@@ -97,7 +99,7 @@ class TeachersTable
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()
-                    ->color(fn (string $state): string => match($state) {
+                    ->color(fn (string $state): string => match ($state) {
                         'active' => 'success',
                         'inactive' => 'danger',
                         default => 'gray',

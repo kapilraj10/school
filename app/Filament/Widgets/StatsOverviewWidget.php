@@ -17,8 +17,8 @@ class StatsOverviewWidget extends BaseWidget
     protected function getStats(): array
     {
         $currentTerm = AcademicTerm::where('is_active', true)->first();
-        $scheduledPeriods = $currentTerm 
-            ? TimetableSlot::where('academic_term_id', $currentTerm->id)->count() 
+        $scheduledPeriods = $currentTerm
+            ? TimetableSlot::where('academic_term_id', $currentTerm->id)->count()
             : 0;
 
         return [
@@ -38,7 +38,7 @@ class StatsOverviewWidget extends BaseWidget
                 ->color('info'),
 
             Stat::make('Scheduled Periods', $scheduledPeriods)
-                ->description('Current term: ' . ($currentTerm->name ?? 'N/A'))
+                ->description('Current term: '.($currentTerm->name ?? 'N/A'))
                 ->icon('heroicon-o-calendar-days')
                 ->color('primary'),
         ];

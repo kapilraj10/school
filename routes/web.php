@@ -8,6 +8,5 @@ Route::get('/', function () {
 
 Route::get('/testing', function () {
 
-    
     return 'This is a testing route.';
 });

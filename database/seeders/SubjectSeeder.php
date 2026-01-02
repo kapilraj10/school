@@ -76,7 +76,7 @@ class SubjectSeeder extends Seeder
         ];
 
         $timestamp = now();
-        
+
         foreach ($subjectsData as &$subject) {
             $subject['status'] = 'active';
             $subject['created_at'] = $timestamp;
@@ -85,6 +85,6 @@ class SubjectSeeder extends Seeder
 
         DB::table('subjects')->insert($subjectsData);
 
-        $this->command->info('Successfully seeded ' . count($subjectsData) . ' subjects with class-specific requirements.');
+        $this->command->info('Successfully seeded '.count($subjectsData).' subjects with class-specific requirements.');
     }
 }

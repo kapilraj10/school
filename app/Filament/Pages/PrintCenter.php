@@ -68,7 +68,7 @@ class PrintCenter extends Page implements HasForms
 
                 Select::make('class_room_id')
                     ->label('Select Class')
-                    ->options(ClassRoom::active()->get()->mapWithKeys(fn($c) => [$c->id => $c->full_name]))
+                    ->options(ClassRoom::active()->get()->mapWithKeys(fn ($c) => [$c->id => $c->full_name]))
                     ->visible(fn (Get $get) => $get('print_type') === 'class')
                     ->required(fn (Get $get) => $get('print_type') === 'class')
                     ->native(false)
@@ -100,13 +100,14 @@ class PrintCenter extends Page implements HasForms
     public function generateOutput()
     {
         $data = $this->form->getState();
-        
+
         if ($data['print_type'] === 'class' && empty($data['class_room_id'])) {
             Notification::make()
                 ->title('Validation Error')
                 ->danger()
                 ->body('Please select a class to print.')
                 ->send();
+
             return;
         }
 
@@ -116,6 +117,7 @@ class PrintCenter extends Page implements HasForms
                 ->danger()
                 ->body('Please select a teacher to print.')
                 ->send();
+
             return;
         }
 
@@ -149,10 +151,10 @@ class PrintCenter extends Page implements HasForms
                 ->color('gray')
                 ->action(function () {
                     $data = $this->form->getState();
-                    
-                    if ($data['print_type'] === 'class' && !empty($data['class_room_id'])) {
+
+                    if ($data['print_type'] === 'class' && ! empty($data['class_room_id'])) {
                         return redirect()->route('filament.admin.pages.timetable-viewer');
-                    } elseif ($data['print_type'] === 'teacher' && !empty($data['teacher_id'])) {
+                    } elseif ($data['print_type'] === 'teacher' && ! empty($data['teacher_id'])) {
                         return redirect()->route('filament.admin.pages.teacher-schedule');
                     } else {
                         Notification::make()

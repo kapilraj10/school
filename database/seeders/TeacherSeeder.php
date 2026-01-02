@@ -34,7 +34,7 @@ class TeacherSeeder extends Seeder
             ['name' => 'T012', 'subject' => 'Sports', 'class_range' => '1 - 4', 'available_days' => ['Sun', 'Mon', 'Wed', 'Fri'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
             ['name' => 'T013', 'subject' => 'Taekwondo', 'class_range' => '1 - 4', 'available_days' => ['Sun', 'Tue', 'Thu'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
             ['name' => 'T014', 'subject' => 'Library', 'class_range' => '1 - 4', 'available_days' => ['Sun', 'Mon', 'Wed'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
-            
+
             // Class 5-7 Teachers
             ['name' => 'T015', 'subject' => 'English', 'class_range' => '5 - 7', 'available_days' => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
             ['name' => 'T016', 'subject' => 'Nepali', 'class_range' => '5 - 7', 'available_days' => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
@@ -50,7 +50,7 @@ class TeacherSeeder extends Seeder
             ['name' => 'T026', 'subject' => 'Sports', 'class_range' => '5 - 7', 'available_days' => ['Sun', 'Mon', 'Wed', 'Fri'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
             ['name' => 'T027', 'subject' => 'Taekwondo', 'class_range' => '5 - 7', 'available_days' => ['Sun', 'Tue', 'Thu'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
             ['name' => 'T028', 'subject' => 'Library', 'class_range' => '5 - 7', 'available_days' => ['Sun', 'Mon', 'Wed'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
-            
+
             // Class 8 Teachers
             ['name' => 'T029', 'subject' => 'English', 'class_range' => '8', 'available_days' => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
             ['name' => 'T030', 'subject' => 'Nepali', 'class_range' => '8', 'available_days' => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
@@ -64,7 +64,7 @@ class TeacherSeeder extends Seeder
             ['name' => 'T038', 'subject' => 'Dance/Music', 'class_range' => '8', 'available_days' => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
             ['name' => 'T039', 'subject' => 'Art', 'class_range' => '8', 'available_days' => ['Sun', 'Tue', 'Thu', 'Fri'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
             ['name' => 'T040', 'subject' => 'Sports', 'class_range' => '8', 'available_days' => ['Sun', 'Mon', 'Wed', 'Fri'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
-            
+
             // Class 9-10 Teachers
             ['name' => 'T041', 'subject' => 'English', 'class_range' => '9 - 10', 'available_days' => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
             ['name' => 'T042', 'subject' => 'Nepali', 'class_range' => '9 - 10', 'available_days' => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'], 'available_periods' => ['1', '2', '3', '4', '5', '6', '7', '8']],
@@ -94,20 +94,21 @@ class TeacherSeeder extends Seeder
                 ->where('class_range', $teacherData['class_range'])
                 ->first();
 
-            if (!$subject) {
+            if (! $subject) {
                 $this->command->warn("Subject '{$teacherData['subject']}' for class range '{$teacherData['class_range']}' not found. Skipping teacher {$teacherData['name']}.");
+
                 continue;
             }
 
             // Calculate available periods based on available days and periods
-git             $availableDays = $teacherData['available_days'];
+            $availableDays = $teacherData['available_days'];
             $availablePeriods = array_map('intval', $teacherData['available_periods']);
 
             DB::table('teachers')->insert([
                 'name' => $teacherData['name'],
                 'employee_id' => strtoupper($teacherData['name']),
-                'email' => strtolower($teacherData['name']) . '@school.edu',
-                'phone' => '98' . str_pad(rand(10000000, 99999999), 8, '0', STR_PAD_LEFT),
+                'email' => strtolower($teacherData['name']).'@school.edu',
+                'phone' => '98'.str_pad(rand(10000000, 99999999), 8, '0', STR_PAD_LEFT),
                 'subject_ids' => json_encode([$subject->id]),
                 'max_periods_per_day' => 8,
                 'max_periods_per_week' => 40,
@@ -119,6 +120,6 @@ git             $availableDays = $teacherData['available_days'];
             ]);
         }
 
-        $this->command->info('Successfully seeded ' . count($teachersData) . ' teachers with subject assignments and availability.');
+        $this->command->info('Successfully seeded '.count($teachersData).' teachers with subject assignments and availability.');
     }
 }

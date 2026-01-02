@@ -31,6 +31,7 @@ class TimetableViewer extends Page implements HasForms
     protected static ?int $navigationSort = 2;
 
     public ?array $data = [];
+
     public $timetableData = null;
 
     public function getMaxContentWidth(): MaxWidth
@@ -71,7 +72,7 @@ class TimetableViewer extends Page implements HasForms
 
                 Select::make('class_room_id')
                     ->label('Class')
-                    ->options(ClassRoom::active()->get()->mapWithKeys(fn($c) => [$c->id => $c->full_name]))
+                    ->options(ClassRoom::active()->get()->mapWithKeys(fn ($c) => [$c->id => $c->full_name]))
                     ->required()
                     ->live()
                     ->afterStateUpdated(fn () => $this->loadTimetable())
@@ -86,8 +87,9 @@ class TimetableViewer extends Page implements HasForms
     {
         $data = $this->form->getState();
 
-        if (!isset($data['academic_term_id']) || !isset($data['class_room_id'])) {
+        if (! isset($data['academic_term_id']) || ! isset($data['class_room_id'])) {
             $this->timetableData = null;
+
             return;
         }
 
@@ -99,7 +101,7 @@ class TimetableViewer extends Page implements HasForms
             ->get();
 
         $organized = [];
-        for ($day = 1; $day <= 5; $day++) {
+        for ($day = 0; $day <= 5; $day++) {
             $organized[$day] = [];
             for ($period = 1; $period <= 8; $period++) {
                 $slot = $slots->where('day', $day)->where('period', $period)->first();
@@ -121,7 +123,7 @@ class TimetableViewer extends Page implements HasForms
     public function refreshTimetable(): void
     {
         $this->loadTimetable();
-        
+
         Notification::make()
             ->title('Timetable Refreshed')
             ->success()

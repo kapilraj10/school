@@ -22,13 +22,13 @@ use Filament\Tables\Table;
 class CombinedPeriodResource extends Resource
 {
     protected static ?string $model = CombinedPeriod::class;
-    
+
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
-    
+
     protected static ?string $navigationLabel = 'Combined Periods';
-    
+
     protected static ?string $navigationGroup = 'Timetable Management';
-    
+
     protected static ?int $navigationSort = 6;
 
     public static function form(Form $form): Form
@@ -68,7 +68,7 @@ class CombinedPeriodResource extends Resource
                 ->schema([
                     CheckboxList::make('class_room_ids')
                         ->label('Classes')
-                        ->options(ClassRoom::active()->get()->mapWithKeys(fn($c) => [$c->id => $c->full_name]))
+                        ->options(ClassRoom::active()->get()->mapWithKeys(fn ($c) => [$c->id => $c->full_name]))
                         ->required()
                         ->columns(4)
                         ->helperText('Select all classes that will attend together'),
@@ -114,19 +114,22 @@ class CombinedPeriodResource extends Resource
                     ->label('Teacher')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('day')
-                    ->formatStateUsing(fn($state) => TimetableSlot::$days[$state] ?? 'N/A')
+                    ->formatStateUsing(fn ($state) => TimetableSlot::$days[$state] ?? 'N/A')
                     ->badge()
                     ->color('info'),
                 Tables\Columns\TextColumn::make('period')
-                    ->formatStateUsing(fn($state) => "Period {$state}")
+                    ->formatStateUsing(fn ($state) => "Period {$state}")
                     ->badge()
                     ->color('success'),
                 Tables\Columns\TextColumn::make('class_room_ids')
                     ->label('Classes')
                     ->formatStateUsing(function ($state) {
-                        if (empty($state)) return 'None';
+                        if (empty($state)) {
+                            return 'None';
+                        }
                         $count = count($state);
-                        return "{$count} " . ($count === 1 ? 'class' : 'classes');
+
+                        return "{$count} ".($count === 1 ? 'class' : 'classes');
                     }),
                 Tables\Columns\TextColumn::make('frequency')
                     ->badge()

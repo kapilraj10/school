@@ -12,17 +12,18 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class SubjectResource extends Resource
 {
     protected static ?string $model = Subject::class;
-    
+
     protected static ?string $navigationIcon = 'heroicon-o-book-open';
-    
+
     protected static ?string $navigationLabel = 'Subjects';
-    
+
     protected static ?string $navigationGroup = 'Academic Management';
-    
+
     protected static ?int $navigationSort = 3;
 
     public static function form(Form $form): Form
@@ -96,7 +97,6 @@ class SubjectResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('single_combined')
                     ->label('Period Type')
@@ -150,7 +150,23 @@ class SubjectResource extends Resource
                         'active' => 'Active',
                         'inactive' => 'Inactive',
                     ]),
-            ], layout: Tables\Enums\FiltersLayout::AboveContentCollapsible)
+                Tables\Filters\Filter::make('search')
+                    ->form([
+                        TextInput::make('query')
+                            ->hiddenLabel()
+                            ->placeholder('Search'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        $search = $data['query'] ?? null;
+
+                        if (! filled($search)) {
+                            return $query;
+                        }
+
+                        return $query->where('name', 'like', "%{$search}%");
+                    }),
+            ], layout: Tables\Enums\FiltersLayout::AboveContent)
+            ->filtersFormColumns(4)
             ->actions([
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),

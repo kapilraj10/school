@@ -20,7 +20,8 @@ return new class extends Migration
             $table->json('subject_ids')->nullable(); // Array of subject IDs they can teach
             $table->integer('max_periods_per_day')->default(6);
             $table->integer('max_periods_per_week')->default(30);
-            $table->json('unavailable_periods')->nullable(); // {"day": 1, "period": 3}
+            $table->json('available_days')->nullable();
+            $table->json('available_periods')->nullable();
             $table->enum('status', ['active', 'inactive'])->default('active');
             $table->timestamps();
         });

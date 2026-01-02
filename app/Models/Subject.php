@@ -66,7 +66,7 @@ class Subject extends Model
      */
     public function getTypeDisplayAttribute(): string
     {
-        return match($this->type) {
+        return match ($this->type) {
             'core' => 'Core Subject',
             'elective' => 'Elective',
             'co_curricular' => 'Co-Curricular',
@@ -101,8 +101,12 @@ class Subject extends Model
     /**
      * Scope for specific level (forLevel alias for compatibility)
      */
-    public function scopeForLevel($query, string $level)
+    public function scopeForLevel($query, ?string $level)
     {
+        if ($level === null) {
+            return $query;
+        }
+
         return $query->where('level', $level);
     }
 }

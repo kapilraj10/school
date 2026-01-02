@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('name', 100);
             $table->enum('type', ['teacher_conflict', 'subject_placement', 'combined_period', 'custom']);
-            $table->json('rule'); 
+            $table->json('rule');
             $table->integer('priority')->default(5);
             $table->boolean('is_active')->default(true);
             $table->text('description')->nullable();

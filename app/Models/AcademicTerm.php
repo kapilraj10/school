@@ -53,7 +53,7 @@ class AcademicTerm extends Model
      */
     public function getTermDisplayAttribute(): string
     {
-        return match($this->term) {
+        return match ($this->term) {
             '1' => 'First Term',
             '2' => 'Second Term',
             '3' => 'Third Term',

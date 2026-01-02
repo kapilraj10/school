@@ -61,6 +61,7 @@ class Teacher extends Model
         if (empty($this->subject_ids)) {
             return collect([]);
         }
+
         return Subject::whereIn('id', $this->subject_ids)->get();
     }
 

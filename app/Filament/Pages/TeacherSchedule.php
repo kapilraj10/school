@@ -30,6 +30,7 @@ class TeacherSchedule extends Page implements HasForms
     protected static ?int $navigationSort = 3;
 
     public ?array $data = [];
+
     public $scheduleData = null;
 
     public function mount(): void
@@ -77,8 +78,9 @@ class TeacherSchedule extends Page implements HasForms
     {
         $data = $this->form->getState();
 
-        if (!isset($data['academic_term_id']) || !isset($data['teacher_id'])) {
+        if (! isset($data['academic_term_id']) || ! isset($data['teacher_id'])) {
             $this->scheduleData = null;
+
             return;
         }
 
@@ -101,7 +103,7 @@ class TeacherSchedule extends Page implements HasForms
         $teacher = Teacher::find($data['teacher_id']);
         $totalPeriods = $slots->count();
         $periodsPerDay = [];
-        
+
         foreach (range(1, 5) as $day) {
             $periodsPerDay[$day] = $slots->where('day', $day)->count();
         }
@@ -122,7 +124,7 @@ class TeacherSchedule extends Page implements HasForms
     public function refreshSchedule(): void
     {
         $this->loadSchedule();
-        
+
         Notification::make()
             ->title('Schedule Refreshed')
             ->success()

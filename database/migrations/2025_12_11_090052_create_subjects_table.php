@@ -15,9 +15,13 @@ return new class extends Migration
             $table->id();
             $table->string('name', 100);
             $table->string('code', 20)->unique();
+            $table->string('class_range')->nullable();
             $table->enum('type', ['core', 'elective', 'co_curricular']);
             $table->integer('weekly_periods')->default(4);
-            $table->string('level', 50); // basic_1_3, basic_4_8, secondary_9_10
+            $table->integer('min_periods_per_week')->default(1);
+            $table->integer('max_periods_per_week')->default(1);
+            $table->string('level', 50)->nullable(); // basic_1_3, basic_4_8, secondary_9_10
+            $table->enum('single_combined', ['single', 'combined'])->default('single');
             $table->enum('status', ['active', 'inactive'])->default('active');
             $table->timestamps();
         });

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class TimetableSlot extends Model
 {
     public static $days = [
+        0 => 'Sunday',
         1 => 'Monday',
         2 => 'Tuesday',
         3 => 'Wednesday',
@@ -112,7 +113,7 @@ class TimetableSlot extends Model
      */
     public function getTypeDisplayAttribute(): string
     {
-        return match($this->type) {
+        return match ($this->type) {
             'regular' => 'Regular Class',
             'break' => 'Break',
             'lunch' => 'Lunch',

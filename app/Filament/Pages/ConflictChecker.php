@@ -3,7 +3,6 @@
 namespace App\Filament\Pages;
 
 use App\Models\AcademicTerm;
-use App\Models\TimetableSlot;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -30,6 +29,7 @@ class ConflictChecker extends Page implements HasForms
     protected static ?int $navigationSort = 4;
 
     public ?array $data = [];
+
     public $conflicts = null;
 
     public function mount(): void
@@ -65,15 +65,16 @@ class ConflictChecker extends Page implements HasForms
     {
         $data = $this->form->getState();
 
-        if (!isset($data['academic_term_id'])) {
+        if (! isset($data['academic_term_id'])) {
             $this->conflicts = null;
+
             return;
         }
 
         $termId = $data['academic_term_id'];
-        
+
         $teacherConflicts = DB::table('timetable_slots as t1')
-            ->join('timetable_slots as t2', function($join) use ($termId) {
+            ->join('timetable_slots as t2', function ($join) use ($termId) {
                 $join->on('t1.teacher_id', '=', 't2.teacher_id')
                     ->on('t1.day', '=', 't2.day')
                     ->on('t1.period', '=', 't2.period')
@@ -101,16 +102,27 @@ class ConflictChecker extends Page implements HasForms
         $unavailableViolations = DB::table('timetable_slots as ts')
             ->join('teachers as t', 'ts.teacher_id', '=', 't.id')
             ->where('ts.academic_term_id', $termId)
-            ->whereNotNull('t.unavailable_periods')
-            ->select('ts.id', 'ts.day', 'ts.period', 't.name as teacher_name', 't.unavailable_periods')
+            ->select('ts.id', 'ts.day', 'ts.period', 't.name as teacher_name', 't.available_days', 't.available_periods')
             ->get()
-            ->filter(function($slot) {
-                $unavailable = json_decode($slot->unavailable_periods, true) ?? [];
-                foreach ($unavailable as $period) {
-                    if ($period['day'] == $slot->day && $period['period'] == $slot->period) {
-                        return true;
-                    }
+            ->filter(function ($slot) {
+                // Map numeric days to day names
+                $dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+                $dayName = $dayNames[$slot->day] ?? null;
+
+                // Check if teacher is unavailable on this day or period
+                $availableDays = json_decode($slot->available_days, true) ?? [];
+                $availablePeriods = json_decode($slot->available_periods, true) ?? [];
+
+                // If day is not in available_days, it's a violation
+                if (! empty($availableDays) && $dayName && ! in_array($dayName, $availableDays)) {
+                    return true;
                 }
+
+                // If period is not in available_periods, it's a violation
+                if (! empty($availablePeriods) && ! in_array($slot->period, $availablePeriods, true) && ! in_array((string) $slot->period, $availablePeriods, true)) {
+                    return true;
+                }
+
                 return false;
             });
 
@@ -139,11 +151,11 @@ class ConflictChecker extends Page implements HasForms
     public function refreshCheck(): void
     {
         $this->checkConflicts();
-        
+
         Notification::make()
             ->title('Conflicts Rechecked')
             ->success()
-            ->body('Found ' . ($this->conflicts['total_conflicts'] ?? 0) . ' conflict(s)')
+            ->body('Found '.($this->conflicts['total_conflicts'] ?? 0).' conflict(s)')
             ->send();
     }
 

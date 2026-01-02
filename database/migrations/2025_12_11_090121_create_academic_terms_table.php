@@ -21,7 +21,7 @@ return new class extends Migration
             $table->boolean('is_active')->default(false);
             $table->enum('status', ['draft', 'active', 'completed'])->default('draft');
             $table->timestamps();
-            
+
             $table->unique(['year', 'term']);
         });
     }

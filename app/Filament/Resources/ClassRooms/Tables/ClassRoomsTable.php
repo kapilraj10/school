@@ -21,7 +21,9 @@ class ClassRoomsTable
                 TextColumn::make('name')
                     ->label('Class')
                     ->searchable()
-                    ->sortable()
+                    ->sortable(query: function ($query, string $direction): void {
+                        $query->orderByRaw('CAST(REPLACE(name, "Class ", "") AS INTEGER) '.$direction);
+                    })
                     ->weight('bold')
                     ->icon('heroicon-m-academic-cap'),
 
@@ -36,25 +38,7 @@ class ClassRoomsTable
                     ->label('Full Name')
                     ->searchable(['name', 'section'])
                     ->sortable()
-                    ->toggleable()
-                    ->description(fn ($record) => $record->level_display),
-
-                TextColumn::make('level')
-                    ->label('Level')
-                    ->formatStateUsing(fn (string $state): string => match($state) {
-                        'basic_1_3' => 'Basic (1-3)',
-                        'basic_4_8' => 'Basic (4-8)',
-                        'secondary_9_10' => 'Secondary (9-10)',
-                        default => $state,
-                    })
-                    ->badge()
-                    ->color(fn (string $state): string => match($state) {
-                        'basic_1_3' => 'success',
-                        'basic_4_8' => 'warning',
-                        'secondary_9_10' => 'danger',
-                        default => 'gray',
-                    })
-                    ->sortable(),
+                    ->toggleable(),
 
                 TextColumn::make('weekly_periods')
                     ->label('Weekly Periods')
@@ -80,7 +64,7 @@ class ClassRoomsTable
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()
-                    ->color(fn (string $state): string => match($state) {
+                    ->color(fn (string $state): string => match ($state) {
                         'active' => 'success',
                         'inactive' => 'danger',
                         default => 'gray',
@@ -100,16 +84,6 @@ class ClassRoomsTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                SelectFilter::make('level')
-                    ->label('Level')
-                    ->options([
-                        'basic_1_3' => 'Basic (1-3)',
-                        'basic_4_8' => 'Basic (4-8)',
-                        'secondary_9_10' => 'Secondary (9-10)',
-                    ])
-                    ->multiple()
-                    ->native(false),
-
                 SelectFilter::make('status')
                     ->label('Status')
                     ->options([
