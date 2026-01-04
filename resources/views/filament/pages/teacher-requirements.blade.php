@@ -1,5 +1,5 @@
 {{-- File: resources/views/filament/pages/teacher-requirements.blade.php --}}
-<x-filament-panels::page>
+<x-filament-panels::page class="!max-w-full">
     <div class="space-y-6">
         {{-- Settings Form --}}
         <x-filament::section>

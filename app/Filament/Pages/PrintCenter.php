@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\Teacher;
+use App\Services\TimetablePrintService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -101,6 +102,7 @@ class PrintCenter extends Page implements HasForms
     {
         $data = $this->form->getState();
 
+        // Validate required fields based on print type
         if ($data['print_type'] === 'class' && empty($data['class_room_id'])) {
             Notification::make()
                 ->title('Validation Error')
@@ -121,25 +123,139 @@ class PrintCenter extends Page implements HasForms
             return;
         }
 
+        try {
+            $printService = new TimetablePrintService;
+            $term = AcademicTerm::findOrFail($data['academic_term_id']);
+
+            // Handle different print types and formats
+            switch ($data['print_type']) {
+                case 'class':
+                    return $this->handleClassPrint($data, $printService, $term);
+
+                case 'teacher':
+                    return $this->handleTeacherPrint($data, $printService, $term);
+
+                case 'all_classes':
+                    return $this->handleAllClassesPrint($data, $printService, $term);
+
+                case 'master':
+                    return $this->handleMasterTimetablePrint($data, $printService, $term);
+
+                default:
+                    throw new \Exception('Invalid print type selected.');
+            }
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Error Generating Document')
+                ->danger()
+                ->body($e->getMessage())
+                ->send();
+
+            return;
+        }
+    }
+
+    protected function handleClassPrint(array $data, TimetablePrintService $printService, AcademicTerm $term)
+    {
+        $class = ClassRoom::findOrFail($data['class_room_id']);
+
+        if ($data['format'] === 'pdf') {
+            $pdf = $printService->generateClassTimetablePdf($class->id, $term->id);
+            $filename = $printService->generateFilename('class', $class, $term);
+
+            return response()->streamDownload(
+                fn () => print ($pdf->output()),
+                $filename
+            );
+        }
+
+        if ($data['format'] === 'print') {
+            // Redirect to a print preview page
+            return redirect()->route('print.class-preview', [
+                'class_id' => $class->id,
+                'term_id' => $term->id,
+            ]);
+        }
+
+        if ($data['format'] === 'excel') {
+            Notification::make()
+                ->title('Excel Export')
+                ->info()
+                ->body('Excel export feature coming soon!')
+                ->send();
+
+            return;
+        }
+    }
+
+    protected function handleTeacherPrint(array $data, TimetablePrintService $printService, AcademicTerm $term)
+    {
+        $teacher = Teacher::findOrFail($data['teacher_id']);
+
+        if ($data['format'] === 'pdf') {
+            $pdf = $printService->generateTeacherSchedulePdf($teacher->id, $term->id);
+            $filename = $printService->generateFilename('teacher', $teacher, $term);
+
+            return response()->streamDownload(
+                fn () => print ($pdf->output()),
+                $filename
+            );
+        }
+
+        if ($data['format'] === 'print') {
+            return redirect()->route('print.teacher-preview', [
+                'teacher_id' => $teacher->id,
+                'term_id' => $term->id,
+            ]);
+        }
+
+        if ($data['format'] === 'excel') {
+            Notification::make()
+                ->title('Excel Export')
+                ->info()
+                ->body('Excel export feature coming soon!')
+                ->send();
+
+            return;
+        }
+    }
+
+    protected function handleAllClassesPrint(array $data, TimetablePrintService $printService, AcademicTerm $term)
+    {
+        if ($data['format'] === 'pdf') {
+            $pdf = $printService->generateAllClassesPdf($term->id);
+            $filename = $printService->generateFilename('all_classes', null, $term);
+
+            return response()->streamDownload(
+                fn () => print ($pdf->output()),
+                $filename
+            );
+        }
+
         Notification::make()
-            ->title('Generating Document')
-            ->info()
-            ->body('Your document is being generated. This feature will be fully implemented soon.')
+            ->title('Format Not Supported')
+            ->warning()
+            ->body('Only PDF format is supported for bulk class printing.')
             ->send();
+    }
 
-        if ($data['print_type'] === 'class' && isset($data['class_room_id'])) {
-            return redirect()->route('filament.admin.pages.timetable-viewer', [
-                'academic_term_id' => $data['academic_term_id'],
-                'class_room_id' => $data['class_room_id'],
-            ]);
+    protected function handleMasterTimetablePrint(array $data, TimetablePrintService $printService, AcademicTerm $term)
+    {
+        if ($data['format'] === 'pdf') {
+            $pdf = $printService->generateMasterTimetablePdf($term->id);
+            $filename = $printService->generateFilename('master', null, $term);
+
+            return response()->streamDownload(
+                fn () => print ($pdf->output()),
+                $filename
+            );
         }
 
-        if ($data['print_type'] === 'teacher' && isset($data['teacher_id'])) {
-            return redirect()->route('filament.admin.pages.teacher-schedule', [
-                'academic_term_id' => $data['academic_term_id'],
-                'teacher_id' => $data['teacher_id'],
-            ]);
-        }
+        Notification::make()
+            ->title('Format Not Supported')
+            ->warning()
+            ->body('Only PDF format is supported for master timetable.')
+            ->send();
     }
 
     protected function getFormActions(): array

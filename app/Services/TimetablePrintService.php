@@ -1,0 +1,265 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\AcademicTerm;
+use App\Models\ClassRoom;
+use App\Models\Teacher;
+use App\Models\TimetableSlot;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\View;
+
+class TimetablePrintService
+{
+    /**
+     * Generate a PDF for a class timetable
+     */
+    public function generateClassTimetablePdf(int $classRoomId, int $academicTermId): \Barryvdh\DomPDF\PDF
+    {
+        $data = $this->getClassTimetableData($classRoomId, $academicTermId);
+
+        $pdf = Pdf::loadView('print.class-timetable', $data);
+        $pdf->setPaper('A4', 'landscape');
+        $pdf->setOption('isHtml5ParserEnabled', true);
+        $pdf->setOption('isRemoteEnabled', true);
+
+        return $pdf;
+    }
+
+    /**
+     * Generate a PDF for a teacher schedule
+     */
+    public function generateTeacherSchedulePdf(int $teacherId, int $academicTermId): \Barryvdh\DomPDF\PDF
+    {
+        $data = $this->getTeacherScheduleData($teacherId, $academicTermId);
+
+        $pdf = Pdf::loadView('print.teacher-schedule', $data);
+        $pdf->setPaper('A4', 'landscape');
+        $pdf->setOption('isHtml5ParserEnabled', true);
+        $pdf->setOption('isRemoteEnabled', true);
+
+        return $pdf;
+    }
+
+    /**
+     * Generate PDFs for all classes in a term
+     */
+    public function generateAllClassesPdf(int $academicTermId): \Barryvdh\DomPDF\PDF
+    {
+        $term = AcademicTerm::findOrFail($academicTermId);
+        $classes = ClassRoom::active()->orderBy('name')->orderBy('section')->get();
+
+        $html = '';
+        foreach ($classes as $index => $class) {
+            $data = $this->getClassTimetableData($class->id, $academicTermId);
+            $html .= View::make('print.class-timetable', $data)->render();
+
+            // Add page break between classes except for the last one
+            if ($index < $classes->count() - 1) {
+                $html .= '<div class="page-break"></div>';
+            }
+        }
+
+        $pdf = Pdf::loadHTML($html);
+        $pdf->setPaper('A4', 'landscape');
+        $pdf->setOption('isHtml5ParserEnabled', true);
+        $pdf->setOption('isRemoteEnabled', true);
+
+        return $pdf;
+    }
+
+    /**
+     * Generate master timetable (all classes overview)
+     */
+    public function generateMasterTimetablePdf(int $academicTermId): \Barryvdh\DomPDF\PDF
+    {
+        $term = AcademicTerm::findOrFail($academicTermId);
+        $classes = ClassRoom::active()->orderBy('name')->orderBy('section')->get();
+
+        $masterData = [
+            'term' => $term,
+            'classes' => $classes,
+            'days' => TimetableSlot::$days,
+            'periods' => TimetableSlot::$periods,
+            'schedules' => [],
+        ];
+
+        // Collect timetable data for each class
+        foreach ($classes as $class) {
+            $slots = $this->getOrganizedSlots($class->id, $academicTermId);
+            $masterData['schedules'][$class->id] = [
+                'class' => $class,
+                'slots' => $slots,
+            ];
+        }
+
+        $pdf = Pdf::loadView('print.master-timetable', $masterData);
+        $pdf->setPaper('A4', 'landscape');
+        $pdf->setOption('isHtml5ParserEnabled', true);
+        $pdf->setOption('isRemoteEnabled', true);
+
+        return $pdf;
+    }
+
+    /**
+     * Export class timetable to Excel format
+     */
+    public function exportClassTimetableToExcel(int $classRoomId, int $academicTermId)
+    {
+        // This would use Laravel Excel package
+        // For now, returning the data structure that can be used with maatwebsite/excel
+        $data = $this->getClassTimetableData($classRoomId, $academicTermId);
+
+        return [
+            'class' => $data['class'],
+            'term' => $data['term'],
+            'timetable' => $this->formatTimetableForExcel($data['slots'], $data['days'], $data['periods']),
+        ];
+    }
+
+    /**
+     * Get organized timetable data for a class
+     */
+    protected function getClassTimetableData(int $classRoomId, int $academicTermId): array
+    {
+        $class = ClassRoom::findOrFail($classRoomId);
+        $term = AcademicTerm::findOrFail($academicTermId);
+
+        $slots = $this->getOrganizedSlots($classRoomId, $academicTermId);
+
+        $totalSlots = collect($slots)->flatten(1)->filter()->count();
+        $filledSlots = collect($slots)->flatten(1)->filter(fn ($slot) => $slot && $slot->subject_id)->count();
+
+        return [
+            'class' => $class,
+            'term' => $term,
+            'slots' => $slots,
+            'days' => TimetableSlot::$days,
+            'periods' => TimetableSlot::$periods,
+            'totalSlots' => $totalSlots,
+            'filledSlots' => $filledSlots,
+        ];
+    }
+
+    /**
+     * Get organized schedule data for a teacher
+     */
+    protected function getTeacherScheduleData(int $teacherId, int $academicTermId): array
+    {
+        $teacher = Teacher::findOrFail($teacherId);
+        $term = AcademicTerm::findOrFail($academicTermId);
+
+        $slotsQuery = TimetableSlot::where('academic_term_id', $academicTermId)
+            ->where('teacher_id', $teacherId)
+            ->with(['subject', 'classRoom', 'combinedPeriod'])
+            ->orderBy('day')
+            ->orderBy('period')
+            ->get();
+
+        $organized = [];
+        for ($day = 0; $day <= 5; $day++) {
+            $organized[$day] = [];
+            for ($period = 1; $period <= 8; $period++) {
+                $slot = $slotsQuery->where('day', $day)->where('period', $period)->first();
+                $organized[$day][$period] = $slot;
+            }
+        }
+
+        $totalSlots = collect($organized)->flatten(1)->filter()->count();
+        $filledSlots = collect($organized)->flatten(1)->filter(fn ($slot) => $slot && $slot->subject_id)->count();
+
+        return [
+            'teacher' => $teacher,
+            'term' => $term,
+            'slots' => $organized,
+            'days' => TimetableSlot::$days,
+            'periods' => TimetableSlot::$periods,
+            'totalSlots' => $totalSlots,
+            'filledSlots' => $filledSlots,
+        ];
+    }
+
+    /**
+     * Get organized slots for a class
+     */
+    protected function getOrganizedSlots(int $classRoomId, int $academicTermId): array
+    {
+        $slotsQuery = TimetableSlot::where('academic_term_id', $academicTermId)
+            ->where('class_room_id', $classRoomId)
+            ->with(['subject', 'teacher', 'combinedPeriod'])
+            ->orderBy('day')
+            ->orderBy('period')
+            ->get();
+
+        $organized = [];
+        for ($day = 0; $day <= 5; $day++) {
+            $organized[$day] = [];
+            for ($period = 1; $period <= 8; $period++) {
+                $slot = $slotsQuery->where('day', $day)->where('period', $period)->first();
+                $organized[$day][$period] = $slot;
+            }
+        }
+
+        return $organized;
+    }
+
+    /**
+     * Format timetable data for Excel export
+     */
+    protected function formatTimetableForExcel(array $slots, array $days, array $periods): array
+    {
+        $formatted = [];
+
+        // Header row
+        $header = ['Day/Period'];
+        foreach ($periods as $period => $label) {
+            $header[] = $label;
+        }
+        $formatted[] = $header;
+
+        // Data rows
+        foreach ($days as $dayNum => $dayName) {
+            $row = [$dayName];
+            foreach ($periods as $period => $label) {
+                $slot = $slots[$dayNum][$period] ?? null;
+                if ($slot) {
+                    $cellData = $slot->subject?->name ?? 'N/A';
+                    $cellData .= "\n".($slot->teacher?->name ?? 'No Teacher');
+                    if ($slot->subject?->code) {
+                        $cellData .= "\n[{$slot->subject->code}]";
+                    }
+                    if ($slot->is_combined) {
+                        $cellData .= "\n(Combined)";
+                    }
+                    $row[] = $cellData;
+                } else {
+                    $row[] = 'Free';
+                }
+            }
+            $formatted[] = $row;
+        }
+
+        return $formatted;
+    }
+
+    /**
+     * Generate filename for the export
+     */
+    public function generateFilename(string $type, $entity, AcademicTerm $term): string
+    {
+        $timestamp = now()->format('Y-m-d');
+
+        switch ($type) {
+            case 'class':
+                return "timetable_{$entity->full_name}_{$term->name}_{$timestamp}.pdf";
+            case 'teacher':
+                return "schedule_{$entity->name}_{$term->name}_{$timestamp}.pdf";
+            case 'all_classes':
+                return "timetables_all_classes_{$term->name}_{$timestamp}.pdf";
+            case 'master':
+                return "master_timetable_{$term->name}_{$timestamp}.pdf";
+            default:
+                return "timetable_{$timestamp}.pdf";
+        }
+    }
+}

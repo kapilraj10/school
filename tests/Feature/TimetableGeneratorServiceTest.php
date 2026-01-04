@@ -405,19 +405,23 @@ class TimetableGeneratorServiceTest extends TestCase
 
         $this->assertTrue($result['success']);
 
-        // Check each day has max 1 ECA subject
+        // Check each day has max 1 ECA subject TYPE (same ECA can have multiple consecutive periods)
         $slots = TimetableSlot::where('class_room_id', $this->class->id)
             ->where('academic_term_id', $this->term->id)
             ->whereIn('subject_id', [$eca1->id, $eca2->id])
             ->get();
 
-        $ecaPerDay = [];
+        $ecaTypesPerDay = [];
         foreach ($slots as $slot) {
-            $ecaPerDay[$slot->day] = ($ecaPerDay[$slot->day] ?? 0) + 1;
+            if (! isset($ecaTypesPerDay[$slot->day])) {
+                $ecaTypesPerDay[$slot->day] = [];
+            }
+            $ecaTypesPerDay[$slot->day][$slot->subject_id] = true;
         }
 
-        foreach ($ecaPerDay as $day => $count) {
-            $this->assertLessThanOrEqual(1, $count, "Day $day has more than 1 ECA subject");
+        foreach ($ecaTypesPerDay as $day => $subjects) {
+            $uniqueEcaTypes = count($subjects);
+            $this->assertLessThanOrEqual(1, $uniqueEcaTypes, "Day $day has more than 1 unique ECA subject type");
         }
     }
 

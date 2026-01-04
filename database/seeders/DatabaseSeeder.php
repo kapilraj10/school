@@ -27,6 +27,11 @@ class DatabaseSeeder extends Seeder
             TeacherSeeder::class,
         ]);
 
+        // Seed timetable data (class ranges, class subject settings)
+        $this->call([
+            TimetableDataSeeder::class,
+        ]);
+
         // Create admin user
         User::firstOrCreate(
             ['email' => 'admin@admin.com'],
