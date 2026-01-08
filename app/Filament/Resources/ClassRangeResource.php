@@ -90,12 +90,6 @@ class ClassRangeResource extends Resource
                                     ->suffix('periods')
                                     ->helperText('Total periods per week'),
 
-                                Forms\Components\TextInput::make('sort_order')
-                                    ->label('Sort Order')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->helperText('Display order in lists'),
-
                                 Forms\Components\Toggle::make('is_active')
                                     ->label('Active')
                                     ->default(true)
@@ -110,7 +104,7 @@ class ClassRangeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Range')
+                    ->label('Class Range')
                     ->sortable()
                     ->searchable(),
 
@@ -119,11 +113,11 @@ class ClassRangeResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('start_class')
-                    ->label('Start')
+                    ->label('Class From')
                     ->alignCenter(),
 
                 Tables\Columns\TextColumn::make('end_class')
-                    ->label('End')
+                    ->label('Class To')
                     ->alignCenter(),
 
                 Tables\Columns\TextColumn::make('periods_per_day')
@@ -139,7 +133,7 @@ class ClassRangeResource extends Resource
                     ->boolean()
                     ->alignCenter(),
             ])
-            ->defaultSort('sort_order')
+            ->defaultSort('name')
             ->filters([
                 Tables\Filters\TernaryFilter::make('is_active')
                     ->label('Active Status'),

@@ -145,6 +145,7 @@ class TeacherRequirementAnalyzer
             'class_range' => $classRange?->display_name ?? "Class {$classNumber}",
             'subject_id' => $subject->id,
             'subject_name' => $subject->name,
+            'subject_type' => $subject->type ?? 'core',
             'sections' => $classSettings->pluck('classRoom.section')->toArray(),
             'section_count' => $sectionCount,
             'min_periods_per_week' => $totalMinPeriods,
@@ -183,6 +184,7 @@ class TeacherRequirementAnalyzer
             'class_name' => $classRoom->full_name,
             'subject_id' => $subject->id,
             'subject_name' => $subject->name,
+            'subject_type' => $subject->type ?? 'core',
             'min_periods_per_week' => $setting->min_periods_per_week,
             'max_periods_per_week' => $setting->max_periods_per_week,
             'weekly_periods' => $setting->weekly_periods,
@@ -278,18 +280,18 @@ class TeacherRequirementAnalyzer
      */
     private function generateRuleText(int $classNumber, string $subjectName, int $minDays, array $periodsNeeded, ?string $teacherName, ?string $section = null): string
     {
-        $classLabel = $section ? "Class {$classNumber} - {$section}" : "Class {$classNumber}";
-        $teacherLabel = $teacherName ?? 'The teacher';
+        $classLabel = $section ? "class {$classNumber}{$section}" : "class {$classNumber}";
+        $teacherLabel = 'teacher';
 
         $daysText = $minDays >= count($this->schoolDays)
             ? 'all school days'
-            : implode(', ', array_slice($this->schoolDays, 0, $minDays));
+            : strtolower(implode(', ', array_slice($this->schoolDays, 0, $minDays)));
 
-        $periodsText = count($periodsNeeded) >= $this->periodsPerDay
-            ? 'all periods'
-            : 'periods '.implode(', ', $periodsNeeded);
+        $periodsText = count($periodsNeeded) === 1
+            ? 'period '.implode(', ', $periodsNeeded)
+            : 'period '.implode(' and ', $periodsNeeded);
 
-        return "{$teacherLabel} for {$subjectName} in {$classLabel} should be available on {$daysText} during {$periodsText}.";
+        return "{$teacherLabel} for ".strtolower($subjectName)." in {$classLabel} should be available on {$daysText} during {$periodsText}";
     }
 
     /**

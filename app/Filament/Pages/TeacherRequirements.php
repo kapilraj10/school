@@ -35,6 +35,12 @@ class TeacherRequirements extends Page implements HasForms, HasTable
 
     public ?int $selectedClassId = null;
 
+    public ?string $filterSubject = '';
+
+    public ?string $filterType = '';
+
+    public ?string $filterSingleCombined = '';
+
     public ?array $analysisData = null;
 
     public ?array $settings = null;
@@ -97,6 +103,31 @@ class TeacherRequirements extends Page implements HasForms, HasTable
         } else {
             $this->analysisData = $analyzer->analyzeAll()->toArray();
         }
+    }
+
+    public function getFilteredData(): array
+    {
+        $data = $this->analysisData ?? [];
+
+        if ($this->filterSubject) {
+            $data = array_filter($data, function ($item) {
+                return stripos($item['subject_name'] ?? '', $this->filterSubject) !== false;
+            });
+        }
+
+        if ($this->filterType) {
+            $data = array_filter($data, function ($item) {
+                return ($item['subject_type'] ?? 'core') === $this->filterType;
+            });
+        }
+
+        if ($this->filterSingleCombined) {
+            $data = array_filter($data, function ($item) {
+                return ($item['single_combined'] ?? 'single') === $this->filterSingleCombined;
+            });
+        }
+
+        return $data;
     }
 
     public function table(Table $table): Table

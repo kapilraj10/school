@@ -108,6 +108,7 @@ class TimetableDataSeeder extends Seeder
 
             if (! $classRange) {
                 $this->command->warn("No class range found for {$class->full_name}");
+
                 continue;
             }
 
@@ -118,6 +119,7 @@ class TimetableDataSeeder extends Seeder
 
             if ($subjects->isEmpty()) {
                 $this->command->warn("No subjects found for class range {$classRange->name}");
+
                 continue;
             }
 

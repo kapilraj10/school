@@ -1,7 +1,5 @@
-{{-- File: resources/views/filament/pages/teacher-requirements.blade.php --}}
 <x-filament-panels::page class="!max-w-full">
     <div class="space-y-6">
-        {{-- Settings Form --}}
         <x-filament::section>
             <x-slot name="heading">
                 <div class="flex items-center gap-2">
@@ -34,7 +32,6 @@
             </form>
         </x-filament::section>
 
-        {{-- Current Settings Info --}}
         @if($settings)
         <x-filament::section collapsible collapsed>
             <x-slot name="heading">
@@ -61,23 +58,49 @@
         </x-filament::section>
         @endif
 
-        {{-- Analysis Results --}}
         <x-filament::section>
             <x-slot name="heading">
                 <div class="flex items-center gap-2">
                     <x-heroicon-o-clipboard-document-check class="w-5 h-5" />
                     Teacher Availability Requirements
                     @if($analysisData)
-                        <span class="text-sm font-normal text-gray-500">({{ count($analysisData) }} rules)</span>
+                        <span class="text-sm font-normal text-gray-500">({{ count($this->getFilteredData()) }} rules)</span>
                     @endif
                 </div>
             </x-slot>
 
-            @if($analysisData && count($analysisData) > 0)
+            <div class="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Filter by Subject</label>
+                    <input 
+                        type="text" 
+                        wire:model.live="filterSubject" 
+                        placeholder="Search subjects..."
+                        class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Filter by Type</label>
+                    <select wire:model.live="filterType" class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
+                        <option value="">All Types</option>
+                        <option value="core">Core</option>
+                        <option value="co-curricular">Co-Curricular</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Filter by Period Type</label>
+                    <select wire:model.live="filterSingleCombined" class="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
+                        <option value="">All Period Types</option>
+                        <option value="single">Single</option>
+                        <option value="combined">Combined</option>
+                    </select>
+                </div>
+            </div>
+
+            @if($analysisData && count($this->getFilteredData()) > 0)
                 <div class="space-y-4">
                     @if($viewMode === 'by_subject')
-                        {{-- By Subject View --}}
-                        @foreach($analysisData as $item)
+                        @foreach($this->getFilteredData() as $item)
                             <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow">
                                 <div class="flex items-start justify-between">
                                     <div class="flex-1">
@@ -87,9 +110,6 @@
                                             </span>
                                             <span class="text-sm text-gray-500 dark:text-gray-400">
                                                 {{ $item['class_range'] ?? '' }}
-                                            </span>
-                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ ($item['single_combined'] ?? 'single') === 'combined' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' }}">
-                                                {{ ucfirst($item['single_combined'] ?? 'single') }}
                                             </span>
                                         </div>
                                         
@@ -105,7 +125,7 @@
                                             </div>
                                             <div class="bg-gray-50 dark:bg-gray-700 p-2 rounded">
                                                 <span class="text-gray-500 dark:text-gray-400 block">Total Periods:</span>
-                                                <span class="font-semibold">{{ $item['total_min_periods'] ?? $item['min_periods_per_week'] ?? 0 }} - {{ $item['total_max_periods'] ?? $item['max_periods_per_week'] ?? 0 }}/week</span>
+                                                <span class="font-semibold">{{ $item['total_min_periods'] ?? $item['min_periods_per_week'] ?? 0 }}-{{ $item['total_max_periods'] ?? $item['max_periods_per_week'] ?? 0 }}/week</span>
                                             </div>
                                             <div class="bg-gray-50 dark:bg-gray-700 p-2 rounded">
                                                 <span class="text-gray-500 dark:text-gray-400 block">Days Needed:</span>
@@ -117,20 +137,12 @@
                                             </div>
                                         </div>
                                     </div>
-                                    
-                                    <div class="ml-4 text-right">
-                                        <div class="text-sm font-medium {{ ($item['teacher_id'] ?? null) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }}">
-                                            <x-heroicon-o-user class="w-4 h-4 inline" />
-                                            {{ $item['teacher'] ?? 'Not Assigned' }}
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                         @endforeach
                     @else
-                        {{-- By Class View --}}
                         @php
-                            $grouped = collect($analysisData)->groupBy(fn($item) => $item['class_name'] ?? $item['class_number']);
+                            $grouped = collect($this->getFilteredData())->groupBy(fn($item) => $item['class_name'] ?? $item['class_number']);
                         @endphp
                         
                         @foreach($grouped as $className => $items)
@@ -143,15 +155,15 @@
                                     @endif
                                 </h3>
                                 
-                                <div class="overflow-x-auto">
+                                <div class="overflow-x-auto w-full">
                                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                         <thead class="bg-gray-50 dark:bg-gray-800">
                                             <tr>
                                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Subject</th>
                                                 <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Periods/Week</th>
                                                 <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Days Needed</th>
-                                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Periods</th>
-                                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Teacher</th>
+                                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Single or Combined</th>
+                                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
                                                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Requirement Rule</th>
                                             </tr>
                                         </thead>
@@ -159,19 +171,10 @@
                                             @foreach($items as $item)
                                                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
                                                     <td class="px-4 py-3 whitespace-nowrap">
-                                                        <div class="flex items-center gap-2">
-                                                            <span class="font-medium text-gray-900 dark:text-white">{{ $item['subject_name'] ?? 'Unknown' }}</span>
-                                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs {{ ($item['single_combined'] ?? 'single') === 'combined' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' }}">
-                                                                {{ ucfirst($item['single_combined'] ?? 'single') }}
-                                                            </span>
-                                                        </div>
+                                                        <span class="font-medium text-gray-900 dark:text-white">{{ $item['subject_name'] ?? 'Unknown' }}</span>
                                                     </td>
                                                     <td class="px-4 py-3 text-center whitespace-nowrap">
-                                                        <span class="text-sm">
-                                                            <span class="text-blue-600 dark:text-blue-400 font-semibold">{{ $item['min_periods_per_week'] ?? 0 }}</span>
-                                                            <span class="text-gray-400">-</span>
-                                                            <span class="text-gray-600 dark:text-gray-300">{{ $item['max_periods_per_week'] ?? 0 }}</span>
-                                                        </span>
+                                                        <span class="text-sm text-blue-600 dark:text-blue-400 font-semibold">{{ $item['min_periods_per_week'] ?? 0 }}</span>
                                                     </td>
                                                     <td class="px-4 py-3 text-center whitespace-nowrap">
                                                         <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
@@ -179,17 +182,17 @@
                                                         </span>
                                                     </td>
                                                     <td class="px-4 py-3 text-center whitespace-nowrap">
-                                                        <span class="text-xs text-gray-600 dark:text-gray-400">
-                                                            {{ implode(', ', $item['periods_needed'] ?? []) }}
+                                                        <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium {{ ($item['single_combined'] ?? 'single') === 'combined' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200' }}">
+                                                            {{ ucfirst($item['single_combined'] ?? 'single') }}
                                                         </span>
                                                     </td>
-                                                    <td class="px-4 py-3 whitespace-nowrap">
-                                                        <span class="{{ ($item['teacher_id'] ?? null) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400' }} text-sm">
-                                                            {{ $item['teacher'] ?? 'Not Assigned' }}
+                                                    <td class="px-4 py-3 text-center whitespace-nowrap">
+                                                        <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium {{ ($item['subject_type'] ?? 'core') === 'core' ? 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-200' : 'bg-info-100 text-info-700 dark:bg-info-900 dark:text-info-200' }}">
+                                                            {{ ($item['subject_type'] ?? 'core') === 'core' ? 'Core' : 'Co-Curricular' }}
                                                         </span>
                                                     </td>
                                                     <td class="px-4 py-3">
-                                                        <p class="text-xs text-gray-600 dark:text-gray-400 max-w-md">
+                                                        <p class="text-xs text-gray-600 dark:text-gray-400">
                                                             {{ $item['rule_text'] ?? '' }}
                                                         </p>
                                                     </td>
@@ -217,7 +220,6 @@
             @endif
         </x-filament::section>
 
-        {{-- Legend --}}
         <x-filament::section collapsible collapsed>
             <x-slot name="heading">
                 <div class="flex items-center gap-2">
@@ -228,13 +230,12 @@
             
             <div class="prose dark:prose-invert max-w-none text-sm">
                 <ul class="space-y-2">
-                    <li><strong>Periods/Week:</strong> Shows min-max range. The minimum is what must be assigned, max is the upper limit.</li>
+                    <li><strong>Periods/Week:</strong> Shows the minimum periods that must be assigned.</li>
                     <li><strong>Days Needed:</strong> Calculated based on max {{ $settings['max_same_subject_per_day'] ?? 2 }} same-subject periods per day.</li>
-                    <li><strong>Periods:</strong> Which period slots the teacher should ideally be available for.</li>
                     <li><strong>Single:</strong> Subject taught to one class at a time.</li>
                     <li><strong>Combined:</strong> Subject taught to multiple classes together (e.g., Sports, Music).</li>
-                    <li><strong class="text-green-600 dark:text-green-400">Green teacher name:</strong> Teacher is assigned.</li>
-                    <li><strong class="text-red-600 dark:text-red-400">Red "Not Assigned":</strong> No teacher assigned for this subject.</li>
+                    <li><strong>Core:</strong> Core subject (e.g., Math, Science).</li>
+                    <li><strong>Co-Curricular:</strong> Co-curricular subject (e.g., Sports, Music, Art).</li>
                 </ul>
                 
                 <p class="mt-4 text-gray-600 dark:text-gray-400">

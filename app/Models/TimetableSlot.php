@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TimetableSlot extends Model
 {
+    use HasFactory;
+
     public static $days = [
         0 => 'Sunday',
         1 => 'Monday',
@@ -35,9 +38,11 @@ class TimetableSlot extends Model
         'combined_period_id',
         'day',
         'period',
+        'date',
         'start_time',
         'end_time',
         'type',
+        'status',
         'is_locked',
         'is_combined',
         'notes',
@@ -46,6 +51,7 @@ class TimetableSlot extends Model
     protected $casts = [
         'day' => 'integer',
         'period' => 'integer',
+        'date' => 'date',
         'start_time' => 'datetime',
         'end_time' => 'datetime',
         'is_locked' => 'boolean',

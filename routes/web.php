@@ -1,10 +1,22 @@
 <?php
 
+use App\Http\Controllers\HomeController;
+use App\Livewire\TimetableDesigner;
+use App\Models\PageClick;
 use App\Services\TimetablePrintService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
+Route::get('/', [HomeController::class, 'index'])->name('home');
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/timetable-designer', TimetableDesigner::class)->name('timetable-designer');
+
+    Route::post('/track-click', function (Request $request) {
+        PageClick::recordClick($request->input('page_name'), $request->input('url'));
+
+        return response()->json(['success' => true]);
+    })->name('track-click');
 });
 
 Route::get('/testing', function () {

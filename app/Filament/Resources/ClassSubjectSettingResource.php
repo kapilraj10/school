@@ -113,6 +113,16 @@ class ClassSubjectSettingResource extends Resource
                                     ->native(false)
                                     ->helperText('Whether periods are for single or combined classes'),
 
+                                Forms\Components\Select::make('type')
+                                    ->label('Subject Type')
+                                    ->options([
+                                        'core' => 'Core',
+                                        'co-curricular' => 'Co-Curricular',
+                                    ])
+                                    ->default('core')
+                                    ->native(false)
+                                    ->helperText('Core or Co-Curricular subject'),
+
                                 Forms\Components\TextInput::make('priority')
                                     ->label('Priority')
                                     ->numeric()
@@ -145,19 +155,33 @@ class ClassSubjectSettingResource extends Resource
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('min_periods_per_week')
-                    ->label('Min')
+                    ->label('Min/Week')
                     ->alignCenter(),
 
                 Tables\Columns\TextColumn::make('weekly_periods')
-                    ->label('Target')
+                    ->label('Target/Week')
                     ->alignCenter(),
 
                 Tables\Columns\TextColumn::make('max_periods_per_week')
-                    ->label('Max')
+                    ->label('Max/Week')
                     ->alignCenter(),
 
-                Tables\Columns\TextColumn::make('single_combined')
+                Tables\Columns\TextColumn::make('subject.type')
                     ->label('Type')
+                    ->badge()
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'core' => 'Core',
+                        'co_curricular' => 'Co-Curricular',
+                        default => ucfirst($state),
+                    })
+                    ->color(fn (string $state): string => match ($state) {
+                        'core' => 'success',
+                        'co_curricular' => 'info',
+                        default => 'gray',
+                    }),
+
+                Tables\Columns\TextColumn::make('single_combined')
+                    ->label('Single or Combined')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'single' => 'success',
