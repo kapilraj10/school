@@ -64,6 +64,7 @@
                     $primaryTeacher = $subject->teachers->first();
                     $workload = isset($subjectWorkload[$subject->id]) ? $subjectWorkload[$subject->id] : 0;
                     $maxPeriods = $subject->max_periods_per_week ?? 0;
+                    $minPeriods = $subject->min_periods_per_week ?? 0;
                     $subjectType = strtolower(str_replace('-', '_', $subject->type ?? ''));
                     
                     if ($subjectType === 'core') {
@@ -75,11 +76,11 @@
                     }
                 @endphp
 
-                @if($maxPeriods === 0 || $workload < $maxPeriods)
+                @if($primaryTeacher && ($maxPeriods === 0 || $workload < $maxPeriods))
                     <div class="p-3 rounded-lg border transition-colors {{ $bgColor }}"
                          x-bind:class="{ 'cursor-move hover:border-blue-400 dark:hover:border-blue-600': editMode, 'cursor-not-allowed opacity-60': !editMode }"
                          x-bind:draggable="editMode"
-                         @dragstart="startDrag({{ $subject->id }}, {{ $primaryTeacher?->id ?? 'null' }})"
+                         @dragstart="startDrag({{ $subject->id }}, {{ $primaryTeacher->id }})"
                          @dragend="endDrag()">
                         <div class="flex items-start justify-between mb-2">
                             <div class="flex-1">
@@ -87,12 +88,30 @@
                                     {{ $subject->name }}
                                 </h3>
                                 <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                    {{ $primaryTeacher?->name ?? 'No teacher assigned' }}
+                                    {{ $primaryTeacher->name }}
                                 </p>
                             </div>
                             <div class="flex flex-col items-end gap-1">
-                                <span class="text-[10px] px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{{ $workload }}/{{ $maxPeriods }}</span>
-                                <span class="text-[10px] px-2 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Max: {{ $maxPeriods }}</span>
+                                <span class="text-[10px] px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{{ $workload }}</span>
+                                @if($minPeriods > 0)
+                                    <span class="text-[10px] px-2 py-1 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">Min: {{ $minPeriods }}</span>
+                                @endif
+                                @if($maxPeriods > 0)
+                                    <span class="text-[10px] px-2 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Max: {{ $maxPeriods }}</span>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                @elseif(!$primaryTeacher)
+                    <div class="p-3 rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 opacity-60">
+                        <div class="flex items-start justify-between mb-2">
+                            <div class="flex-1">
+                                <h3 class="font-semibold text-sm text-red-900 dark:text-red-100">
+                                    {{ $subject->name }}
+                                </h3>
+                                <p class="text-xs text-red-600 dark:text-red-400 mt-1">
+                                    No teacher assigned
+                                </p>
                             </div>
                         </div>
                     </div>

@@ -92,7 +92,7 @@ class TeacherSchedule extends Page implements HasForms
             ->get();
 
         $organized = [];
-        for ($day = 1; $day <= 5; $day++) {
+        for ($day = 0; $day <= 5; $day++) {
             $organized[$day] = [];
             for ($period = 1; $period <= 8; $period++) {
                 $slot = $slots->where('day', $day)->where('period', $period)->first();
@@ -104,7 +104,7 @@ class TeacherSchedule extends Page implements HasForms
         $totalPeriods = $slots->count();
         $periodsPerDay = [];
 
-        foreach (range(1, 5) as $day) {
+        foreach (range(0, 5) as $day) {
             $periodsPerDay[$day] = $slots->where('day', $day)->count();
         }
 

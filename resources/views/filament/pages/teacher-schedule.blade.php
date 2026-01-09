@@ -1,7 +1,44 @@
 {{-- File: resources/views/filament/pages/teacher-schedule.blade.php --}}
 <x-filament-panels::page>
+    <style>
+        @media print {
+            .fi-sidebar,
+            .fi-topbar,
+            header,
+            nav,
+            .fi-header-actions,
+            .print\\:hidden {
+                display: none !important;
+            }
+            
+            body {
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            
+            .fi-main {
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            
+            .fi-page {
+                padding: 20px !important;
+                max-width: 100% !important;
+            }
+            
+            table {
+                page-break-inside: auto;
+            }
+            
+            tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+            }
+        }
+    </style>
+    
     <div class="space-y-6">
-        <form wire:submit.prevent="submit">
+        <form wire:submit.prevent="submit" class="print:hidden">
             {{ $this->form }}
         </form>
 

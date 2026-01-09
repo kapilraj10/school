@@ -48,20 +48,48 @@
                     
                     <div class="mb-3">
                         <p class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Value:</p>
-                        <p class="text-base text-gray-900 dark:text-white {{ $record->type === 'json' ? '' : 'font-mono' }} break-all">
-                            @if($record->type === 'json')
-                                @php
-                                    $jsonValue = json_decode($record->value, true);
-                                    if (is_array($jsonValue)) {
-                                        echo implode(', ', $jsonValue);
-                                    } else {
-                                        echo $record->value;
-                                    }
-                                @endphp
-                            @else
-                                {{ strlen($record->value) > 100 ? substr($record->value, 0, 100) . '...' : $record->value }}
-                            @endif
-                        </p>
+                        @if($this->editingRecordId === $record->id)
+                            <div class="flex gap-2 items-start">
+                                @if($record->type === 'boolean')
+                                    <select wire:model="editingValue" class="flex-1 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                                        <option value="1">Yes</option>
+                                        <option value="0">No</option>
+                                    </select>
+                                @elseif($record->type === 'json')
+                                    <textarea wire:model="editingValue" rows="3" class="flex-1 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500"></textarea>
+                                @else
+                                    <input type="{{ $record->type === 'integer' ? 'number' : 'text' }}" wire:model="editingValue" class="flex-1 rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-primary-500 focus:ring-primary-500">
+                                @endif
+                                <button wire:click="saveValue" type="button" class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                                    Save
+                                </button>
+                                <button wire:click="cancelEditing" type="button" class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                                    Cancel
+                                </button>
+                            </div>
+                        @else
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="text-base text-gray-900 dark:text-white {{ $record->type === 'json' ? '' : 'font-mono' }} break-all flex-1">
+                                    @if($record->type === 'json')
+                                        @php
+                                            $jsonValue = json_decode($record->value, true);
+                                            if (is_array($jsonValue)) {
+                                                echo implode(', ', $jsonValue);
+                                            } else {
+                                                echo $record->value;
+                                            }
+                                        @endphp
+                                    @else
+                                        {{ strlen($record->value) > 100 ? substr($record->value, 0, 100) . '...' : $record->value }}
+                                    @endif
+                                </p>
+                                <button wire:click="startEditing({{ $record->id }}, '{{ addslashes($record->value) }}', '{{ $record->type }}')" type="button" class="inline-flex items-center px-2 py-1 text-xs font-medium text-primary-700 dark:text-primary-400 hover:text-primary-900 dark:hover:text-primary-200">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                </button>
+                            </div>
+                        @endif
                     </div>
                     
                     <x-filament-actions::modals />

@@ -262,13 +262,24 @@ class TimetableDesigner extends Component
     public function mergeTimetableSlots(): void
     {
         foreach ($this->unsavedChanges as $key => $change) {
-            $this->timetableSlots[$key] = $this->createMockSlot($change);
+            if (! isset($change['deleted']) || ! $change['deleted']) {
+                $mockSlot = $this->createMockSlot($change);
+                if ($mockSlot->subject_id) {
+                    $this->timetableSlots[$key] = $mockSlot;
+                }
+            }
         }
     }
 
     protected function createMockSlot(array $change): TimetableSlot
     {
-        $mockSlot = new TimetableSlot($change);
+        $mockSlot = new TimetableSlot;
+
+        if (! isset($change['subject_id']) || ! isset($change['teacher_id'])) {
+            return $mockSlot;
+        }
+
+        $mockSlot->fill($change);
         $mockSlot->subject = Subject::find($change['subject_id']);
         $mockSlot->teacher = Teacher::find($change['teacher_id']);
         $mockSlot->is_unsaved = true;

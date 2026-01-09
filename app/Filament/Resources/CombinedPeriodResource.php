@@ -71,7 +71,26 @@ class CombinedPeriodResource extends Resource
                         ->options(ClassRoom::active()->get()->mapWithKeys(fn ($c) => [$c->id => $c->full_name]))
                         ->required()
                         ->columns(4)
-                        ->helperText('Select all classes that will attend together'),
+                        ->helperText('Select all classes that will attend together. Only same-grade classes can be combined (e.g., Class 1A + Class 1B is allowed, but Class 1A + Class 2A is not).')
+                        ->rule('array')
+                        ->rule(function () {
+                            return function ($attribute, $value, $fail) {
+                                if (empty($value) || count($value) < 2) {
+                                    return;
+                                }
+
+                                $classes = ClassRoom::whereIn('id', $value)->get();
+                                $grades = $classes->map(function ($class) {
+                                    preg_match('/(\d+)/', $class->name, $matches);
+
+                                    return isset($matches[1]) ? (int) $matches[1] : null;
+                                })->filter()->unique();
+
+                                if ($grades->count() > 1) {
+                                    $fail('Only classes from the same grade can be combined. For example, Class 1A and Class 1B can be combined, but Class 1A and Class 2A cannot.');
+                                }
+                            };
+                        }),
                     Grid::make(3)->schema([
                         Select::make('day')
                             ->label('Day')

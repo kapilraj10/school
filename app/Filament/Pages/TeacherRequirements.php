@@ -87,8 +87,7 @@ class TeacherRequirements extends Page implements HasForms, HasTable
                     ->afterStateUpdated(fn () => $this->loadAnalysis())
                     ->searchable()
                     ->native(false),
-            ])
-            ->statePath('data');
+            ]);
     }
 
     public function loadAnalysis(): void

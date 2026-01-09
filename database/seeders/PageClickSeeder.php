@@ -9,39 +9,58 @@ class PageClickSeeder extends Seeder
 {
     public function run(): void
     {
+        $this->command->info('Seeding page clicks...');
+
         $pages = [
             [
                 'page_name' => 'Class Timetable Designer',
-                'url' => route('timetable-designer'),
+                'url' => '/timetable-designer',
                 'click_count' => 0,
             ],
             [
                 'page_name' => 'Teacher Requirements',
-                'url' => route('filament.admin.pages.teacher-requirements'),
+                'url' => '/admin/teacher-requirements',
                 'click_count' => 0,
             ],
             [
                 'page_name' => 'Class Subject Settings',
-                'url' => route('filament.admin.resources.class-subject-settings.index'),
+                'url' => '/admin/class-subject-settings',
                 'click_count' => 0,
             ],
             [
                 'page_name' => 'Class Rooms',
-                'url' => route('filament.admin.resources.class-rooms.class-rooms.index'),
+                'url' => '/admin/class-rooms/class-rooms',
                 'click_count' => 0,
             ],
             [
                 'page_name' => 'Teachers',
-                'url' => route('filament.admin.resources.teachers.teachers.index'),
+                'url' => '/admin/teachers/teachers',
+                'click_count' => 0,
+            ],
+            [
+                'page_name' => 'Subjects',
+                'url' => '/admin/subjects/subjects',
+                'click_count' => 0,
+            ],
+            [
+                'page_name' => 'Academic Terms',
+                'url' => '/admin/academic-terms',
+                'click_count' => 0,
+            ],
+            [
+                'page_name' => 'Timetable Settings',
+                'url' => '/admin/timetable-settings',
                 'click_count' => 0,
             ],
         ];
 
         foreach ($pages as $page) {
-            PageClick::firstOrCreate(
+            PageClick::updateOrCreate(
                 ['url' => $page['url']],
                 $page
             );
         }
+
+        $this->command->info('Page clicks seeded: '.count($pages).' entries.');
     }
 }

@@ -101,26 +101,98 @@ class TimetablePrintService
         return $pdf;
     }
 
-    /**
-     * Export class timetable to Excel format
-     */
-    public function exportClassTimetableToExcel(int $classRoomId, int $academicTermId)
+    public function exportClassTimetableToExcel(int $classRoomId, int $academicTermId, string $filename)
     {
-        // This would use Laravel Excel package
-        // For now, returning the data structure that can be used with maatwebsite/excel
         $data = $this->getClassTimetableData($classRoomId, $academicTermId);
 
-        return [
-            'class' => $data['class'],
-            'term' => $data['term'],
-            'timetable' => $this->formatTimetableForExcel($data['slots'], $data['days'], $data['periods']),
+        $writer = new \OpenSpout\Writer\XLSX\Writer;
+        $tempFile = tempnam(sys_get_temp_dir(), 'timetable_');
+        $writer->openToFile($tempFile);
+
+        $sheet = $writer->getCurrentSheet();
+        $sheet->setName('Timetable');
+
+        $titleRow = [
+            \OpenSpout\Common\Entity\Row::fromValues([
+                "Class Timetable: {$data['class']->full_name} - {$data['term']->name}",
+            ]),
         ];
+        $writer->addRows($titleRow);
+        $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues(['']));
+
+        $header = ['Day / Period'];
+        for ($period = 1; $period <= 8; $period++) {
+            $header[] = "Period {$period}";
+        }
+        $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues($header));
+
+        foreach ($data['days'] as $dayNum => $dayName) {
+            $row = [$dayName];
+            for ($period = 1; $period <= 8; $period++) {
+                $slot = $data['slots'][$dayNum][$period] ?? null;
+                if ($slot && $slot->subject) {
+                    $cellData = $slot->subject->name;
+                    if ($slot->teacher) {
+                        $cellData .= "\n".$slot->teacher->name;
+                    }
+                    $row[] = $cellData;
+                } else {
+                    $row[] = 'Free';
+                }
+            }
+            $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues($row));
+        }
+
+        $writer->close();
+
+        return response()->download($tempFile, $filename)->deleteFileAfterSend(true);
     }
 
-    /**
-     * Get organized timetable data for a class
-     */
-    protected function getClassTimetableData(int $classRoomId, int $academicTermId): array
+    public function exportTeacherScheduleToExcel(int $teacherId, int $academicTermId, string $filename)
+    {
+        $data = $this->getTeacherScheduleData($teacherId, $academicTermId);
+
+        $writer = new \OpenSpout\Writer\XLSX\Writer;
+        $tempFile = tempnam(sys_get_temp_dir(), 'schedule_');
+        $writer->openToFile($tempFile);
+
+        $sheet = $writer->getCurrentSheet();
+        $sheet->setName('Schedule');
+
+        $titleRow = [
+            \OpenSpout\Common\Entity\Row::fromValues([
+                "Teacher Schedule: {$data['teacher']->name} - {$data['term']->name}",
+            ]),
+        ];
+        $writer->addRows($titleRow);
+        $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues(['']));
+
+        $header = ['Day / Period'];
+        for ($period = 1; $period <= 8; $period++) {
+            $header[] = "Period {$period}";
+        }
+        $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues($header));
+
+        foreach ($data['days'] as $dayNum => $dayName) {
+            $row = [$dayName];
+            for ($period = 1; $period <= 8; $period++) {
+                $slot = $data['slots'][$dayNum][$period] ?? null;
+                if ($slot && $slot->subject) {
+                    $cellData = $slot->classRoom->full_name."\n".$slot->subject->name;
+                    $row[] = $cellData;
+                } else {
+                    $row[] = 'Free';
+                }
+            }
+            $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues($row));
+        }
+
+        $writer->close();
+
+        return response()->download($tempFile, $filename)->deleteFileAfterSend(true);
+    }
+
+    public function generateFilename(string $type, $entity, AcademicTerm $term): string
     {
         $class = ClassRoom::findOrFail($classRoomId);
         $term = AcademicTerm::findOrFail($academicTermId);

@@ -170,7 +170,6 @@ class PrintCenter extends Page implements HasForms
         }
 
         if ($data['format'] === 'print') {
-            // Redirect to a print preview page
             return redirect()->route('print.class-preview', [
                 'class_id' => $class->id,
                 'term_id' => $term->id,
@@ -178,13 +177,7 @@ class PrintCenter extends Page implements HasForms
         }
 
         if ($data['format'] === 'excel') {
-            Notification::make()
-                ->title('Excel Export')
-                ->info()
-                ->body('Excel export feature coming soon!')
-                ->send();
-
-            return;
+            return $this->exportClassToExcel($class->id, $term->id, $class, $term);
         }
     }
 
@@ -210,13 +203,7 @@ class PrintCenter extends Page implements HasForms
         }
 
         if ($data['format'] === 'excel') {
-            Notification::make()
-                ->title('Excel Export')
-                ->info()
-                ->body('Excel export feature coming soon!')
-                ->send();
-
-            return;
+            return $this->exportTeacherToExcel($teacher->id, $term->id, $teacher, $term);
         }
     }
 
@@ -269,9 +256,15 @@ class PrintCenter extends Page implements HasForms
                     $data = $this->form->getState();
 
                     if ($data['print_type'] === 'class' && ! empty($data['class_room_id'])) {
-                        return redirect()->route('filament.admin.pages.timetable-viewer');
+                        return redirect()->route('print.class-preview', [
+                            'class_id' => $data['class_room_id'],
+                            'term_id' => $data['academic_term_id'],
+                        ]);
                     } elseif ($data['print_type'] === 'teacher' && ! empty($data['teacher_id'])) {
-                        return redirect()->route('filament.admin.pages.teacher-schedule');
+                        return redirect()->route('print.teacher-preview', [
+                            'teacher_id' => $data['teacher_id'],
+                            'term_id' => $data['academic_term_id'],
+                        ]);
                     } else {
                         Notification::make()
                             ->title('Selection Required')
@@ -287,5 +280,21 @@ class PrintCenter extends Page implements HasForms
                 ->color('primary')
                 ->action('generateOutput'),
         ];
+    }
+
+    protected function exportClassToExcel(int $classId, int $termId, ClassRoom $class, AcademicTerm $term)
+    {
+        $printService = new TimetablePrintService;
+        $filename = "class-timetable-{$class->full_name}-{$term->name}.xlsx";
+
+        return $printService->exportClassTimetableToExcel($classId, $termId, $filename);
+    }
+
+    protected function exportTeacherToExcel(int $teacherId, int $termId, Teacher $teacher, AcademicTerm $term)
+    {
+        $printService = new TimetablePrintService;
+        $filename = "teacher-schedule-{$teacher->name}-{$term->name}.xlsx";
+
+        return $printService->exportTeacherScheduleToExcel($teacherId, $termId, $filename);
     }
 }
