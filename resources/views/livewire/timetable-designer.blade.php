@@ -1,8 +1,25 @@
-<div class="flex h-[calc(100vh-120px)] gap-4"
+<div class="h-[calc(100vh-3.5rem)] gap-0 flex flex-col"
      x-data="{
          draggedSubject: null,
          draggedTeacher: null,
+         draggedSlot: null,
          editMode: @entangle('editMode'),
+         zoom: Math.min(1, Math.max(0.6, (window.innerHeight - 150) / 800)),
+         init() {
+            this.$watch('zoom', val => {
+                if(val < 0.5) this.zoom = 0.5;
+                if(val > 1.5) this.zoom = 1.5;
+            });
+            window.addEventListener('resize', () => {
+                this.fitToScreen();
+            });
+         },
+         fitToScreen() {
+            // Rough estimation to fit 8 periods + headers vertically
+            const availableHeight = window.innerHeight - 120; // Header + controls
+            const contentHeight = 700; // Approx height of grid
+            this.zoom = Math.min(1, Math.max(0.6, availableHeight / contentHeight));
+         },
          startDrag(subjectId, teacherId) {
              if (!this.editMode) return;
              this.draggedSubject = subjectId;
@@ -11,11 +28,23 @@
          endDrag() {
              this.draggedSubject = null;
              this.draggedTeacher = null;
+         },
+         startDragSlot(date, period) {
+             if (!this.editMode) return;
+             this.draggedSlot = { date, period };
+         },
+         handleSidebarDrop() {
+             if (this.draggedSlot) {
+                 $wire.removeSlot(this.draggedSlot.date, this.draggedSlot.period);
+                 this.draggedSlot = null;
+             }
          }
      }">
 
     <!-- Left Sidebar - Subject/Teacher List -->
-    <div class="w-64 shrink-0 bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
+     <div class="fixed left-0 top-14 bottom-0 w-64 bg-white dark:bg-gray-800 shadow-md border-r border-gray-200 dark:border-gray-700 z-40 flex flex-col transition-transform duration-300 transform"
+          @dragover.prevent
+          @drop="handleSidebarDrop()">
         <div class="p-4 border-b border-gray-200 dark:border-gray-700">
             <div class="relative">
                 <input
@@ -33,22 +62,16 @@
             @foreach ($subjects as $subject)
                 @php
                     $primaryTeacher = $subject->teachers->first();
-                    $workload = $subjectWorkload[$subject->id] ?? 0;
-                    $totalHours = floor($workload * 0.75);
-                    $totalMinutes = ($workload * 45) % 60;
+                    $workload = isset($subjectWorkload[$subject->id]) ? $subjectWorkload[$subject->id] : 0;
                     $maxPeriods = $subject->max_periods_per_week ?? 0;
                     $subjectType = strtolower(str_replace('-', '_', $subject->type ?? ''));
                     
-                    // Determine color based on subject type
-                    $isCombined = $subject->single_combined === 'combined';
-                    if ($isCombined) {
-                        $bgColor = 'bg-purple-50 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700';
-                    } elseif ($subjectType === 'core') {
+                    if ($subjectType === 'core') {
                         $bgColor = 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700';
                     } elseif ($subjectType === 'co_curricular') {
                         $bgColor = 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700';
                     } else {
-                        $bgColor = 'bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700';
+                        $bgColor = 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
                     }
                 @endphp
 
@@ -79,10 +102,10 @@
     </div>
 
     <!-- Main Content Area - Weekly Calendar -->
-    <div class="flex-1 bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
+    <div class="ml-64 flex-1 bg-white dark:bg-gray-800 rounded-none shadow-none border-none overflow-hidden flex flex-col h-full">
 
         <!-- Top Controls -->
-        <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4">
+        <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4 h-14 bg-white dark:bg-gray-800 sticky top-0 z-30">
             <div class="flex items-center gap-4">
                 <select
                     wire:model.live="selectedTermId"
@@ -105,17 +128,53 @@
                 </select>
             </div>
 
-            <!-- Edit Mode Toggle -->
-            <button
-                wire:click="toggleEditMode"
-                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                :class="editMode ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'"
-            >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                </svg>
-                <span x-text="editMode ? 'Edit Mode: ON' : 'Edit Mode: OFF'"></span>
-            </button>
+            <div class="flex items-center gap-2">
+                <!-- Edit Mode Toggle -->
+                <button
+                    wire:click="toggleEditMode"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                    :class="editMode ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                    </svg>
+                    <span x-text="editMode ? 'Edit Mode: ON' : 'Edit Mode: OFF'"></span>
+                </button>
+
+                <!-- Save Button -->
+                <button
+                    wire:click="saveAllSlots"
+                    class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                    :class="Object.keys($wire.unsavedChanges || {}).length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-300 text-gray-500 cursor-not-allowed'"
+                    wire:loading.attr="disabled"
+                    wire:target="saveAllSlots"
+                    x-bind:disabled="Object.keys($wire.unsavedChanges || {}).length === 0"
+                >
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" wire:loading.remove wire:target="saveAllSlots">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                    </svg>
+                    <svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24" wire:loading wire:target="saveAllSlots">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span wire:loading.remove wire:target="saveAllSlots">Save</span>
+                    <span wire:loading wire:target="saveAllSlots">Saving...</span>
+                </button>
+            </div>
+
+             <!-- Zoom Controls -->
+             <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                 <button @click="fitToScreen()" class="px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 border-r border-gray-300 dark:border-gray-600 mr-1" title="Adust zoom to fit screen">
+                     Fit
+                 </button>
+                 <button @click="zoom = Math.max(0.5, zoom - 0.1)" class="p-1 hover:bg-white dark:hover:bg-gray-600 rounded" title="Zoom Out">
+                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+                 </button>
+                 <span class="text-xs w-8 text-center" x-text="Math.round(zoom * 100) + '%'"></span>
+                 <button @click="zoom = Math.min(1.5, zoom + 0.1)" class="p-1 hover:bg-white dark:hover:bg-gray-600 rounded" title="Zoom In">
+                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                 </button>
+             </div>
         </div>
 
         @if (session()->has('message'))
@@ -124,26 +183,24 @@
             </div>
         @endif
 
-        <div class="mx-4 mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
-            <div class="flex items-center gap-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700 rounded-lg px-3 py-2">
-                <span class="w-3 h-3 rounded-full bg-purple-500"></span>
-                <span class="text-gray-700 dark:text-gray-300">Combined</span>
-            </div>
-            <div class="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg px-3 py-2">
-                <span class="w-3 h-3 rounded-full bg-blue-500"></span>
-                <span class="text-gray-700 dark:text-gray-300">Core</span>
-            </div>
-            <div class="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg px-3 py-2">
-                <span class="w-3 h-3 rounded-full bg-green-500"></span>
-                <span class="text-gray-700 dark:text-gray-300">Co-Curricular</span>
-            </div>
-            <div class="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg px-3 py-2">
-                <span class="w-3 h-3 rounded-full bg-amber-500"></span>
-                <span class="text-gray-700 dark:text-gray-300">Single/Other</span>
-            </div>
+        <!-- Legend (Moved to bottom left) -->
+        <div class="fixed bottom-4 left-4 z-50 bg-white dark:bg-gray-800 p-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 grid grid-cols-1 gap-2 text-xs w-60">
+             <div class="font-semibold text-center mb-1">Color Legend</div>
+             <div class="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded px-2 py-1">
+                 <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+                 <span class="text-gray-700 dark:text-gray-300">Core Subject</span>
+             </div>
+             <div class="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded px-2 py-1">
+                 <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                 <span class="text-gray-700 dark:text-gray-300">Co-Curricular</span>
+             </div>
+             <div class="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-2 py-1">
+                 <span class="w-3 h-3 rounded-full bg-gray-400"></span>
+                 <span class="text-gray-700 dark:text-gray-300">Others</span>
+             </div>
         </div>
 
-        <div class="flex-1 overflow-auto p-4">
+        <div class="flex-1 overflow-auto p-4 transition-transform origin-top-left" :style="'zoom: ' + zoom">
             @if ($selectedClassId && $selectedTermId)
                 <div class="min-w-[1100px] space-y-3">
                     <div class="grid items-stretch gap-2 sticky top-0 z-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur"
@@ -189,31 +246,30 @@
                                         $colorClasses = '';
                                         if ($slot && $slot->subject) {
                                             $subjectType = strtolower(str_replace('-', '_', $slot->subject->type ?? ''));
-                                            $isCombined = $slot->subject->single_combined === 'combined';
                                             
-                                            if ($isCombined) {
-                                                // Combined periods - Purple
-                                                $colorClasses = 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700';
-                                            } elseif ($subjectType === 'core') {
+                                            if ($subjectType === 'core') {
                                                 // Core subjects - Blue
                                                 $colorClasses = 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700';
                                             } elseif ($subjectType === 'co_curricular') {
                                                 // Co-curricular subjects - Green
                                                 $colorClasses = 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700';
                                             } else {
-                                                // Single periods or other - Amber
-                                                $colorClasses = 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700';
+                                                // Others - Gray
+                                                $colorClasses = 'bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600';
                                             }
                                         }
                                     @endphp
 
                                     <div
-                                        class="min-h-[100px] p-3 rounded-lg border-2 transition-all {{ $slot ? $colorClasses : 'border-dashed bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' }}"
+                                        class="min-h-[100px] p-3 rounded-lg border-2 transition-all {{ $slot ? $colorClasses : 'border-dashed bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' }} {{ $slot && isset($slot->is_unsaved) && $slot->is_unsaved ? 'ring-2 ring-yellow-400 dark:ring-yellow-500' : '' }}"
                                         x-bind:class="{
                                             'hover:border-blue-400 dark:hover:border-blue-600': !draggedSubject && editMode,
                                             'border-blue-500 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20': draggedSubject && editMode,
+                                            'cursor-move': editMode && {{ $slot ? 'true' : 'false' }},
                                             'cursor-not-allowed opacity-60': !editMode
                                         }"
+                                        x-bind:draggable="editMode && {{ $slot ? 'true' : 'false' }}"
+                                        @dragstart="startDragSlot('{{ $dateKey }}', {{ $period }})"
                                         @dragover.prevent="editMode && $event.preventDefault()"
                                         @drop.prevent="editMode && $wire.assignPeriod(draggedSubject, draggedTeacher, '{{ $dateKey }}', {{ $period }})">
 
@@ -223,6 +279,9 @@
                                                     <div class="flex items-start justify-between gap-2">
                                                         <h4 class="font-semibold text-sm text-gray-900 dark:text-gray-100 line-clamp-2">
                                                             {{ $slot->subject?->name }}
+                                                            @if(isset($slot->is_unsaved) && $slot->is_unsaved)
+                                                                <span class="inline-block ml-1 px-1 py-0.5 text-[10px] bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">UNSAVED</span>
+                                                            @endif
                                                         </h4>
                                                         <div class="flex gap-1" x-show="editMode">
                                                             <button

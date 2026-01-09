@@ -14,7 +14,8 @@ class TeacherSeeder extends Seeder
      */
     public function run(): void
     {
-        // Clear existing teachers
+        // Clear existing teachers and pivot table
+        DB::table('teacher_subject')->truncate();
         DB::table('teachers')->truncate();
 
         // Teacher data from TeacherData.php
@@ -104,7 +105,8 @@ class TeacherSeeder extends Seeder
             $availableDays = $teacherData['available_days'];
             $availablePeriods = array_map('intval', $teacherData['available_periods']);
 
-            DB::table('teachers')->insert([
+            // Insert teacher record
+            $teacherId = DB::table('teachers')->insertGetId([
                 'name' => $teacherData['name'],
                 'employee_id' => strtoupper($teacherData['name']),
                 'email' => strtolower($teacherData['name']).'@school.edu',
@@ -115,6 +117,14 @@ class TeacherSeeder extends Seeder
                 'available_days' => json_encode($availableDays),
                 'available_periods' => json_encode($availablePeriods),
                 'status' => 'active',
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
+            ]);
+
+            // Insert into teacher_subject pivot table
+            DB::table('teacher_subject')->insert([
+                'teacher_id' => $teacherId,
+                'subject_id' => $subject->id,
                 'created_at' => $timestamp,
                 'updated_at' => $timestamp,
             ]);
