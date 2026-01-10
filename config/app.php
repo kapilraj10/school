@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'School Timetable Management System'),
+    'name' => env('APP_NAME', 'School Timetable Management System - Animesh Shakya'),
 
     /*
     |--------------------------------------------------------------------------

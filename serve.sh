@@ -1,3 +1,3 @@
-php artisan optimize:clear
-clear
+php artisan optimize:clear &&
+clear &&
 composer run dev

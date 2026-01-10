@@ -21,6 +21,7 @@
         <div class="w-full px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
+                    <img src="/timetable_logo.png" alt="Timetable Logo" class="w-10 h-10 object-contain mr-2" />
                     <h1 class="text-lg font-bold text-gray-900 dark:text-gray-100">
                         Timetable Designer
                     </h1>
