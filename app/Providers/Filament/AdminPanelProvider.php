@@ -31,12 +31,30 @@ class AdminPanelProvider extends PanelProvider
             fn (): string => Blade::render(<<<'HTML'
                 <script>
                     document.addEventListener('DOMContentLoaded', function() {
+                        // Track clicks on navigation items
                         document.addEventListener('click', function(e) {
                             const link = e.target.closest('a[href]');
-                            if (link && link.href && link.href.includes('/admin/')) {
-                                const pageName = link.textContent?.trim() || 'Unknown';
+                            if (link && link.href && (link.href.includes('/admin/') || link.href.includes('/timetable-designer'))) {
+                                // Get text from span or the link itself
+                                let pageName = 'Unknown';
+                                const spanText = link.querySelector('span');
+                                if (spanText) {
+                                    pageName = spanText.textContent?.trim();
+                                } else {
+                                    pageName = link.textContent?.trim();
+                                }
+                                
+                                // Clean up page name
+                                pageName = pageName.replace(/\s+/g, ' ').trim();
+                                
+                                // Skip if empty or just whitespace
+                                if (!pageName || pageName === '') {
+                                    return;
+                                }
+                                
                                 const url = link.href;
                                 
+                                // Send tracking request
                                 fetch('{{ route("track-click") }}', {
                                     method: 'POST',
                                     headers: {
@@ -49,7 +67,7 @@ class AdminPanelProvider extends PanelProvider
                                     })
                                 }).catch(() => {});
                             }
-                        });
+                        }, true); // Use capture phase
                     });
                 </script>
             HTML)

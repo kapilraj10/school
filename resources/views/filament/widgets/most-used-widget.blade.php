@@ -8,7 +8,6 @@
             @foreach($links as $link)
                 <a 
                     href="{{ $link['url'] }}" 
-                    onclick="fetch('{{ route('track-click') }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' }, body: JSON.stringify({ page_name: '{{ $link['label'] }}', url: '{{ $link['url'] }}' }) })"
                     class="flex flex-col items-center justify-center p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-primary-500 hover:shadow-md transition-all"
                 >
                     <x-filament::icon 
@@ -18,6 +17,11 @@
                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300 text-center">
                         {{ $link['label'] }}
                     </span>
+                    @if(isset($link['click_count']) && $link['click_count'] > 0)
+                        <span class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {{ $link['click_count'] }} clicks
+                        </span>
+                    @endif
                 </a>
             @endforeach
         </div>

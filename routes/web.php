@@ -13,7 +13,13 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/timetable-designer', TimetableDesigner::class)->name('timetable-designer');
 
     Route::post('/track-click', function (Request $request) {
-        PageClick::recordClick($request->input('page_name'), $request->input('url'));
+        $url = $request->input('url');
+        
+        // Normalize URL to relative path
+        $parsedUrl = parse_url($url);
+        $normalizedUrl = $parsedUrl['path'] ?? $url;
+        
+        PageClick::recordClick($request->input('page_name'), $normalizedUrl);
 
         return response()->json(['success' => true]);
     })->name('track-click');
