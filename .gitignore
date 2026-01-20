@@ -23,6 +23,13 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 
-# Ignore all .md files except README.md
+
 *.md
 !README.md
+*.txt
+!LICENSE.txt
+*.pdf
+*.docx
+*.doc
+*.zip
+*.rar
