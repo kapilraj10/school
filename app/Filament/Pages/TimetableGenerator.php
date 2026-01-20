@@ -5,7 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\Subject;
-use App\Services\TimetableGeneratorService;
+use App\Services\GeneticAlgorithmTimetableService;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
@@ -18,6 +18,7 @@ use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class TimetableGenerator extends Page implements HasForms
@@ -39,6 +40,20 @@ class TimetableGenerator extends Page implements HasForms
     public ?array $data = [];
 
     public ?array $generationResult = null;
+
+    public function getEstimatedGenerationSeconds(): int
+    {
+        $classCount = count($this->data['class_ids'] ?? []);
+
+        if ($classCount < 1) {
+            return 0;
+        }
+
+        $avgSecondsPerClass = (float) Cache::get('ga_generation_avg_seconds_per_class', 60.0);
+        $avgSecondsPerClass = max(10.0, min(600.0, $avgSecondsPerClass));
+
+        return (int) max(5, round($avgSecondsPerClass * $classCount));
+    }
 
     public function mount(): void
     {
@@ -245,6 +260,7 @@ class TimetableGenerator extends Page implements HasForms
     public function generateTimetable(): void
     {
         try {
+            $startedAt = microtime(true);
             $data = $this->form->getState();
 
             if (empty($data['class_ids'])) {
@@ -257,30 +273,76 @@ class TimetableGenerator extends Page implements HasForms
                 return;
             }
 
-            $service = new TimetableGeneratorService;
-            $result = $service->generate(
-                $data['class_ids'],
-                $data['academic_term_id'],
-                $data
-            );
+            $service = new GeneticAlgorithmTimetableService;
+            $academicTerm = AcademicTerm::find($data['academic_term_id']);
+            $classes = ClassRoom::whereIn('id', $data['class_ids'])->get();
 
-            $this->generationResult = $result;
+            $results = [];
+            $totalSlots = 0;
+            $successCount = 0;
+            $allWarnings = [];
+            $allErrors = [];
 
-            if (! empty($result['success'])) {
+            foreach ($classes as $class) {
+                $result = $service->generateTimetable(
+                    $class,
+                    $academicTerm,
+                    50,
+                    500
+                );
+
+                $results[] = $result;
+
+                if ($result['success']) {
+                    $successCount++;
+                    $totalSlots += $result['slots'] ?? 0;
+                    if (! empty($result['warnings'])) {
+                        $allWarnings = array_merge($allWarnings, $result['warnings']);
+                    }
+                } else {
+                    if (! empty($result['errors'])) {
+                        $allErrors = array_merge($allErrors, $result['errors']);
+                    }
+                    $allErrors[] = $result['message'];
+                }
+            }
+
+            $this->generationResult = [
+                'success' => $successCount > 0,
+                'results' => $results,
+                'statistics' => [
+                    'total_slots' => $totalSlots,
+                    'combined_slots' => 0,
+                    'classes_generated' => $successCount,
+                    'teachers_used' => 0,
+                ],
+                'warnings' => $allWarnings,
+                'errors' => $allErrors,
+            ];
+
+            $classCount = max(1, count($classes));
+            $elapsedSeconds = max(0.0, microtime(true) - $startedAt);
+            $secondsPerClass = $elapsedSeconds / $classCount;
+            $previousAvg = (float) Cache::get('ga_generation_avg_seconds_per_class', 60.0);
+            $newAvg = ($previousAvg * 0.7) + ($secondsPerClass * 0.3);
+
+            Cache::forever('ga_generation_avg_seconds_per_class', max(10.0, min(600.0, $newAvg)));
+
+            if ($successCount > 0) {
                 Notification::make()
                     ->title('Timetable Generated Successfully!')
                     ->success()
                     ->body(sprintf(
-                        'Generated %d slots for %d classes with %d teachers assigned.',
-                        $result['statistics']['total_slots'] ?? 0,
-                        $result['statistics']['classes_generated'] ?? 0,
-                        $result['statistics']['teachers_used'] ?? 0
+                        'Generated %d slots for %d out of %d classes using Genetic Algorithm.',
+                        $totalSlots,
+                        $successCount,
+                        count($classes)
                     ))
                     ->duration(8000)
                     ->send();
 
-                if (! empty($result['warnings'])) {
-                    foreach (array_slice($result['warnings'], 0, 3) as $warning) {
+                if (! empty($allWarnings)) {
+                    foreach (array_slice($allWarnings, 0, 3) as $warning) {
                         Notification::make()
                             ->title('Generation Warning')
                             ->warning()
@@ -289,7 +351,6 @@ class TimetableGenerator extends Page implements HasForms
                     }
                 }
 
-                // Redirect to the timetable viewer page after success
                 $this->js('setTimeout(() => window.location.href = "'.route('filament.admin.pages.timetable-viewer').'", 2000)');
             } else {
                 Notification::make()
@@ -299,7 +360,7 @@ class TimetableGenerator extends Page implements HasForms
                     ->persistent()
                     ->send();
 
-                foreach (array_slice($result['errors'] ?? [], 0, 3) as $error) {
+                foreach (array_slice($allErrors, 0, 3) as $error) {
                     Notification::make()
                         ->title('Error')
                         ->danger()

@@ -7,7 +7,7 @@ use App\Models\ClassRoom;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimetableSlot;
-use App\Services\TimetableGeneratorService;
+use App\Services\GeneticAlgorithmTimetableService;
 use App\Services\TimetableValidationService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -479,10 +479,15 @@ class TimetableDesigner extends Page implements HasForms
         $this->isLoading = true;
 
         try {
-            $generator = app(TimetableGeneratorService::class);
-            $result = $generator->generate(
-                [$this->selectedClassRoomId],
-                $this->selectedTermId
+            $generator = app(GeneticAlgorithmTimetableService::class);
+            $classRoom = ClassRoom::find($this->selectedClassRoomId);
+            $academicTerm = AcademicTerm::find($this->selectedTermId);
+
+            $result = $generator->generateTimetable(
+                $classRoom,
+                $academicTerm,
+                100,
+                1000
             );
 
             if ($result['success']) {
@@ -491,7 +496,22 @@ class TimetableDesigner extends Page implements HasForms
                 Notification::make()
                     ->success()
                     ->title('Timetable generated successfully')
+                    ->body(sprintf(
+                        'Generated %d slots with fitness score: %.2f',
+                        $result['slots'] ?? 0,
+                        $result['fitness'] ?? 0
+                    ))
                     ->send();
+
+                if (! empty($result['warnings'])) {
+                    foreach (array_slice($result['warnings'], 0, 2) as $warning) {
+                        Notification::make()
+                            ->warning()
+                            ->title('Warning')
+                            ->body($warning)
+                            ->send();
+                    }
+                }
             } else {
                 Notification::make()
                     ->danger()

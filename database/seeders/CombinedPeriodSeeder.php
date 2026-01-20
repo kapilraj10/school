@@ -21,47 +21,90 @@ class CombinedPeriodSeeder extends Seeder
             return;
         }
 
-        $peSubject = Subject::where('name', 'like', '%Physical Education%')->orWhere('name', 'like', '%PE%')->first();
-        $artSubject = Subject::where('name', 'like', '%Art%')->first();
+        // Get all subjects marked as 'combined'
+        $combinedSubjects = Subject::where('single_combined', 'combined')
+            ->where('status', 'active')
+            ->get();
 
-        $class1Sections = ClassRoom::where('name', 'Class 1')->where('is_active', true)->get();
+        if ($combinedSubjects->isEmpty()) {
+            $this->command->info('No combined subjects found. Skipping combined period seeding.');
 
-        if ($peSubject && $class1Sections->count() >= 2) {
-            $teacher = Teacher::whereJsonContains('subject_ids', $peSubject->id)->first();
+            return;
+        }
 
-            if ($teacher && $class1Sections->count() >= 2) {
+        // Group classes by their name
+        $classGroups = ClassRoom::where('status', 'active')
+            ->get()
+            ->groupBy(function ($class) {
+                return $class->name;
+            });
+
+        $createdCount = 0;
+        $periodCounter = 0;
+
+        // For each class group, assign combined subjects sequentially
+        foreach ($classGroups as $baseName => $sections) {
+            if ($sections->count() < 2) {
+                continue; // Need at least 2 sections for combined period
+            }
+
+            $classRoomIds = $sections->take(2)->pluck('id')->toArray();
+            $subjectIndex = 0;
+
+            // Assign each combined subject to a unique time slot for this class
+            foreach ($combinedSubjects as $subject) {
+                // Get teacher for this subject
+                $teacher = Teacher::whereJsonContains('subject_ids', $subject->id)->first();
+
+                if (! $teacher) {
+                    $this->command->warn("No teacher found for combined subject: {$subject->name}");
+
+                    continue;
+                }
+
+                // Check if combined period already exists for this class and subject
+                $exists = CombinedPeriod::where('subject_id', $subject->id)
+                    ->where('teacher_id', $teacher->id)
+                    ->where('academic_term_id', $activeTerm->id)
+                    ->where(function ($query) use ($classRoomIds) {
+                        foreach ($classRoomIds as $id) {
+                            $query->orWhereJsonContains('class_room_ids', $id);
+                        }
+                    })
+                    ->exists();
+
+                if ($exists) {
+                    $subjectIndex++;
+
+                    continue;
+                }
+
+                // Calculate unique day/period combination
+                $dayOffset = $periodCounter % 5; // 0-4 (5 days)
+                $periodOffset = 6 + (int) floor($periodCounter / 5) % 3; // Periods 6, 7, 8
+
                 CombinedPeriod::create([
-                    'name' => 'Class 1 Combined PE',
-                    'subject_id' => $peSubject->id,
+                    'name' => "{$baseName} Combined {$subject->name}",
+                    'subject_id' => $subject->id,
                     'teacher_id' => $teacher->id,
-                    'class_room_ids' => $class1Sections->take(2)->pluck('id')->toArray(),
-                    'day' => 1,
-                    'period' => 6,
+                    'class_room_ids' => $classRoomIds,
+                    'day' => $dayOffset,
+                    'period' => $periodOffset,
                     'frequency' => 'weekly',
                     'academic_term_id' => $activeTerm->id,
                 ]);
+
+                $createdCount++;
+                $periodCounter++;
+                $this->command->info("Created: {$baseName} Combined {$subject->name} (Day: {$dayOffset}, Period: {$periodOffset})");
+                $subjectIndex++;
             }
         }
 
-        $class2Sections = ClassRoom::where('name', 'Class 2')->where('is_active', true)->get();
-
-        if ($artSubject && $class2Sections->count() >= 2) {
-            $teacher = Teacher::whereJsonContains('subject_ids', $artSubject->id)->first();
-
-            if ($teacher && $class2Sections->count() >= 2) {
-                CombinedPeriod::create([
-                    'name' => 'Class 2 Combined Art',
-                    'subject_id' => $artSubject->id,
-                    'teacher_id' => $teacher->id,
-                    'class_room_ids' => $class2Sections->take(2)->pluck('id')->toArray(),
-                    'day' => 3,
-                    'period' => 7,
-                    'frequency' => 'weekly',
-                    'academic_term_id' => $activeTerm->id,
-                ]);
-            }
+        if ($createdCount > 0) {
+            $this->command->info("Combined periods seeded successfully! Created {$createdCount} combined periods.");
+        } else {
+            $this->command->info('No new combined periods were created.');
         }
-
-        $this->command->info('Combined periods seeded successfully!');
     }
 }
