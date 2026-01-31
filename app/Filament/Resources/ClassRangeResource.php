@@ -16,6 +16,8 @@ class ClassRangeResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-academic-cap';
 
+    protected static ?string $recordTitleAttribute = 'display_name';
+
     protected static ?string $navigationLabel = 'Class Ranges';
 
     protected static ?string $modelLabel = 'Class Range';
@@ -23,6 +25,11 @@ class ClassRangeResource extends Resource
     protected static ?string $navigationGroup = 'Timetable Settings';
 
     protected static ?int $navigationSort = 1;
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'display_name'];
+    }
 
     public static function form(Form $form): Form
     {

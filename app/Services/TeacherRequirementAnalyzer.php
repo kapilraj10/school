@@ -222,7 +222,7 @@ class TeacherRequirementAnalyzer
         return [
             'subject_id' => $subject->id,
             'subject_name' => $subject->name,
-            'class_range' => $subject->class_range,
+            'class_room' => $subject->classRoom?->full_name ?? 'N/A',
             'classes' => $classNames,
             'class_count' => count($classNames),
             'total_min_periods' => $totalMinPeriods,

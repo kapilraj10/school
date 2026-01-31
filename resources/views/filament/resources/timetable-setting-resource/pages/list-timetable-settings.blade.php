@@ -20,17 +20,6 @@
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                                 {{ formatSettingKey($record->key) }}
                             </h3>
-                            <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium 
-                                @if($record->type === 'string') bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300
-                                @elseif($record->type === 'integer') bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300
-                                @elseif($record->type === 'boolean') bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300
-                                @elseif($record->type === 'json') bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300
-                                @endif">
-                                {{ ucfirst($record->type) }}
-                            </span>
-                            <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300 ml-2">
-                                {{ formatSettingKey($record->group) }}
-                            </span>
                         </div>
                         <div class="flex gap-2 ml-2">
                             <a href="{{ $this->getResource()::getUrl('edit', ['record' => $record]) }}" class="inline-flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">
@@ -63,13 +52,13 @@
                                 <button wire:click="saveValue" type="button" class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
                                     Save
                                 </button>
-                                <button wire:click="cancelEditing" type="button" class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                                <button wire:click="cancelEditing" type="button" class="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-400 text-sm font-medium rounded-md text-white dark:text-gray-100 bg-white dark:bg-transparent hover:bg-gray-50 dark:hover:bg-gray-700/60 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
                                     Cancel
                                 </button>
                             </div>
                         @else
                             <div class="flex items-start justify-between gap-2">
-                                <p class="text-base text-gray-900 dark:text-white {{ $record->type === 'json' ? '' : 'font-mono' }} break-all flex-1">
+                                <p class="text-base text-gray-900 dark:text-white {{ in_array($record->type, ['json', 'boolean'], true) ? '' : 'font-mono' }} break-all flex-1">
                                     @if($record->type === 'json')
                                         @php
                                             $jsonValue = json_decode($record->value, true);
@@ -79,6 +68,8 @@
                                                 echo $record->value;
                                             }
                                         @endphp
+                                    @elseif($record->type === 'boolean')
+                                        {{ in_array((string) $record->value, ['1', 'true'], true) ? 'Yes' : 'No' }}
                                     @else
                                         {{ strlen($record->value) > 100 ? substr($record->value, 0, 100) . '...' : $record->value }}
                                     @endif
@@ -123,7 +114,7 @@
                                      x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
                                      class="inline-block px-4 pt-5 pb-4 overflow-hidden text-left align-bottom transition-all transform bg-white rounded-lg shadow-xl dark:bg-gray-800 sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
                                     <div class="sm:flex sm:items-start">
-                                        <div class="flex items-center justify-center flex-shrink-0 w-12 h-12 mx-auto bg-red-100 rounded-full dark:bg-red-900/20 sm:mx-0 sm:h-10 sm:w-10">
+                                        <div class="flex items-center justify-center shrink-0 w-12 h-12 mx-auto bg-red-100 rounded-full dark:bg-red-900/20 sm:mx-0 sm:h-10 sm:w-10">
                                             <svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                             </svg>

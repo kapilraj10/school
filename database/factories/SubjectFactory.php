@@ -22,13 +22,13 @@ class SubjectFactory extends Factory
         return [
             'name' => fake()->randomElement(['Math', 'Science', 'English', 'Social', 'Nepali', 'Computer']),
             'code' => strtoupper(fake()->lexify('???')),
+            'class_room_id' => \App\Models\ClassRoom::factory(),
             'type' => 'core',
             'weekly_periods' => fake()->numberBetween(4, 6),
             'min_periods_per_week' => 4,
             'max_periods_per_week' => 6,
             'level' => 'intermediate',
             'status' => 'active',
-            'class_range' => '1 - 5',
             'single_combined' => 'single',
         ];
     }

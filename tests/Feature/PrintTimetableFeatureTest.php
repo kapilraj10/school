@@ -7,13 +7,10 @@ use App\Models\ClassRoom;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Services\TimetablePrintService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class PrintTimetableFeatureTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected User $user;
 
     protected AcademicTerm $term;

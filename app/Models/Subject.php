@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -14,13 +15,13 @@ class Subject extends Model
     protected $fillable = [
         'name',
         'code',
+        'class_room_id',
         'type',
         'weekly_periods',
         'min_periods_per_week',
         'max_periods_per_week',
         'level',
         'status',
-        'class_range',
         'single_combined',
     ];
 
@@ -30,9 +31,11 @@ class Subject extends Model
         'max_periods_per_week' => 'integer',
     ];
 
-    /**
-     * Get the timetable slots for this subject
-     */
+    public function classRoom(): BelongsTo
+    {
+        return $this->belongsTo(ClassRoom::class);
+    }
+
     public function timetableSlots(): HasMany
     {
         return $this->hasMany(TimetableSlot::class);

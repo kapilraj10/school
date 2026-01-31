@@ -110,7 +110,6 @@ class TimetableGeneratorService
      */
     private function getSubjectsForClass(ClassRoom $class): Collection
     {
-        // First, try to get from ClassSubjectSettings
         $classSettings = ClassSubjectSetting::with('subject')
             ->where('class_room_id', $class->id)
             ->where('is_active', true)
@@ -121,15 +120,10 @@ class TimetableGeneratorService
             return $classSettings;
         }
 
-        // Fallback: get subjects by class range
-        $classNumber = $this->extractClassNumber($class->name);
-        $classRange = $this->getClassRangeForClassNumber($classNumber);
-
-        return Subject::where('class_range', $classRange)
+        return Subject::where('class_room_id', $class->id)
             ->where('status', 'active')
             ->get()
             ->map(function ($subject) {
-                // Convert to a pseudo-ClassSubjectSetting format for consistency
                 return (object) [
                     'subject' => $subject,
                     'subject_id' => $subject->id,
@@ -142,20 +136,16 @@ class TimetableGeneratorService
             });
     }
 
-    /**
-     * Get teacher for a subject and class range
-     * Finds a teacher who teaches this subject for the given class range
-     */
-    private function getTeacherForSubject(Subject $subject, string $classRange): ?Teacher
+    private function getTeacherForSubject(Subject $subject, int $classRoomId): ?Teacher
     {
-        // Find teacher who can teach this subject
         $teachers = Teacher::active()
             ->whereJsonContains('subject_ids', $subject->id)
             ->get();
 
-        // Prefer teachers with matching class range (by subject association)
         foreach ($teachers as $teacher) {
-            return $teacher;
+            if ($teacher->canTeachClass($classRoomId)) {
+                return $teacher;
+            }
         }
 
         return null;
@@ -516,10 +506,11 @@ class TimetableGeneratorService
         try {
             DB::beginTransaction();
 
-            // Clear existing timetable for these classes if option is set
+            // Clear existing timetable for these classes if option is set (except locked slots)
             if ($options['clear_existing'] ?? true) {
                 TimetableSlot::whereIn('class_room_id', $classIds)
                     ->where('academic_term_id', $termId)
+                    ->where('is_locked', false)
                     ->delete();
             }
 
@@ -737,7 +728,7 @@ class TimetableGeneratorService
         foreach ($subjects as $item) {
             $subject = $item['subject'];
             $target = ($mode === 'min') ? $item['min'] : $item['max'];
-            $teacher = $this->getTeacherForSubject($subject, $classRange);
+            $teacher = $this->getTeacherForSubject($subject, $classId);
 
             while (($assignedPeriods[$subject->id] ?? 0) < $target) {
                 $assigned = false;
@@ -825,7 +816,7 @@ class TimetableGeneratorService
         foreach ($subjects as $item) {
             $subject = $item['subject'];
             $target = ($mode === 'min') ? $item['min'] : $item['max'];
-            $teacher = $this->getTeacherForSubject($subject, $classRange);
+            $teacher = $this->getTeacherForSubject($subject, $classId);
 
             // Get preferred period from template
             $preferredPeriod = $template[$subject->id] ?? null;
@@ -926,7 +917,7 @@ class TimetableGeneratorService
         foreach ($ecaItems as $item) {
             $subject = $item['subject'];
             $target = $item['min'];
-            $teacher = $this->getTeacherForSubject($subject, $classRange);
+            $teacher = $this->getTeacherForSubject($subject, $classId);
 
             while (($assignedPeriods[$subject->id] ?? 0) < $target) {
                 $assigned = false;
@@ -995,7 +986,7 @@ class TimetableGeneratorService
                 // Find best subject that can fill this slot
                 foreach ($allSubjects as $item) {
                     $subject = $item['subject'];
-                    $teacher = $this->getTeacherForSubject($subject, $classRange);
+                    $teacher = $this->getTeacherForSubject($subject, $classId);
 
                     // Skip if at max
                     if (($assignedPeriods[$subject->id] ?? 0) >= $item['max']) {

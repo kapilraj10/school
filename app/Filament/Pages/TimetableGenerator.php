@@ -41,6 +41,12 @@ class TimetableGenerator extends Page implements HasForms
 
     public ?array $generationResult = null;
 
+    public bool $isGenerating = false;
+
+    public int $currentClassIndex = 0;
+
+    public int $totalClasses = 0;
+
     public function getEstimatedGenerationSeconds(): int
     {
         $classCount = count($this->data['class_ids'] ?? []);
@@ -257,6 +263,12 @@ class TimetableGenerator extends Page implements HasForms
         return [];
     }
 
+    public function checkGenerationProgress(): void
+    {
+        // This method is called by wire:poll to update the UI
+        // The properties are already reactive, so no additional action needed
+    }
+
     public function generateTimetable(): void
     {
         try {
@@ -277,13 +289,20 @@ class TimetableGenerator extends Page implements HasForms
             $academicTerm = AcademicTerm::find($data['academic_term_id']);
             $classes = ClassRoom::whereIn('id', $data['class_ids'])->get();
 
+            // Initialize generation state
+            $this->isGenerating = true;
+            $this->totalClasses = count($classes);
+            $this->currentClassIndex = 0;
+
             $results = [];
             $totalSlots = 0;
             $successCount = 0;
             $allWarnings = [];
             $allErrors = [];
 
-            foreach ($classes as $class) {
+            foreach ($classes as $index => $class) {
+                $this->currentClassIndex = $index + 1;
+
                 $result = $service->generateTimetable(
                     $class,
                     $academicTerm,
@@ -369,7 +388,13 @@ class TimetableGenerator extends Page implements HasForms
                         ->send();
                 }
             }
+
+            // Reset generation state
+            $this->isGenerating = false;
         } catch (\Exception $e) {
+            // Reset generation state on error
+            $this->isGenerating = false;
+
             Log::error('Timetable generation error: '.$e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);

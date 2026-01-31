@@ -9,13 +9,10 @@ use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimetableSlot;
 use App\Services\TimetableValidationService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class TimetableValidationServiceTest extends TestCase
 {
-    use RefreshDatabase;
-
     private TimetableValidationService $validator;
 
     private ClassRoom $classRoom;

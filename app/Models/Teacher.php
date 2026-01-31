@@ -17,6 +17,7 @@ class Teacher extends Model
         'email',
         'phone',
         'subject_ids',
+        'class_room_ids',
         'max_periods_per_day',
         'max_periods_per_week',
         'available_days',
@@ -26,6 +27,7 @@ class Teacher extends Model
 
     protected $casts = [
         'subject_ids' => 'array',
+        'class_room_ids' => 'array',
         'max_periods_per_day' => 'integer',
         'max_periods_per_week' => 'integer',
         'available_days' => 'array',
@@ -57,6 +59,18 @@ class Teacher extends Model
     }
 
     /**
+     * Get classes this teacher is assigned to
+     */
+    public function classRooms()
+    {
+        if (empty($this->class_room_ids)) {
+            return collect([]);
+        }
+
+        return ClassRoom::whereIn('id', $this->class_room_ids)->get();
+    }
+
+    /**
      * Get subjects by IDs
      */
     public function getSubjectsAttribute()
@@ -74,6 +88,18 @@ class Teacher extends Model
     public function canTeachSubject(int $subjectId): bool
     {
         return in_array($subjectId, $this->subject_ids ?? []);
+    }
+
+    /**
+     * Check if teacher is assigned to a specific class
+     */
+    public function canTeachClass(int $classRoomId): bool
+    {
+        if (empty($this->class_room_ids)) {
+            return true;
+        }
+
+        return in_array($classRoomId, $this->class_room_ids);
     }
 
     /**

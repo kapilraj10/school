@@ -56,9 +56,6 @@ class TimetableSettingsSeeder extends Seeder
 
             // Period settings
             ['key' => 'periods_per_day', 'value' => '8', 'type' => 'integer', 'group' => 'periods', 'description' => 'Number of periods per school day'],
-            ['key' => 'period_duration_minutes', 'value' => '40', 'type' => 'integer', 'group' => 'periods', 'description' => 'Duration of each period in minutes'],
-            ['key' => 'break_after_period', 'value' => '4', 'type' => 'integer', 'group' => 'periods', 'description' => 'Break after this period number'],
-            ['key' => 'break_duration_minutes', 'value' => '20', 'type' => 'integer', 'group' => 'periods', 'description' => 'Duration of break in minutes'],
 
             // Algorithm settings
             ['key' => 'max_same_subject_per_day', 'value' => '2', 'type' => 'integer', 'group' => 'algorithm', 'description' => 'Maximum times same subject can appear per day'],

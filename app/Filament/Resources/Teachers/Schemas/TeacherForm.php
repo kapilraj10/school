@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Teachers\Schemas;
 
+use App\Filament\Forms\Components\AvailabilityGrid;
+use App\Models\ClassRoom;
 use App\Models\Subject;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Section;
@@ -78,6 +80,23 @@ class TeacherForm
                             ->helperText('Select all subjects this teacher is qualified to teach'),
                     ]),
 
+                Section::make('Class Assignment')
+                    ->description('Select classes this teacher is assigned to teach')
+                    ->schema([
+                        Select::make('class_room_ids')
+                            ->label('Assigned Classes')
+                            ->multiple()
+                            ->options(fn () => ClassRoom::active()
+                                ->get()
+                                ->sortBy(fn ($class) => $class->name.$class->section, SORT_NATURAL | SORT_FLAG_CASE)
+                                ->mapWithKeys(fn ($class) => [$class->id => $class->full_name])
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->native(false)
+                            ->helperText('Leave empty to allow teaching all classes, or select specific classes'),
+                    ]),
+
                 Section::make('Teaching Capacity')
                     ->description('Configure the teacher\'s workload limits')
                     ->schema([
@@ -107,42 +126,37 @@ class TeacherForm
                             ]),
                     ]),
 
-                Section::make('Available Periods')
+                Section::make('Teacher Availability')
                     ->description('Specify when this teacher is available to teach')
                     ->schema([
-                        Select::make('available_days')
-                            ->label('Available Days')
-                            ->multiple()
-                            ->options([
-                                'Sun' => 'Sunday',
-                                'Mon' => 'Monday',
-                                'Tue' => 'Tuesday',
-                                'Wed' => 'Wednesday',
-                                'Thu' => 'Thursday',
-                                'Fri' => 'Friday',
-                            ])
+                        AvailabilityGrid::make('availability')
+                            ->label('Availability Grid')
                             ->required()
-                            ->native(false)
-                            ->helperText('Select days when teacher is available'),
-
-                        Select::make('available_periods')
-                            ->label('Available Periods')
-                            ->multiple()
-                            ->options([
-                                1 => 'Period 1',
-                                2 => 'Period 2',
-                                3 => 'Period 3',
-                                4 => 'Period 4',
-                                5 => 'Period 5',
-                                6 => 'Period 6',
-                                7 => 'Period 7',
-                                8 => 'Period 8',
-                            ])
-                            ->required()
-                            ->native(false)
-                            ->helperText('Select periods when teacher is available'),
+                            ->helperText('Click cells to toggle availability. Click headers to toggle entire rows/columns.')
+                            ->afterStateHydrated(function (AvailabilityGrid $component, $state, $record) {
+                                if ($record) {
+                                    $component->state([
+                                        'days' => $record->available_days ?? [],
+                                        'periods' => $record->available_periods ?? [],
+                                    ]);
+                                }
+                            })
+                            ->dehydrated()
+                            ->live(),
                     ])
                     ->collapsible(),
-            ]);
+            ])
+            ->columns(1);
+    }
+
+    public static function mutateFormDataBeforeSave(array $data): array
+    {
+        if (isset($data['availability'])) {
+            $data['available_days'] = $data['availability']['days'] ?? [];
+            $data['available_periods'] = $data['availability']['periods'] ?? [];
+            unset($data['availability']);
+        }
+
+        return $data;
     }
 }

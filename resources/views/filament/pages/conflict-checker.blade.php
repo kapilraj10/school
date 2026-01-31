@@ -23,12 +23,18 @@
                     </div>
                 @else
                     {{-- Summary Stats --}}
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-6">
                         <div class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800">
                             <div class="text-2xl font-bold text-red-700 dark:text-red-300">
                                 {{ $conflicts['teacher_conflicts']->count() }}
                             </div>
                             <div class="text-xs text-red-600 dark:text-red-400 mt-1">Teacher Conflicts</div>
+                        </div>
+                        <div class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-200 dark:border-red-800">
+                            <div class="text-2xl font-bold text-red-700 dark:text-red-300">
+                                {{ ($conflicts['classroom_conflicts'] ?? collect())->count() }}
+                            </div>
+                            <div class="text-xs text-red-600 dark:text-red-400 mt-1">Classroom Conflicts</div>
                         </div>
                         <div class="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg border border-orange-200 dark:border-orange-800">
                             <div class="text-2xl font-bold text-orange-700 dark:text-orange-300">
@@ -40,7 +46,13 @@
                             <div class="text-2xl font-bold text-yellow-700 dark:text-yellow-300">
                                 {{ $conflicts['overloaded_teachers']->count() }}
                             </div>
-                            <div class="text-xs text-yellow-600 dark:text-yellow-400 mt-1">Overloaded</div>
+                            <div class="text-xs text-yellow-600 dark:text-yellow-400 mt-1">Weekly Overload</div>
+                        </div>
+                        <div class="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg border border-amber-200 dark:border-amber-800">
+                            <div class="text-2xl font-bold text-amber-700 dark:text-amber-300">
+                                {{ ($conflicts['daily_overloads'] ?? collect())->count() }}
+                            </div>
+                            <div class="text-xs text-amber-600 dark:text-amber-400 mt-1">Daily Overload</div>
                         </div>
                         <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
                             <div class="text-2xl font-bold text-blue-700 dark:text-blue-300">
@@ -94,6 +106,37 @@
                             @endforeach
                         </div>
                         @endif
+
+                        @if(($conflicts['classroom_conflicts'] ?? collect())->count() > 0)
+                        <div class="mt-4 space-y-3">
+                            <h4 class="font-semibold text-red-900 dark:text-red-100 flex items-center">
+                                <x-heroicon-o-building-office-2 class="w-5 h-5 mr-2" />
+                                Classroom Double-Booking ({{ $conflicts['classroom_conflicts']->count() }})
+                            </h4>
+                            <p class="text-sm text-red-700 dark:text-red-300 mb-2">
+                                Same class scheduled for multiple subjects at the same time
+                            </p>
+                            @foreach($conflicts['classroom_conflicts'] as $conflict)
+                                <div class="bg-white dark:bg-gray-800 p-4 rounded border border-red-200 dark:border-red-800">
+                                    <div class="font-semibold text-red-800 dark:text-red-200">
+                                        {{ $conflict->data['classroom_name'] ?? 'Unknown Classroom' }}
+                                    </div>
+                                    <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                        Conflict on {{ \App\Models\TimetableSlot::$days[$conflict->data['day'] ?? 0] ?? "Day {$conflict->data['day']}" }}, Period {{ $conflict->data['period'] ?? 'N/A' }}
+                                    </div>
+                                    <div class="text-sm mt-2 text-gray-700 dark:text-gray-300">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-medium">{{ $conflict->data['subject1'] ?? 'Unknown' }}</span>
+                                            <span class="text-gray-400">({{ $conflict->data['teacher1'] ?? 'Unknown' }})</span>
+                                            <span class="text-red-500">⚠</span>
+                                            <span class="font-medium">{{ $conflict->data['subject2'] ?? 'Unknown' }}</span>
+                                            <span class="text-gray-400">({{ $conflict->data['teacher2'] ?? 'Unknown' }})</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                        @endif
                     </div>
 
                     @if($conflicts['unavailable_violations']->count() > 0)
@@ -119,7 +162,7 @@
                     @if($conflicts['overloaded_teachers']->count() > 0)
                         <div class="mt-6 bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg">
                             <h3 class="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-3">
-                                Overloaded Teachers ({{ $conflicts['overloaded_teachers']->count() }})
+                                Overloaded Teachers - Weekly ({{ $conflicts['overloaded_teachers']->count() }})
                             </h3>
                             <div class="space-y-3">
                                 @foreach($conflicts['overloaded_teachers'] as $teacher)
@@ -130,6 +173,41 @@
                                         <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                                             Assigned {{ $teacher->data['assigned_periods'] ?? 0 }} periods (Max: {{ $teacher->data['max_periods_per_week'] ?? 0 }})
                                             - <span class="font-semibold text-yellow-700 dark:text-yellow-300">{{ ($teacher->data['assigned_periods'] ?? 0) - ($teacher->data['max_periods_per_week'] ?? 0) }} over limit</span>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
+                    @if(($conflicts['daily_overloads'] ?? collect())->count() > 0)
+                        <div class="mt-6 bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-amber-800 dark:text-amber-200 mb-3 flex items-center">
+                                <x-heroicon-o-calendar-days class="w-5 h-5 mr-2" />
+                                Daily Teacher Overload ({{ $conflicts['daily_overloads']->count() }})
+                            </h3>
+                            <p class="text-sm text-amber-700 dark:text-amber-300 mb-3">
+                                Teachers exceeding their maximum periods per day constraint
+                            </p>
+                            <div class="space-y-3">
+                                @foreach($conflicts['daily_overloads'] as $overload)
+                                    <div class="bg-white dark:bg-gray-800 p-4 rounded border border-amber-200 dark:border-amber-800">
+                                        <div class="flex justify-between items-start">
+                                            <div>
+                                                <div class="font-semibold text-amber-800 dark:text-amber-200">
+                                                    {{ $overload->data['teacher_name'] ?? 'Unknown Teacher' }}
+                                                </div>
+                                                <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                                    {{ $overload->data['day_name'] ?? 'Unknown Day' }}: 
+                                                    <span class="font-semibold">{{ $overload->data['assigned_periods'] ?? 0 }}</span> periods
+                                                    (Max: <span class="font-semibold text-amber-700 dark:text-amber-300">{{ $overload->data['max_periods'] ?? 0 }}</span> periods)
+                                                </div>
+                                            </div>
+                                            <div class="bg-amber-100 dark:bg-amber-900 px-3 py-1 rounded-full">
+                                                <span class="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                                                    +{{ $overload->data['excess'] ?? 0 }}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 @endforeach

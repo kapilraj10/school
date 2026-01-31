@@ -3,7 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\SubjectResource\Pages;
-use App\Models\ClassRange;
+use App\Models\ClassRoom;
 use App\Models\Subject;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Section;
@@ -13,7 +13,6 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
 
 class SubjectResource extends Resource
 {
@@ -21,11 +20,18 @@ class SubjectResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-book-open';
 
+    protected static ?string $recordTitleAttribute = 'name';
+
     protected static ?string $navigationLabel = 'Subjects';
 
     protected static ?string $navigationGroup = 'Academic Management';
 
     protected static ?int $navigationSort = 3;
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'code', 'classRoom.name', 'classRoom.section'];
+    }
 
     public static function form(Form $form): Form
     {
@@ -38,17 +44,33 @@ class SubjectResource extends Resource
                             ->required()
                             ->maxLength(255)
                             ->placeholder('e.g., Mathematics'),
-                        Select::make('class_range')
-                            ->label('Class Range')
-                            ->options(fn () => ClassRange::getOptionsArray() ?: [
-                                '1 - 4' => 'Class 1-4',
-                                '5 - 7' => 'Class 5-7',
-                                '8' => 'Class 8',
-                                '9 - 10' => 'Class 9-10',
-                            ])
+                        TextInput::make('code')
+                            ->label('Subject Code')
+                            ->required()
+                            ->unique(ignoreRecord: true)
+                            ->maxLength(20)
+                            ->placeholder('e.g., MATH-1A')
+                            ->helperText('Unique code for this subject'),
+                        Select::make('class_room_id')
+                            ->label('Class')
+                            ->relationship('classRoom', 'name')
+                            ->getOptionLabelFromRecordUsing(fn (ClassRoom $record) => "{$record->name} - {$record->section}")
+                            ->searchable(['name', 'section'])
+                            ->preload()
                             ->required()
                             ->native(false)
-                            ->helperText('Which class range this subject applies to'),
+                            ->live()
+                            ->helperText('Select the class for this subject'),
+                        Select::make('type')
+                            ->label('Subject Type')
+                            ->options([
+                                'core' => 'Core Subject',
+                                'elective' => 'Elective',
+                                'co_curricular' => 'Co-Curricular',
+                            ])
+                            ->default('core')
+                            ->required()
+                            ->native(false),
                         Select::make('single_combined')
                             ->label('Period Type')
                             ->options([
@@ -98,7 +120,26 @@ class SubjectResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
+                    ->sortable()
+                    ->searchable(),
+                Tables\Columns\TextColumn::make('code')
+                    ->label('Code')
+                    ->searchable()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('type')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'core' => 'success',
+                        'elective' => 'info',
+                        'co_curricular' => 'warning',
+                        default => 'gray',
+                    })
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        'core' => 'Core',
+                        'elective' => 'Elective',
+                        'co_curricular' => 'Co-Curricular',
+                        default => $state,
+                    }),
                 Tables\Columns\TextColumn::make('single_combined')
                     ->label('Period Type')
                     ->badge()
@@ -126,19 +167,25 @@ class SubjectResource extends Resource
                     }),
             ])
             ->groups([
-                Tables\Grouping\Group::make('class_range')
-                    ->label('Class Range')
-                    ->collapsible(),
+                Tables\Grouping\Group::make('classRoom.name')
+                    ->label('Class')
+                    ->collapsible()
+                    ->getTitleFromRecordUsing(fn (Subject $record) => "{$record->classRoom->name} - {$record->classRoom->section}"),
             ])
-            ->defaultGroup('class_range')
+            ->defaultGroup('classRoom.name')
             ->filters([
-                Tables\Filters\SelectFilter::make('class_range')
-                    ->label('Class Range')
-                    ->options(fn () => ClassRange::getOptionsArray() ?: [
-                        '1 - 4' => 'Class 1-4',
-                        '5 - 7' => 'Class 5-7',
-                        '8' => 'Class 8',
-                        '9 - 10' => 'Class 9-10',
+                Tables\Filters\SelectFilter::make('class_room_id')
+                    ->label('Class')
+                    ->relationship('classRoom', 'name')
+                    ->getOptionLabelFromRecordUsing(fn (ClassRoom $record) => "{$record->name} - {$record->section}")
+                    ->searchable()
+                    ->preload(),
+                Tables\Filters\SelectFilter::make('type')
+                    ->label('Type')
+                    ->options([
+                        'core' => 'Core',
+                        'elective' => 'Elective',
+                        'co_curricular' => 'Co-Curricular',
                     ]),
                 Tables\Filters\SelectFilter::make('single_combined')
                     ->label('Period Type')
@@ -151,24 +198,57 @@ class SubjectResource extends Resource
                         'active' => 'Active',
                         'inactive' => 'Inactive',
                     ]),
-                Tables\Filters\Filter::make('search')
-                    ->form([
-                        TextInput::make('query')
-                            ->hiddenLabel()
-                            ->placeholder('Search'),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        $search = $data['query'] ?? null;
-
-                        if (! filled($search)) {
-                            return $query;
-                        }
-
-                        return $query->where('name', 'like', "%{$search}%");
-                    }),
             ], layout: Tables\Enums\FiltersLayout::AboveContent)
             ->filtersFormColumns(4)
             ->actions([
+                Tables\Actions\Action::make('copy')
+                    ->label('Copy')
+                    ->icon('heroicon-o-clipboard-document')
+                    ->form([
+                        Select::make('target_class_ids')
+                            ->label('Copy to Classes')
+                            ->multiple()
+                            ->options(fn (Subject $record) => ClassRoom::where('id', '!=', $record->class_room_id)
+                                ->get()
+                                ->mapWithKeys(fn ($class) => [
+                                    $class->id => "{$class->name} - {$class->section}",
+                                ])
+                            )
+                            ->searchable()
+                            ->required()
+                            ->helperText('Select classes to copy this subject to'),
+                    ])
+                    ->action(function (Subject $record, array $data) {
+                        foreach ($data['target_class_ids'] as $classId) {
+                            $classRoom = ClassRoom::find($classId);
+                            $classNumber = preg_replace('/[^0-9]/', '', $classRoom->name);
+                            $section = $classRoom->section;
+                            $baseCode = preg_replace('/-[\d-]+[A-Z]?$/', '', $record->code);
+                            $newCode = "{$baseCode}-{$classNumber}{$section}";
+
+                            $counter = 1;
+                            $originalCode = $newCode;
+                            while (Subject::where('code', $newCode)->exists()) {
+                                $newCode = "{$originalCode}-{$counter}";
+                                $counter++;
+                            }
+
+                            Subject::create([
+                                'name' => $record->name,
+                                'code' => $newCode,
+                                'class_room_id' => $classId,
+                                'type' => $record->type,
+                                'weekly_periods' => $record->weekly_periods,
+                                'min_periods_per_week' => $record->min_periods_per_week,
+                                'max_periods_per_week' => $record->max_periods_per_week,
+                                'level' => $record->level,
+                                'single_combined' => $record->single_combined,
+                                'status' => $record->status,
+                            ]);
+                        }
+                    })
+                    ->successNotificationTitle('Subject copied successfully')
+                    ->color('success'),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])
@@ -182,7 +262,8 @@ class SubjectResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListSubjects::route('/'),
+            'index' => Pages\ManageSubjectsByClass::route('/'),
+            'list' => Pages\ListSubjects::route('/list'),
             'create' => Pages\CreateSubject::route('/create'),
             'edit' => Pages\EditSubject::route('/{record}/edit'),
         ];

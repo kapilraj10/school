@@ -1,4 +1,4 @@
-<x-filament-panels::page class="!max-w-full">
+<x-filament-panels::page class="max-w-full!">
     <div class="space-y-6">
         <x-filament::section>
             <x-slot name="heading">
@@ -109,7 +109,7 @@
                                                 {{ $item['subject_name'] }}
                                             </span>
                                             <span class="text-sm text-gray-500 dark:text-gray-400">
-                                                {{ $item['class_range'] ?? '' }}
+                                                {{ $item['class_room'] ?? $item['class_name'] ?? '' }}
                                             </span>
                                         </div>
                                         
@@ -142,7 +142,12 @@
                         @endforeach
                     @else
                         @php
-                            $grouped = collect($this->getFilteredData())->groupBy(fn($item) => $item['class_name'] ?? $item['class_number']);
+                            $grouped = collect($this->getFilteredData())
+                                ->groupBy(fn($item) => $item['class_name'] ?? $item['class_number'])
+                                ->map(function($items) {
+                                    // Remove duplicate subjects within same class
+                                    return $items->unique(fn($item) => $item['subject_id'] ?? $item['subject_name']);
+                                });
                         @endphp
                         
                         @foreach($grouped as $className => $items)

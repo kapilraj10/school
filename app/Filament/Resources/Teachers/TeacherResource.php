@@ -30,6 +30,11 @@ class TeacherResource extends Resource
 
     protected static ?int $navigationSort = 3;
 
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'employee_id', 'email', 'phone'];
+    }
+
     public static function form(Form $form): Form
     {
         return TeacherForm::configure($form);
@@ -52,6 +57,7 @@ class TeacherResource extends Resource
         return [
             'index' => ListTeachers::route('/'),
             'create' => CreateTeacher::route('/create'),
+            'view' => Pages\ViewTeacher::route('/{record}'),
             'edit' => EditTeacher::route('/{record}/edit'),
         ];
     }

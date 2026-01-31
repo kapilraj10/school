@@ -12,13 +12,10 @@ use App\Models\Teacher;
 use App\Models\TimetableSetting;
 use App\Models\TimetableSlot;
 use App\Services\TimetableGeneratorService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class TimetableGeneratorServiceTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected TimetableGeneratorService $service;
 
     protected AcademicTerm $term;

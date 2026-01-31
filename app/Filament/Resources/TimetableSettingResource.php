@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\TimetableSettingResource\Pages;
 use App\Models\TimetableSetting;
 use Filament\Forms;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -16,6 +17,8 @@ class TimetableSettingResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
 
+    protected static ?string $recordTitleAttribute = 'key';
+
     protected static ?string $navigationLabel = 'General Settings';
 
     protected static ?string $modelLabel = 'Setting';
@@ -23,6 +26,11 @@ class TimetableSettingResource extends Resource
     protected static ?string $navigationGroup = 'Timetable Settings';
 
     protected static ?int $navigationSort = 0;
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['key', 'group', 'description'];
+    }
 
     public static function form(Form $form): Form
     {
@@ -63,8 +71,21 @@ class TimetableSettingResource extends Resource
                         Forms\Components\Textarea::make('value')
                             ->label('Value (JSON)')
                             ->rows(5)
-                            ->visible(fn (Forms\Get $get) => $get('type') === 'json')
+                            ->visible(fn (Forms\Get $get) => $get('type') === 'json' && $get('key') !== 'school_days')
                             ->helperText('Enter valid JSON'),
+
+                        TagsInput::make('value')
+                            ->label('School Days')
+                            ->placeholder('Add day')
+                            ->visible(fn (Forms\Get $get) => $get('key') === 'school_days')
+                            ->helperText('Enter the days when school is in session')
+                            ->dehydrateStateUsing(fn ($state) => json_encode(array_values($state ?? [])))
+                            ->afterStateHydrated(function (TagsInput $component, $state) {
+                                if (is_string($state)) {
+                                    $decoded = json_decode($state, true);
+                                    $component->state($decoded ?? []);
+                                }
+                            }),
 
                         Forms\Components\Select::make('group')
                             ->label('Group')
@@ -98,22 +119,27 @@ class TimetableSettingResource extends Resource
 
                 Tables\Columns\TextColumn::make('value')
                     ->label('Value')
+                    ->formatStateUsing(function ($record) {
+                        if ($record->type === 'boolean') {
+                            return $record->value === '1' ? 'Yes' : 'No';
+                        }
+                        if ($record->type === 'json') {
+                            $decoded = json_decode($record->value, true);
+                            if (is_array($decoded)) {
+                                return implode(', ', $decoded);
+                            }
+                        }
+
+                        return $record->value;
+                    })
                     ->limit(50)
                     ->tooltip(fn ($record) => $record->value),
 
                 Tables\Columns\TextColumn::make('type')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'string' => 'gray',
-                        'integer' => 'info',
-                        'boolean' => 'success',
-                        'json' => 'warning',
-                        default => 'gray',
-                    }),
+                    ->label('Type'),
 
                 Tables\Columns\TextColumn::make('group')
-                    ->badge()
-                    ->color('primary'),
+                    ->label('Group'),
 
                 Tables\Columns\TextColumn::make('description')
                     ->limit(30)
@@ -160,15 +186,12 @@ class TimetableSettingResource extends Resource
                     ->modalDescription('This will create default settings if they do not exist. Existing settings will not be overwritten.')
                     ->action(function () {
                         $defaults = [
+                            ['key' => 'school_days', 'value' => '["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday"]', 'type' => 'json', 'group' => 'general', 'description' => 'Days when school is in session'],
                             ['key' => 'periods_per_day', 'value' => '8', 'type' => 'integer', 'group' => 'periods', 'description' => 'Number of periods per school day'],
-                            ['key' => 'period_duration_minutes', 'value' => '40', 'type' => 'integer', 'group' => 'periods', 'description' => 'Duration of each period in minutes'],
-                            ['key' => 'break_after_period', 'value' => '4', 'type' => 'integer', 'group' => 'periods', 'description' => 'Break after this period number'],
-                            ['key' => 'break_duration_minutes', 'value' => '20', 'type' => 'integer', 'group' => 'periods', 'description' => 'Duration of break in minutes'],
                             ['key' => 'max_same_subject_per_day', 'value' => '2', 'type' => 'integer', 'group' => 'algorithm', 'description' => 'Maximum times same subject can appear per day'],
                             ['key' => 'respect_teacher_availability', 'value' => '1', 'type' => 'boolean', 'group' => 'algorithm', 'description' => 'Check teacher availability when assigning'],
                             ['key' => 'balance_daily_load', 'value' => '1', 'type' => 'boolean', 'group' => 'algorithm', 'description' => 'Distribute subjects evenly across days'],
                             ['key' => 'avoid_consecutive_subjects', 'value' => '1', 'type' => 'boolean', 'group' => 'algorithm', 'description' => 'Avoid scheduling same subject back-to-back'],
-                            ['key' => 'school_days', 'value' => '["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday"]', 'type' => 'json', 'group' => 'general', 'description' => 'Days when school is in session'],
                         ];
 
                         foreach ($defaults as $setting) {

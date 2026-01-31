@@ -14,11 +14,11 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/track-click', function (Request $request) {
         $url = $request->input('url');
-        
+
         // Normalize URL to relative path
         $parsedUrl = parse_url($url);
         $normalizedUrl = $parsedUrl['path'] ?? $url;
-        
+
         PageClick::recordClick($request->input('page_name'), $normalizedUrl);
 
         return response()->json(['success' => true]);

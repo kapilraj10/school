@@ -15,10 +15,10 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             TimetableSettingsSeeder::class,
-            SubjectSeeder::class,
             ClassRoomSeeder::class,
-            TeacherSeeder::class,
+            SubjectSeeder::class,
             TimetableDataSeeder::class,
+            TeacherSeeder::class,
         ]);
 
         $this->seedUsers();

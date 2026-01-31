@@ -28,6 +28,21 @@ class ClassSubjectSettingResource extends Resource
 
     protected static ?int $navigationSort = 2;
 
+    public static function getGlobalSearchResultTitle($record): string
+    {
+        return "{$record->classRoom->full_name} - {$record->subject->name}";
+    }
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['classRoom.name', 'classRoom.section', 'subject.name', 'subject.code'];
+    }
+
+    public static function getGlobalSearchEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getGlobalSearchEloquentQuery()->with(['classRoom', 'subject']);
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -265,6 +280,153 @@ class ClassSubjectSettingResource extends Resource
                         \Filament\Notifications\Notification::make()
                             ->title('Sync Complete')
                             ->body('Subject settings have been synced for all classes.')
+                            ->success()
+                            ->send();
+                    }),
+
+                Tables\Actions\Action::make('copy_from_class')
+                    ->label('Copy from Another Class')
+                    ->icon('heroicon-o-document-duplicate')
+                    ->color('info')
+                    ->form([
+                        Forms\Components\Select::make('source_class_id')
+                            ->label('Source Class (Copy From)')
+                            ->options(function () {
+                                return ClassRoom::active()
+                                    ->get()
+                                    ->sortBy(function ($class) {
+                                        return (int) filter_var($class->name, FILTER_SANITIZE_NUMBER_INT) * 100 + ord($class->section);
+                                    })
+                                    ->mapWithKeys(fn ($c) => [$c->id => $c->full_name])
+                                    ->toArray();
+                            })
+                            ->required()
+                            ->searchable()
+                            ->native(false)
+                            ->helperText('Select the class to copy subject settings from'),
+
+                        Forms\Components\Select::make('target_class_id')
+                            ->label('Target Class (Copy To)')
+                            ->options(function () {
+                                return ClassRoom::active()
+                                    ->get()
+                                    ->sortBy(function ($class) {
+                                        return (int) filter_var($class->name, FILTER_SANITIZE_NUMBER_INT) * 100 + ord($class->section);
+                                    })
+                                    ->mapWithKeys(fn ($c) => [$c->id => $c->full_name])
+                                    ->toArray();
+                            })
+                            ->required()
+                            ->searchable()
+                            ->native(false)
+                            ->helperText('Select the class to copy subject settings to'),
+
+                        Forms\Components\Select::make('conflict_resolution')
+                            ->label('Conflict Resolution')
+                            ->options([
+                                'skip' => 'Skip - Keep existing target settings',
+                                'update' => 'Update - Merge source into existing',
+                                'replace' => 'Replace - Delete target and copy all',
+                            ])
+                            ->required()
+                            ->default('skip')
+                            ->native(false)
+                            ->helperText('How to handle subjects that already exist in target class'),
+                    ])
+                    ->modalHeading('Copy Subject Settings Between Classes')
+                    ->modalDescription('Copy all subject settings from one class to another.')
+                    ->modalSubmitActionLabel('Copy Settings')
+                    ->action(function (array $data) {
+                        $sourceClassId = $data['source_class_id'];
+                        $targetClassId = $data['target_class_id'];
+                        $conflictResolution = $data['conflict_resolution'];
+
+                        // Validate source and target are different
+                        if ($sourceClassId === $targetClassId) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('Error')
+                                ->body('Source and target classes must be different.')
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        $copiedCount = 0;
+
+                        // Use database transaction for data integrity
+                        \DB::transaction(function () use ($sourceClassId, $targetClassId, $conflictResolution, &$copiedCount) {
+                            // Get all source class subject settings
+                            $sourceSettings = ClassSubjectSetting::where('class_room_id', $sourceClassId)
+                                ->with('subject')
+                                ->get();
+
+                            if ($sourceSettings->isEmpty()) {
+                                \Filament\Notifications\Notification::make()
+                                    ->title('No Settings Found')
+                                    ->body('The source class has no subject settings to copy.')
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+
+                            // Get existing target class settings
+                            $existingTargetSubjects = ClassSubjectSetting::where('class_room_id', $targetClassId)
+                                ->pluck('subject_id')
+                                ->toArray();
+
+                            // Handle conflict resolution
+                            if ($conflictResolution === 'replace') {
+                                // Delete all existing target settings
+                                ClassSubjectSetting::where('class_room_id', $targetClassId)->delete();
+                                $existingTargetSubjects = [];
+                            }
+
+                            // Copy each setting from source to target
+                            foreach ($sourceSettings as $sourceSetting) {
+                                $subjectId = $sourceSetting->subject_id;
+                                $exists = in_array($subjectId, $existingTargetSubjects);
+
+                                if ($conflictResolution === 'skip' && $exists) {
+                                    // Skip if subject already exists in target
+                                    continue;
+                                }
+
+                                // Prepare data to copy (exclude id, class_room_id, timestamps)
+                                $copyData = [
+                                    'class_room_id' => $targetClassId,
+                                    'subject_id' => $sourceSetting->subject_id,
+                                    'min_periods_per_week' => $sourceSetting->min_periods_per_week,
+                                    'weekly_periods' => $sourceSetting->weekly_periods,
+                                    'max_periods_per_week' => $sourceSetting->max_periods_per_week,
+                                    'single_combined' => $sourceSetting->single_combined,
+                                    'type' => $sourceSetting->type,
+                                    'priority' => $sourceSetting->priority,
+                                    'is_active' => $sourceSetting->is_active,
+                                ];
+
+                                if ($conflictResolution === 'update' && $exists) {
+                                    // Update existing record
+                                    ClassSubjectSetting::where('class_room_id', $targetClassId)
+                                        ->where('subject_id', $subjectId)
+                                        ->update($copyData);
+                                } else {
+                                    // Create new record
+                                    ClassSubjectSetting::create($copyData);
+                                }
+
+                                $copiedCount++;
+                            }
+                        });
+
+                        // Send success notification
+                        $sourceClass = ClassRoom::find($sourceClassId);
+                        $targetClass = ClassRoom::find($targetClassId);
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('Copy Complete')
+                            ->body("Successfully copied {$copiedCount} subject setting(s) from {$sourceClass->full_name} to {$targetClass->full_name}.")
                             ->success()
                             ->send();
                     }),

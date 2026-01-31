@@ -192,7 +192,10 @@ class TimetablePrintService
         return response()->download($tempFile, $filename)->deleteFileAfterSend(true);
     }
 
-    public function generateFilename(string $type, $entity, AcademicTerm $term): string
+    /**
+     * Get organized timetable data for a class
+     */
+    protected function getClassTimetableData(int $classRoomId, int $academicTermId): array
     {
         $class = ClassRoom::findOrFail($classRoomId);
         $term = AcademicTerm::findOrFail($academicTermId);

@@ -89,7 +89,7 @@ class ResolveConflictsCommand extends Command
 
             return self::SUCCESS;
         } catch (\Exception $e) {
-            $this->error('Error resolving conflicts: ' . $e->getMessage());
+            $this->error('Error resolving conflicts: '.$e->getMessage());
             $this->error($e->getTraceAsString());
 
             return self::FAILURE;

@@ -21,11 +21,18 @@ class HolidayResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
 
+    protected static ?string $recordTitleAttribute = 'name';
+
     protected static ?string $navigationLabel = 'Holidays';
 
     protected static ?string $navigationGroup = 'Academic Management';
 
     protected static ?int $navigationSort = 5;
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'date', 'type', 'description'];
+    }
 
     public static function form(Form $form): Form
     {

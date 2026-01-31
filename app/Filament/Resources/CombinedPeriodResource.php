@@ -25,11 +25,18 @@ class CombinedPeriodResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
 
+    protected static ?string $recordTitleAttribute = 'name';
+
     protected static ?string $navigationLabel = 'Combined Periods';
 
     protected static ?string $navigationGroup = 'Timetable Management';
 
     protected static ?int $navigationSort = 6;
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'subject.name', 'teacher.name'];
+    }
 
     public static function form(Form $form): Form
     {

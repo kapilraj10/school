@@ -33,6 +33,9 @@
         }
     }"
     class="flex flex-col items-center gap-4 w-full"
+    @if($this->isGenerating ?? false)
+        wire:poll.750ms
+    @endif
 >
     <x-filament::button
         type="submit"
@@ -44,16 +47,22 @@
         x-on:click="begin()"
         class="w-full sm:w-auto"
     >
-        <span wire:loading.remove wire:target="generateTimetable">
+        @if($this->isGenerating ?? false)
+            <span class="flex flex-col items-center gap-2">
+                <span class="text-sm font-semibold">Generating Timetable</span>
+                <span class="text-xs opacity-80">
+                    {{ ($this->totalClasses ?? 0) > 0 ? round((($this->currentClassIndex ?? 0) / $this->totalClasses * 100), 1) : 0 }}%
+                </span>
+                <span class="w-full rounded-full bg-white/20">
+                    <span
+                        class="block h-1.5 rounded-full bg-white transition-all duration-700"
+                        style="width: {{ ($this->totalClasses ?? 0) > 0 ? round((($this->currentClassIndex ?? 0) / $this->totalClasses * 100), 1) : 0 }}%"
+                    ></span>
+                </span>
+            </span>
+        @else
             Generate Timetable
-        </span>
-        <span wire:loading wire:target="generateTimetable" class="flex items-center gap-2">
-            <svg class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Generating Timetable...
-        </span>
+        @endif
     </x-filament::button>
 
     <div wire:loading wire:target="generateTimetable" class="w-full max-w-lg">

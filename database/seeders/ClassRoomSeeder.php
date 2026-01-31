@@ -43,9 +43,12 @@ class ClassRoomSeeder extends Seeder
         ];
 
         foreach ($classes as $class) {
-            ClassRoom::create($class);
+            ClassRoom::updateOrCreate(
+                ['name' => $class['name'], 'section' => $class['section']],
+                $class
+            );
         }
 
-        $this->command->info('ClassRoom seeder completed: '.count($classes).' classes created.');
+        $this->command->info('ClassRoom seeder completed: '.count($classes).' classes created/updated.');
     }
 }

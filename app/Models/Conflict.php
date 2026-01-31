@@ -39,8 +39,10 @@ class Conflict extends Model
 
         return [
             'teacher_conflicts' => $conflicts->where('type', 'teacher_conflict'),
+            'classroom_conflicts' => $conflicts->where('type', 'classroom_conflict'),
             'unavailable_violations' => $conflicts->where('type', 'unavailable_violation'),
             'overloaded_teachers' => $conflicts->where('type', 'overloaded_teacher'),
+            'daily_overloads' => $conflicts->where('type', 'daily_overload'),
             'min_period_violations' => $conflicts->where('type', 'min_period_violation'),
             'max_period_violations' => $conflicts->where('type', 'max_period_violation'),
             'combined_period_violations' => $conflicts->where('type', 'combined_period_violation'),

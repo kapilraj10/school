@@ -10,15 +10,11 @@ use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimetableSlot;
 use App\Services\GeneticAlgorithmTimetableService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class GeneticAlgorithmTimetableServiceTest extends TestCase
 {
-    use RefreshDatabase;
-
     private GeneticAlgorithmTimetableService $service;
 
     private ClassRoom $classRoom;

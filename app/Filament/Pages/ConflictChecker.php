@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\AcademicTerm;
 use App\Models\Conflict;
+use App\Services\ConflictResolverService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -140,6 +141,12 @@ class ConflictChecker extends Page implements HasForms
             ->havingRaw('COUNT(*) > t.max_periods_per_week')
             ->get();
 
+        // Check classroom conflicts
+        $classroomConflicts = $this->checkClassroomConflicts($termId);
+
+        // Check daily teacher overload
+        $dailyOverloads = $this->checkDailyOverload($termId);
+
         // Check class subject settings violations
         $classSubjectViolations = $this->checkClassSubjectSettingsViolations($termId);
 
@@ -182,6 +189,30 @@ class ConflictChecker extends Page implements HasForms
             ]);
         }
 
+        // Save classroom conflicts
+        foreach ($classroomConflicts as $conflict) {
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'classroom_conflict',
+                'severity' => 'critical',
+                'entity_type' => 'classroom',
+                'entity_id' => $conflict->classroom_id,
+                'data' => (array) $conflict,
+            ]);
+        }
+
+        // Save daily overload violations
+        foreach ($dailyOverloads as $overload) {
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'daily_overload',
+                'severity' => 'high',
+                'entity_type' => 'teacher',
+                'entity_id' => $overload['teacher_id'],
+                'data' => $overload,
+            ]);
+        }
+
         // Save min period violations
         foreach ($classSubjectViolations['min_period_violations'] as $violation) {
             Conflict::create([
@@ -221,6 +252,78 @@ class ConflictChecker extends Page implements HasForms
         // Load conflicts from database
         $this->conflicts = Conflict::getGroupedByType($termId);
         $this->conflicts['term'] = AcademicTerm::find($termId);
+    }
+
+    protected function checkClassroomConflicts(int $termId)
+    {
+        // This query finds when the SAME classroom is assigned to DIFFERENT classes at the same time
+        // Note: In timetable_slots, class_room_id refers to the CLASS (not physical classroom)
+        // So we need to check if different classes (class_room_id) are scheduled at same day/period
+        // This would indicate a scheduling conflict where a class is double-booked
+
+        // Actually, let's check for physical classroom conflicts by looking at the classroom field if it exists
+        // For now, we'll look for cases where same physical space would be needed
+
+        return DB::table('timetable_slots as t1')
+            ->join('timetable_slots as t2', function ($join) use ($termId) {
+                $join->on('t1.day', '=', 't2.day')
+                    ->on('t1.period', '=', 't2.period')
+                    ->where('t1.academic_term_id', $termId)
+                    ->where('t2.academic_term_id', $termId)
+                    ->whereColumn('t1.id', '<', 't2.id')
+                    ->whereColumn('t1.class_room_id', '=', 't2.class_room_id'); // Same class, different subjects
+            })
+            ->join('class_rooms as cr', 't1.class_room_id', '=', 'cr.id')
+            ->join('subjects as s1', 't1.subject_id', '=', 's1.id')
+            ->join('subjects as s2', 't2.subject_id', '=', 's2.id')
+            ->join('teachers as teacher1', 't1.teacher_id', '=', 'teacher1.id')
+            ->join('teachers as teacher2', 't2.teacher_id', '=', 'teacher2.id')
+            ->select(
+                'cr.id as classroom_id',
+                DB::raw("cr.name || COALESCE(' - ' || cr.section, '') as classroom_name"),
+                't1.day',
+                't1.period',
+                's1.name as subject1',
+                's2.name as subject2',
+                'teacher1.name as teacher1',
+                'teacher2.name as teacher2'
+            )
+            ->get();
+    }
+
+    protected function checkDailyOverload(int $termId): array
+    {
+        $violations = [];
+
+        $dailyAssignments = DB::table('timetable_slots as ts')
+            ->join('teachers as t', 'ts.teacher_id', '=', 't.id')
+            ->where('ts.academic_term_id', $termId)
+            ->select(
+                't.id as teacher_id',
+                't.name as teacher_name',
+                't.max_periods_per_day',
+                'ts.day',
+                DB::raw('COUNT(*) as daily_periods')
+            )
+            ->groupBy('t.id', 't.name', 't.max_periods_per_day', 'ts.day')
+            ->get();
+
+        foreach ($dailyAssignments as $assignment) {
+            if ($assignment->max_periods_per_day > 0 && $assignment->daily_periods > $assignment->max_periods_per_day) {
+                $dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                $violations[] = [
+                    'teacher_id' => $assignment->teacher_id,
+                    'teacher_name' => $assignment->teacher_name,
+                    'day' => $assignment->day,
+                    'day_name' => $dayNames[$assignment->day] ?? "Day {$assignment->day}",
+                    'assigned_periods' => $assignment->daily_periods,
+                    'max_periods' => $assignment->max_periods_per_day,
+                    'excess' => $assignment->daily_periods - $assignment->max_periods_per_day,
+                ];
+            }
+        }
+
+        return $violations;
     }
 
     protected function checkClassSubjectSettingsViolations(int $termId): array
@@ -363,9 +466,54 @@ class ConflictChecker extends Page implements HasForms
             ->send();
     }
 
+    public function autoResolveConflicts(): void
+    {
+        $data = $this->form->getState();
+
+        if (! isset($data['academic_term_id'])) {
+            Notification::make()
+                ->title('No Term Selected')
+                ->danger()
+                ->body('Please select an academic term first.')
+                ->send();
+
+            return;
+        }
+
+        try {
+            $resolver = new ConflictResolverService($data['academic_term_id']);
+            $result = $resolver->resolveAllConflicts();
+
+            $this->checkConflicts();
+
+            Notification::make()
+                ->title('Conflicts Auto-Resolved')
+                ->success()
+                ->body('Resolved '.count($result['actions']).' conflict(s). Please review the timetable.')
+                ->send();
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Resolution Failed')
+                ->danger()
+                ->body('Error: '.$e->getMessage())
+                ->send();
+        }
+    }
+
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('autoResolve')
+                ->label('Auto-Resolve Conflicts')
+                ->icon('heroicon-m-wrench-screwdriver')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Auto-Resolve Conflicts?')
+                ->modalDescription('This will attempt to automatically resolve conflicts by rescheduling slots. This action cannot be undone.')
+                ->modalSubmitActionLabel('Yes, Resolve')
+                ->action('autoResolveConflicts')
+                ->visible(fn () => isset($this->conflicts) && $this->conflicts['total_conflicts'] > 0),
+
             Action::make('refresh')
                 ->label('Recheck')
                 ->icon('heroicon-m-arrow-path')

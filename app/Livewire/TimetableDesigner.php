@@ -90,11 +90,19 @@ class TimetableDesigner extends Component
 
     protected function initializeTeachers(): void
     {
-        $this->teachers = Teacher::query()
+        $query = Teacher::query()
             ->where('status', 'active')
             ->with(['subjects' => fn ($query) => $query->orderBy('name')])
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
+
+        if ($this->selectedClassId) {
+            $query->where(function ($q) {
+                $q->whereNull('class_room_ids')
+                    ->orWhereJsonContains('class_room_ids', $this->selectedClassId);
+            });
+        }
+
+        $this->teachers = $query->get();
     }
 
     protected function setDefaultSelections(): void
@@ -174,11 +182,19 @@ class TimetableDesigner extends Component
 
     protected function setFallbackTeachers($subject): void
     {
-        $teachers = Teacher::query()
+        $query = Teacher::query()
             ->where('status', 'active')
             ->whereJsonContains('subject_ids', $subject->id)
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
+
+        if ($this->selectedClassId) {
+            $query->where(function ($q) {
+                $q->whereNull('class_room_ids')
+                    ->orWhereJsonContains('class_room_ids', $this->selectedClassId);
+            });
+        }
+
+        $teachers = $query->get();
 
         if ($teachers->isNotEmpty()) {
             $subject->setRelation('teachers', $teachers);
@@ -210,6 +226,7 @@ class TimetableDesigner extends Component
     public function updatedSelectedClassId(): void
     {
         $this->unsavedChanges = [];
+        $this->initializeTeachers();
         $this->loadSubjects();
         $this->loadTimetableSlots();
     }
@@ -262,7 +279,10 @@ class TimetableDesigner extends Component
     public function mergeTimetableSlots(): void
     {
         foreach ($this->unsavedChanges as $key => $change) {
-            if (! isset($change['deleted']) || ! $change['deleted']) {
+            if (isset($change['deleted']) && $change['deleted']) {
+                // Remove the slot from display when marked for deletion
+                unset($this->timetableSlots[$key]);
+            } elseif (! isset($change['deleted']) || ! $change['deleted']) {
                 $mockSlot = $this->createMockSlot($change);
                 if ($mockSlot->subject_id) {
                     $this->timetableSlots[$key] = $mockSlot;
@@ -280,8 +300,8 @@ class TimetableDesigner extends Component
         }
 
         $mockSlot->fill($change);
-        $mockSlot->subject = Subject::find($change['subject_id']);
-        $mockSlot->teacher = Teacher::find($change['teacher_id']);
+        $mockSlot->setRelation('subject', Subject::find($change['subject_id']));
+        $mockSlot->setRelation('teacher', Teacher::find($change['teacher_id']));
         $mockSlot->is_unsaved = true;
 
         return $mockSlot;
@@ -341,6 +361,14 @@ class TimetableDesigner extends Component
     {
         $dayOfWeek = Carbon::parse($date)->dayOfWeek;
         $dateKey = Carbon::parse($date)->format('Y-m-d');
+        $key = "{$dateKey}_{$period}";
+
+        // Check if slot is locked
+        if (isset($this->timetableSlots[$key]) && $this->timetableSlots[$key]->is_locked) {
+            $this->showError('Locked Slot', 'Cannot assign to a locked slot. Unlock it first.');
+
+            return;
+        }
 
         $validation = $this->validateAssignment($subjectId, $teacherId, $dayOfWeek, $period);
 
@@ -393,24 +421,6 @@ class TimetableDesigner extends Component
             'subject_name' => $subject->name,
             'teacher_name' => Teacher::find($teacherId)?->name,
         ];
-    }
-
-    public function toggleStatus($date, $period): void
-    {
-        $dateKey = Carbon::parse($date)->format('Y-m-d');
-        $key = "{$dateKey}_{$period}";
-
-        if (! isset($this->timetableSlots[$key])) {
-            return;
-        }
-
-        $slot = $this->timetableSlots[$key];
-        $newStatus = $slot->status === 'draft' ? 'published' : 'draft';
-
-        TimetableSlot::where('id', $slot->id)->update(['status' => $newStatus]);
-
-        $this->loadTimetableSlots();
-        session()->flash('message', "Status changed to {$newStatus}!");
     }
 
     public function editSlot($date, $period): void
@@ -484,6 +494,17 @@ class TimetableDesigner extends Component
 
     public function deleteSlot($date, $period): void
     {
+        $dateKey = Carbon::parse($date)->format('Y-m-d');
+        $key = "{$dateKey}_{$period}";
+        $slot = $this->timetableSlots[$key] ?? null;
+
+        // Check if slot is locked
+        if ($slot && $slot->is_locked) {
+            session()->flash('error', 'Cannot delete locked slot');
+
+            return;
+        }
+
         $dayOfWeek = Carbon::parse($date)->dayOfWeek;
 
         TimetableSlot::query()
@@ -495,6 +516,32 @@ class TimetableDesigner extends Component
 
         $this->loadTimetableSlots();
         session()->flash('message', 'Timetable slot deleted successfully!');
+    }
+
+    /**
+     * Toggle lock status of a slot
+     */
+    public function toggleLockSlot($date, $period): void
+    {
+        $dateKey = Carbon::parse($date)->format('Y-m-d');
+        $key = "{$dateKey}_{$period}";
+        $slot = $this->timetableSlots[$key] ?? null;
+
+        if (! $slot || ! $slot->id) {
+            return;
+        }
+
+        $currentLockStatus = $slot->is_locked ?? false;
+
+        // Toggle in database
+        TimetableSlot::where('id', $slot->id)->update([
+            'is_locked' => ! $currentLockStatus,
+        ]);
+
+        // Reload timetable to reflect changes
+        $this->loadTimetableSlots();
+
+        session()->flash('message', $currentLockStatus ? 'Slot unlocked' : 'Slot locked');
     }
 
     public function cancelEdit(): void
@@ -580,6 +627,7 @@ class TimetableDesigner extends Component
                 'date' => $change['date'],
                 'type' => $change['type'],
                 'status' => $change['status'],
+                'is_locked' => true,
             ]
         );
     }
@@ -588,24 +636,40 @@ class TimetableDesigner extends Component
     {
         $dateKey = Carbon::parse($date)->format('Y-m-d');
         $key = "{$dateKey}_{$period}";
+        $slot = $this->timetableSlots[$key] ?? null;
+
+        // Check if slot is locked
+        if ($slot && $slot->is_locked) {
+            session()->flash('error', 'Cannot remove locked slot');
+
+            return;
+        }
 
         if (isset($this->unsavedChanges[$key])) {
+            // If it was an unsaved addition, just remove it from unsaved changes
             unset($this->unsavedChanges[$key]);
         } else {
+            // If it exists in the database, mark it for deletion
             $this->markSlotForDeletion($dateKey, $key, $date, $period);
         }
 
-        $this->loadTimetableSlots();
+        $this->mergeTimetableSlots();
         session()->flash('message', 'Subject removed (unsaved)!');
     }
 
     protected function markSlotForDeletion(string $dateKey, string $key, $date, int $period): void
     {
         $dayOfWeek = Carbon::parse($date)->dayOfWeek;
+
+        // Store the original slot information for workload calculation
+        $originalSlot = $this->timetableSlots[$key] ?? null;
+
         $this->unsavedChanges[$key] = [
             'deleted' => true,
             'day' => $dayOfWeek,
             'period' => $period,
+            'subject_id' => $originalSlot?->subject_id,
+            'teacher_id' => $originalSlot?->teacher_id,
         ];
     }
 
@@ -637,11 +701,20 @@ class TimetableDesigner extends Component
 
     protected function getSubjectUnsavedCount(int $subjectId): int
     {
-        return collect($this->unsavedChanges)
+        $added = collect($this->unsavedChanges)
             ->filter(fn ($change) => isset($change['subject_id'])
                 && $change['subject_id'] == $subjectId
-                && ! isset($change['deleted']))
+                && (! isset($change['deleted']) || ! $change['deleted']))
             ->count();
+
+        $removed = collect($this->unsavedChanges)
+            ->filter(fn ($change) => isset($change['deleted'])
+                && $change['deleted']
+                && isset($change['subject_id'])
+                && $change['subject_id'] == $subjectId)
+            ->count();
+
+        return $added - $removed;
     }
 
     public function render()

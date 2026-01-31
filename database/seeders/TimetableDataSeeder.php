@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\ClassRange;
 use App\Models\ClassRoom;
 use App\Models\ClassSubjectSetting;
 use App\Models\Subject;
@@ -32,22 +31,12 @@ class TimetableDataSeeder extends Seeder
         $createdCount = 0;
 
         foreach ($classes as $class) {
-            $classNumber = (int) filter_var($class->name, FILTER_SANITIZE_NUMBER_INT);
-
-            $classRange = ClassRange::getForClassNumber($classNumber);
-
-            if (! $classRange) {
-                $this->command->warn("No class range found for {$class->full_name}");
-
-                continue;
-            }
-
-            $subjects = Subject::where('class_range', $classRange->name)
+            $subjects = Subject::where('class_room_id', $class->id)
                 ->where('status', 'active')
                 ->get();
 
             if ($subjects->isEmpty()) {
-                $this->command->warn("No subjects found for class range {$classRange->name}");
+                $this->command->warn("No subjects found for {$class->full_name}");
 
                 continue;
             }

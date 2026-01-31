@@ -47,12 +47,15 @@ class TimetableViewer extends Page implements HasForms
         $classId = request('class_id');
         $termId = request('term_id');
 
+        $selectedTermId = $termId ?: $currentTerm?->id;
+        $selectedClassId = $classId ?: $firstClass?->id;
+
         $this->form->fill([
-            'academic_term_id' => $termId ?: $currentTerm?->id,
-            'class_room_id' => $classId ?: $firstClass?->id,
+            'academic_term_id' => $selectedTermId,
+            'class_room_id' => $selectedClassId,
         ]);
 
-        if (($termId ?: $currentTerm) && ($classId ?: $firstClass)) {
+        if ($selectedTermId && $selectedClassId) {
             $this->loadTimetable();
         }
     }

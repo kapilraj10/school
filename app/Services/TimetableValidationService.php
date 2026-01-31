@@ -9,7 +9,7 @@ use App\Models\TimetableSlot;
 
 class TimetableValidationService
 {
-    private const MAX_TEACHER_PERIODS_PER_DAY = 6;
+    private const MAX_TEACHER_PERIODS_PER_DAY = 7;
 
     private const MAX_SUBJECT_PERIODS_PER_DAY = 2;
 
@@ -24,6 +24,7 @@ class TimetableValidationService
     private array $warnings = [];
 
     private array $dayNames = [
+        0 => 'Sunday',
         1 => 'Monday',
         2 => 'Tuesday',
         3 => 'Wednesday',
@@ -362,25 +363,41 @@ class TimetableValidationService
         int $termId,
         int $classRoomId
     ): void {
-        // Check for double-booking (teacher in different class at same time)
+        if (! $teacher->canTeachClass($classRoomId)) {
+            $this->errors[] = [
+                'type' => 'teacher_class_assignment',
+                'day' => $day,
+                'day_name' => $dayName,
+                'period' => $period,
+                'message' => sprintf(
+                    'Teacher %s is not assigned to teach this class.',
+                    $teacher->name
+                ),
+            ];
+        }
+
         $conflict = TimetableSlot::where('teacher_id', $teacher->id)
             ->where('academic_term_id', $termId)
             ->where('day', $day)
             ->where('period', $period)
             ->where('class_room_id', '!=', $classRoomId)
-            ->with('classRoom')
+            ->with(['classRoom', 'subject'])
             ->first();
 
         if ($conflict) {
+            $conflictClass = $conflict->classRoom ? "{$conflict->classRoom->name} {$conflict->classRoom->section}" : 'another class';
+            $conflictSubject = $conflict->subject ? " ({$conflict->subject->name})" : '';
+
             $this->errors[] = [
                 'type' => 'teacher_conflict',
                 'day' => $day,
                 'day_name' => $dayName,
                 'period' => $period,
                 'message' => sprintf(
-                    'Teacher %s is already assigned to %s at %s Period %d',
+                    'Teacher %s is already teaching %s%s at %s Period %d',
                     $teacher->name,
-                    $conflict->classRoom->name ?? 'another class',
+                    $conflictClass,
+                    $conflictSubject,
                     $dayName,
                     $period
                 ),
@@ -794,10 +811,15 @@ class TimetableValidationService
                     ->where('day', $day)
                     ->where('period', $period)
                     ->where('class_room_id', '!=', $classRoomId)
-                    ->with('classRoom')
+                    ->with(['classRoom', 'subject'])
                     ->get();
 
                 foreach ($conflicts as $conflict) {
+                    $conflictClass = $conflict->classRoom
+                        ? "{$conflict->classRoom->name} {$conflict->classRoom->section}"
+                        : 'another class';
+                    $conflictSubject = $conflict->subject ? " ({$conflict->subject->name})" : '';
+
                     $this->errors[] = [
                         'type' => 'teacher_conflict',
                         'day' => $day,
@@ -805,9 +827,12 @@ class TimetableValidationService
                         'period' => $period,
                         'teacher_id' => $slot['teacher_id'],
                         'message' => sprintf(
-                            'Teacher %s is already assigned to %s at this time',
+                            'Teacher %s is already teaching %s%s at %s Period %d',
                             $slot['teacher_name'] ?? 'Unknown',
-                            $conflict->classRoom->name ?? 'another class'
+                            $conflictClass,
+                            $conflictSubject,
+                            $dayName,
+                            $period
                         ),
                     ];
                 }

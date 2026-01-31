@@ -32,12 +32,12 @@ class GeneticAlgorithmTimetableService
     public function generateTimetable(
         ClassRoom $classRoom,
         AcademicTerm $academicTerm,
-        int $populationSize = 50,
-        int $maxGenerations = 500
+        int $populationSize = 25,
+        int $maxGenerations = 100
     ): array {
         try {
-            set_time_limit(600);
-            ini_set('max_execution_time', '600');
+            set_time_limit(180);
+            ini_set('max_execution_time', '180');
 
             DB::beginTransaction();
 
@@ -54,12 +54,16 @@ class GeneticAlgorithmTimetableService
                 throw new \Exception('No teachers available for the subjects');
             }
 
+            // Load locked slots before generation
+            $lockedSlots = $this->loadLockedSlots($classRoom, $academicTerm);
+
             $scheduler = new \GeneticAlgorithmScheduler(
                 $this->subjects,
                 $this->teachers,
                 $this->sections,
                 $populationSize,
-                $maxGenerations
+                $maxGenerations,
+                $lockedSlots
             );
 
             Log::info("Starting genetic algorithm for class: {$classRoom->full_name}");
@@ -91,6 +95,31 @@ class GeneticAlgorithmTimetableService
                 'errors' => $this->errors,
             ];
         }
+    }
+
+    private function loadLockedSlots(ClassRoom $classRoom, AcademicTerm $academicTerm): array
+    {
+        $lockedSlots = [];
+        $slots = TimetableSlot::where('class_room_id', $classRoom->id)
+            ->where('academic_term_id', $academicTerm->id)
+            ->where('is_locked', true)
+            ->get();
+
+        foreach ($slots as $slot) {
+            $sectionId = (string) $classRoom->id;
+            if (! isset($lockedSlots[$sectionId])) {
+                $lockedSlots[$sectionId] = [];
+            }
+            if (! isset($lockedSlots[$sectionId][$slot->day])) {
+                $lockedSlots[$sectionId][$slot->day] = [];
+            }
+            $lockedSlots[$sectionId][$slot->day][$slot->period - 1] = [
+                'subject_id' => (string) $slot->subject_id,
+                'teacher_id' => (string) $slot->teacher_id,
+            ];
+        }
+
+        return $lockedSlots;
     }
 
     private function loadClassData(ClassRoom $classRoom): void
@@ -150,7 +179,13 @@ class GeneticAlgorithmTimetableService
             ->whereJsonContains('subject_ids', $subject->id)
             ->get();
 
+        $classRoomId = $this->sections[0]->name ?? null;
+
         foreach ($teachers as $teacher) {
+            if ($classRoomId && ! $teacher->canTeachClass((int) $classRoomId)) {
+                continue;
+            }
+
             $teacherId = (string) $teacher->id;
 
             if (isset($this->teachers[$teacherId])) {
@@ -177,11 +212,18 @@ class GeneticAlgorithmTimetableService
         ClassRoom $classRoom,
         AcademicTerm $academicTerm
     ): int {
+        $lockedSlots = TimetableSlot::where('class_room_id', $classRoom->id)
+            ->where('academic_term_id', $academicTerm->id)
+            ->where('is_locked', true)
+            ->get()
+            ->keyBy(fn ($slot) => "{$slot->day}_{$slot->period}");
+
         TimetableSlot::where('class_room_id', $classRoom->id)
             ->where('academic_term_id', $academicTerm->id)
+            ->where('is_locked', false)
             ->delete();
 
-        $slotsCreated = 0;
+        $slotsToInsert = [];
         $sectionId = (string) $classRoom->id;
 
         if (! isset($timetable->slots[$sectionId])) {
@@ -189,6 +231,9 @@ class GeneticAlgorithmTimetableService
         }
 
         $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+        $timestamp = now();
+
+        $combinedPeriodCache = $this->loadCombinedPeriodsCache($academicTerm);
 
         foreach ($timetable->slots[$sectionId] as $dayIndex => $daySlots) {
             foreach ($daySlots as $periodIndex => $timeSlot) {
@@ -196,16 +241,23 @@ class GeneticAlgorithmTimetableService
                     continue;
                 }
 
-                $combinedPeriodId = $this->getCombinedPeriodId(
+                // Skip positions where locked slots exist (preserve locked entries)
+                $slotKey = "{$dayIndex}_".($periodIndex + 1);
+                if ($lockedSlots->has($slotKey)) {
+                    continue;
+                }
+
+                $combinedPeriodId = $this->getCombinedPeriodIdFromCache(
                     $classRoom->id,
                     (int) $timeSlot->subjectId,
                     (int) $timeSlot->teacherId,
                     $dayIndex,
                     $periodIndex,
-                    $academicTerm
+                    $academicTerm,
+                    $combinedPeriodCache
                 );
 
-                TimetableSlot::create([
+                $slotsToInsert[] = [
                     'class_room_id' => $classRoom->id,
                     'subject_id' => (int) $timeSlot->subjectId,
                     'teacher_id' => (int) $timeSlot->teacherId,
@@ -217,34 +269,56 @@ class GeneticAlgorithmTimetableService
                     'status' => 'published',
                     'is_combined' => $combinedPeriodId !== null,
                     'is_locked' => false,
-                ]);
-
-                $slotsCreated++;
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
+                ];
             }
         }
 
-        return $slotsCreated;
+        if (! empty($slotsToInsert)) {
+            TimetableSlot::insert($slotsToInsert);
+        }
+
+        return count($slotsToInsert) + $lockedSlots->count();
     }
 
-    private function getCombinedPeriodId(
+    private function loadCombinedPeriodsCache(AcademicTerm $academicTerm): array
+    {
+        $combinedPeriods = CombinedPeriod::where('academic_term_id', $academicTerm->id)
+            ->get();
+
+        $cache = [];
+        foreach ($combinedPeriods as $period) {
+            $key = "{$period->subject_id}_{$period->teacher_id}_{$period->day}_{$period->period}";
+            $cache[$key] = $period;
+        }
+
+        return $cache;
+    }
+
+    private function getCombinedPeriodIdFromCache(
         int $classRoomId,
         int $subjectId,
         int $teacherId,
         int $day,
         int $period,
-        AcademicTerm $academicTerm
+        AcademicTerm $academicTerm,
+        array $combinedPeriodCache
     ): ?int {
-        $subject = Subject::find($subjectId);
+        // Check if subject is combined (cache subjects to avoid repeated queries)
+        static $subjectCache = [];
+        if (! isset($subjectCache[$subjectId])) {
+            $subjectCache[$subjectId] = Subject::find($subjectId);
+        }
+
+        $subject = $subjectCache[$subjectId];
         if (! $subject || $subject->single_combined !== 'combined') {
             return null;
         }
 
-        $combinedPeriod = CombinedPeriod::where('subject_id', $subjectId)
-            ->where('teacher_id', $teacherId)
-            ->where('day', $day)
-            ->where('period', $period + 1)
-            ->where('academic_term_id', $academicTerm->id)
-            ->first();
+        // Look up in cache
+        $key = "{$subjectId}_{$teacherId}_{$day}_".($period + 1);
+        $combinedPeriod = $combinedPeriodCache[$key] ?? null;
 
         if ($combinedPeriod) {
             if (! in_array($classRoomId, $combinedPeriod->class_room_ids ?? [])) {

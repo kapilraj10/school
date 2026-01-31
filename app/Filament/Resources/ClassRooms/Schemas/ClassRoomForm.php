@@ -2,12 +2,20 @@
 
 namespace App\Filament\Resources\ClassRooms\Schemas;
 
+use App\Filament\Resources\ClassRooms\Pages\CreateClassRoom;
+use App\Models\ClassRoom;
+use App\Models\Subject;
 use App\Models\Teacher;
+use Filament\Forms\Components\Actions\Action;
 use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 
 class ClassRoomForm
 {
@@ -15,6 +23,15 @@ class ClassRoomForm
     {
         return $form
             ->schema([
+                Hidden::make('copy_from_class_room_id')
+                    ->default(null),
+
+                Hidden::make('copy_subjects_from_source')
+                    ->default(false),
+
+                Hidden::make('copy_from_class_message')
+                    ->default(null),
+
                 Section::make('Class Information')
                     ->description('Enter the basic information for the class')
                     ->schema([
@@ -47,47 +64,63 @@ class ClassRoomForm
                                     ->searchable()
                                     ->native(false)
                                     ->helperText('The class teacher will be assigned Period 1 each day')
-                                    ->columnSpan(1),
-
-                                Select::make('status')
-                                    ->label('Status')
-                                    ->options([
-                                        'active' => 'Active',
-                                        'inactive' => 'Inactive',
-                                    ])
-                                    ->default('active')
-                                    ->required()
-                                    ->native(false)
-                                    ->columnSpan(1),
+                                    ->columnSpanFull(),
                             ]),
                     ]),
 
-                Section::make('Timetable Configuration')
-                    ->description('Configure the weekly schedule for this class')
-                    ->schema([
-                        Grid::make(2)
-                            ->schema([
-                                TextInput::make('weekly_periods')
-                                    ->label('Weekly Periods')
-                                    ->numeric()
-                                    ->default(30)
+                Section::make('Subject Configuration')
+                    ->description('Configure the subjects for this class. If you prefer to manage them manually, you may do so from the Subjects page after the class has been created.')
+                    ->headerActions([
+                        Action::make('copy_from_class')
+                            ->label('Copy Subjects from another class')
+                            ->icon('heroicon-o-clipboard-document')
+                            ->visible(fn ($livewire): bool => $livewire instanceof CreateClassRoom)
+                            ->form([
+                                Select::make('source_class_room_id')
+                                    ->label('Copy From')
+                                    ->options(fn (): array => ClassRoom::query()
+                                        ->orderBy('name')
+                                        ->orderBy('section')
+                                        ->get()
+                                        ->mapWithKeys(fn (ClassRoom $classRoom) => [
+                                            $classRoom->id => $classRoom->full_name,
+                                        ])
+                                        ->all())
+                                    ->searchable()
                                     ->required()
-                                    ->minValue(20)
-                                    ->maxValue(40)
-                                    ->suffix('periods')
-                                    ->helperText('Total number of periods per week')
-                                    ->columnSpan(1),
+                                    ->native(false),
+                                Toggle::make('copy_subjects')
+                                    ->label('Also copy subjects after creating this class')
+                                    ->default(true),
+                            ])
+                            ->action(function (array $data, $livewire): void {
+                                $sourceClassRoom = ClassRoom::find($data['source_class_room_id']);
+                                if (! $sourceClassRoom) {
+                                    return;
+                                }
 
-                                TextInput::make('total_subjects')
-                                    ->label('Total Subjects')
-                                    ->numeric()
-                                    ->default(7)
-                                    ->required()
-                                    ->minValue(1)
-                                    ->maxValue(15)
-                                    ->suffix('subjects')
-                                    ->helperText('Number of subjects taught in this class')
-                                    ->columnSpan(1),
+                                $state = $livewire->form->getState();
+
+                                $livewire->form->fill([
+                                    ...$state,
+                                    'class_teacher_id' => $sourceClassRoom->class_teacher_id,
+                                    'copy_from_class_room_id' => $sourceClassRoom->id,
+                                    'copy_subjects_from_source' => (bool) ($data['copy_subjects'] ?? true),
+                                    'copy_from_class_message' => sprintf(
+                                        '✓ %d subjects from "%s" will be copied when you create this class.',
+                                        Subject::where('class_room_id', $sourceClassRoom->id)->where('status', 'active')->count(),
+                                        $sourceClassRoom->full_name
+                                    ),
+                                ]);
+                            }),
+                    ])
+                    ->schema([
+                        Placeholder::make('copy_from_class_notice')
+                            ->label('Configuration Copied')
+                            ->visible(fn (Get $get): bool => filled($get('copy_from_class_message')))
+                            ->content(fn (Get $get): ?string => $get('copy_from_class_message'))
+                            ->extraAttributes([
+                                'class' => 'fi-badge fi-badge-color-success',
                             ]),
                     ]),
             ]);

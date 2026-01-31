@@ -21,11 +21,18 @@ class AcademicTermResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-calendar';
 
+    protected static ?string $recordTitleAttribute = 'name';
+
     protected static ?string $navigationLabel = 'Academic Terms';
 
     protected static ?string $navigationGroup = 'Academic Management';
 
     protected static ?int $navigationSort = 4;
+
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'year', 'term'];
+    }
 
     public static function form(Form $form): Form
     {

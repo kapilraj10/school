@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\Conflict;
 use App\Models\Subject;
@@ -15,15 +14,25 @@ use Illuminate\Support\Facades\Log;
 class ConflictResolverService
 {
     protected int $academicTermId;
+
     protected Collection $teachers;
+
     protected Collection $subjects;
+
     protected Collection $classRooms;
+
     protected Collection $timetableSlots;
+
     protected array $teacherSchedule = [];
+
     protected array $resolutionLog = [];
+
     protected int $maxPeriodsPerDay = 7;
+
     protected int $periodsPerDay = 8;
+
     protected int $daysPerWeek = 6;
+
     protected array $dayMap = [
         0 => 'Sun',
         1 => 'Mon',
@@ -32,6 +41,7 @@ class ConflictResolverService
         4 => 'Thu',
         5 => 'Fri',
     ];
+
     protected array $dayNameToIndex = [
         'Sun' => 0,
         'Mon' => 1,
@@ -55,9 +65,10 @@ class ConflictResolverService
         $this->teachers = Teacher::where('status', 'active')->get()->keyBy('id');
         $this->subjects = Subject::where('status', 'active')->get()->keyBy('id');
         $this->classRooms = ClassRoom::all()->keyBy('id');
-        $this->timetableSlots = TimetableSlot::where('academic_term_id', $this->academicTermId)->get();
+        $this->timetableSlots = TimetableSlot::where('academic_term_id', $this->academicTermId)
+            ->with(['teacher', 'classRoom', 'subject'])
+            ->get();
 
-        // Build teacher schedule index for quick lookup
         foreach ($this->timetableSlots as $slot) {
             if ($slot->teacher_id) {
                 $key = "{$slot->day}-{$slot->period}";
@@ -112,7 +123,7 @@ class ConflictResolverService
             return $this->resolutionLog;
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Conflict resolution failed: ' . $e->getMessage());
+            Log::error('Conflict resolution failed: '.$e->getMessage());
 
             throw $e;
         }
@@ -136,22 +147,20 @@ class ConflictResolverService
             $day = $data['day'];
             $period = $data['period'];
 
-            // Get all slots where this teacher is scheduled at this time
             $conflictingSlots = TimetableSlot::where('academic_term_id', $this->academicTermId)
                 ->where('teacher_id', $teacherId)
                 ->where('day', $day)
                 ->where('period', $period)
+                ->with(['teacher', 'classRoom'])
                 ->get();
 
             if ($conflictingSlots->count() <= 1) {
-                // Already resolved
                 $conflict->delete();
                 $resolved++;
 
                 continue;
             }
 
-            // Keep the first slot, try to reschedule others
             $slotsToReschedule = $conflictingSlots->slice(1);
 
             foreach ($slotsToReschedule as $slot) {
@@ -198,13 +207,15 @@ class ConflictResolverService
 
             if (! $slotId) {
                 $conflict->delete();
+
                 continue;
             }
 
-            $slot = TimetableSlot::find($slotId);
+            $slot = TimetableSlot::with(['teacher', 'classRoom'])->find($slotId);
 
             if (! $slot) {
                 $conflict->delete();
+
                 continue;
             }
 
@@ -247,6 +258,7 @@ class ConflictResolverService
 
             if (! $teacher) {
                 $conflict->delete();
+
                 continue;
             }
 
@@ -575,7 +587,7 @@ class ConflictResolverService
             ->get();
 
         $grouped = $slots->groupBy(function ($slot) {
-            return $slot->teacher_id . '-' . $slot->day . '-' . $slot->period;
+            return $slot->teacher_id.'-'.$slot->day.'-'.$slot->period;
         });
 
         foreach ($grouped as $key => $group) {

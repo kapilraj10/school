@@ -75,17 +75,7 @@ class ClassSubjectSetting extends Model
      */
     public static function syncSubjectsForClass(ClassRoom $classRoom): void
     {
-        $classNumber = (int) filter_var($classRoom->name, FILTER_SANITIZE_NUMBER_INT);
-
-        // Determine class range
-        $classRange = ClassRange::getForClassNumber($classNumber);
-
-        if (! $classRange) {
-            return;
-        }
-
-        // Get subjects for this class range
-        $subjects = Subject::where('class_range', $classRange->name)
+        $subjects = Subject::where('class_room_id', $classRoom->id)
             ->where('status', 'active')
             ->get();
 

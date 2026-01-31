@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ClassRooms;
 use App\Filament\Resources\ClassRooms\Pages\CreateClassRoom;
 use App\Filament\Resources\ClassRooms\Pages\EditClassRoom;
 use App\Filament\Resources\ClassRooms\Pages\ListClassRooms;
+use App\Filament\Resources\ClassRooms\Pages\ViewClassRoom;
 use App\Filament\Resources\ClassRooms\Schemas\ClassRoomForm;
 use App\Filament\Resources\ClassRooms\Tables\ClassRoomsTable;
 use App\Models\ClassRoom;
@@ -30,6 +31,11 @@ class ClassRoomResource extends Resource
 
     protected static ?int $navigationSort = 1;
 
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'section', 'classTeacher.name'];
+    }
+
     public static function form(Form $form): Form
     {
         return ClassRoomForm::configure($form);
@@ -52,6 +58,7 @@ class ClassRoomResource extends Resource
         return [
             'index' => ListClassRooms::route('/'),
             'create' => CreateClassRoom::route('/create'),
+            'view' => ViewClassRoom::route('/{record}'),
             'edit' => EditClassRoom::route('/{record}/edit'),
         ];
     }

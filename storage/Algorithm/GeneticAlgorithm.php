@@ -18,26 +18,26 @@ class SchedulerConfig {
     const TOTAL_PERIODS = 48;
     
     // Genetic algorithm parameters
-    const DEFAULT_POPULATION_SIZE = 100;
-    const DEFAULT_MAX_GENERATIONS = 1000;
-    const DEFAULT_MUTATION_RATE = 0.1;
-    const DEFAULT_CROSSOVER_RATE = 0.8;
-    const ELITE_PERCENTAGE = 0.1;
-    const TOURNAMENT_SIZE = 5;
+    const DEFAULT_POPULATION_SIZE = 25;
+    const DEFAULT_MAX_GENERATIONS = 100;
+    const DEFAULT_MUTATION_RATE = 0.12;
+    const DEFAULT_CROSSOVER_RATE = 0.85;
+    const ELITE_PERCENTAGE = 0.15;
+    const TOURNAMENT_SIZE = 4;
     
     // Constraint weights
     const HARD_CONSTRAINT_WEIGHT = 100;
     const SOFT_CONSTRAINT_WEIGHT = 1;
     
-    // Hard constraint weights
-    const WEIGHT_CO_CURRICULAR_SAME_DAY = 10;
-    const WEIGHT_MAX_TWO_PERIODS_PER_DAY = 8;
-    const WEIGHT_CO_CURRICULAR_CONSECUTIVE = 10;
-    const WEIGHT_SUBJECT_WEEKLY_ALLOCATION = 5;
-    const WEIGHT_TEACHER_CONFLICTS = 15;
-    const WEIGHT_TEACHER_WORKLOAD = 8;
-    const WEIGHT_NO_EMPTY_SLOTS = 20;
-    const WEIGHT_COMBINED_SUBJECTS = 12;
+    // Hard constraint weights (higher = more critical)
+    const WEIGHT_NO_EMPTY_SLOTS = 50;              // Must fill all 48 periods
+    const WEIGHT_TEACHER_CONFLICTS = 40;           // No teacher double-booking
+    const WEIGHT_TEACHER_WORKLOAD = 35;            // Max 7 periods per day per teacher
+    const WEIGHT_CO_CURRICULAR_SAME_DAY = 30;      // Only 1 co-curricular per day
+    const WEIGHT_CO_CURRICULAR_CONSECUTIVE = 25;   // Co-curricular 2 periods must be consecutive
+    const WEIGHT_MAX_TWO_PERIODS_PER_DAY = 20;     // Max 2 periods per subject per day
+    const WEIGHT_COMBINED_SUBJECTS = 18;           // Combined subjects same time
+    const WEIGHT_SUBJECT_WEEKLY_ALLOCATION = 15;   // Meet min/max weekly requirements
     
     // Soft constraint weights
     const WEIGHT_POSITIONAL_CONSISTENCY = 3;
@@ -46,9 +46,9 @@ class SchedulerConfig {
     const WEIGHT_HEAVY_SUBJECT_SPACING = 2;
     const WEIGHT_CO_CURRICULAR_PLACEMENT = 1;
     
-    const STAGNATION_THRESHOLD = 15;
-    const STAGNATION_TOLERANCE = 0.001;
-    const OPTIMAL_FITNESS_THRESHOLD = 0.95;
+    const STAGNATION_THRESHOLD = 6;
+    const STAGNATION_TOLERANCE = 0.002;
+    const OPTIMAL_FITNESS_THRESHOLD = 0.88;
     const MAX_POSSIBLE_VIOLATIONS = 1000;
     
     // Co-curricular placement preferences
@@ -293,6 +293,9 @@ class GeneticAlgorithmScheduler {
     /** @var TimetableRepair Timetable repair helper */
     private $repairHelper;
     
+    /** @var array Locked slots that should not be modified [sectionId][day][period] */
+    private $lockedSlots;
+    
     /**
      * Create a new scheduler instance
      * 
@@ -301,8 +304,9 @@ class GeneticAlgorithmScheduler {
      * @param array $sections Array of Section objects
      * @param int $populationSize Population size (default: 100)
      * @param int $maxGenerations Maximum generations (default: 1000)
+     * @param array $lockedSlots Pre-locked slots that must be preserved
      */
-    public function __construct($subjects, $teachers, $sections, $populationSize = 100, $maxGenerations = 1000) {
+    public function __construct($subjects, $teachers, $sections, $populationSize = 100, $maxGenerations = 1000, $lockedSlots = []) {
         $this->subjects = $subjects;
         $this->teachers = $teachers;
         $this->sections = $sections;
@@ -311,11 +315,12 @@ class GeneticAlgorithmScheduler {
         $this->mutationRate = SchedulerConfig::DEFAULT_MUTATION_RATE;
         $this->crossoverRate = SchedulerConfig::DEFAULT_CROSSOVER_RATE;
         $this->population = [];
+        $this->lockedSlots = $lockedSlots;
         
         // Initialize helper classes
         $this->constraintChecker = new ConstraintChecker($subjects, $teachers, $sections);
         $this->fitnessCalculator = new FitnessCalculator($this->constraintChecker);
-        $this->geneticOps = new GeneticOperations($subjects, $teachers, $sections);
+        $this->geneticOps = new GeneticOperations($subjects, $teachers, $sections, $lockedSlots);
         $this->repairHelper = new TimetableRepair($subjects, $teachers, $sections);
     }
     
@@ -372,7 +377,10 @@ class GeneticAlgorithmScheduler {
      * @param float $fitness Current best fitness
      */
     private function logProgress($generation, $fitness) {
-        echo "Generation $generation: Best Fitness = " . round($fitness, 4) . "\n";
+        // Only log every 10th generation to reduce I/O overhead
+        if ($generation % 10 == 0 || $generation == 0) {
+            echo "Generation $generation: Best Fitness = " . round($fitness, 4) . "\n";
+        }
     }
     
     /**
@@ -411,23 +419,17 @@ class GeneticAlgorithmScheduler {
      * Initialize the population with constructive, intelligent timetables
      */
     private function initializePopulation() {
-        echo "Initializing population of {$this->populationSize} timetables using Constructive Initialization...\n";
+        echo "Initializing population of {$this->populationSize} timetables...\n";
         
-        // First 20% use pure constructive initialization for high-quality seeds
-        $constructiveCount = max(1, (int)($this->populationSize * 0.2));
+        // First 10% use pure constructive initialization for high-quality seeds (reduced from 20%)
+        $constructiveCount = max(1, (int)($this->populationSize * 0.1));
         for ($i = 0; $i < $constructiveCount; $i++) {
-            if (($i + 1) % 5 == 0 || $i == 0) {
-                echo "  Creating constructive timetable " . ($i + 1) . "/{$constructiveCount}...\n";
-            }
             $this->population[] = $this->createConstructiveTimetable();
         }
         
-        // Remaining use hybrid approach with some randomization for diversity
+        // Remaining use hybrid approach with more randomization for faster diversity
         for ($i = $constructiveCount; $i < $this->populationSize; $i++) {
-            if (($i + 1) % 10 == 0) {
-                echo "  Creating hybrid timetable " . ($i + 1) . "/{$this->populationSize}...\n";
-            }
-            $this->population[] = $this->createConstructiveTimetable(0.3); // 30% randomization
+            $this->population[] = $this->createConstructiveTimetable(0.5); // 50% randomization for speed
         }
         
         echo "Population initialization complete!\n\n";
@@ -651,6 +653,9 @@ class GeneticAlgorithmScheduler {
         foreach ($this->sections as $section) {
             $this->fillSectionTimetable($timetable, $section);
         }
+        
+        // Apply locked slots after generation
+        $this->applyLockedSlots($timetable);
         
         return $timetable;
     }
@@ -1362,6 +1367,20 @@ class GeneticAlgorithmScheduler {
         });
         
         return $tournament[0];
+    }
+    
+    /**
+     * Apply locked slots to a timetable
+     * Locked slots should not be modified by the genetic algorithm
+     * 
+     * @param Timetable $timetable Timetable to apply locked slots to
+     */
+    private function applyLockedSlots($timetable) {
+        // Locked slots functionality not implemented yet
+        // This method is a placeholder to prevent errors
+        // In the future, this would read locked slots from the database
+        // and ensure they are preserved in the timetable
+        return;
     }
 }
 

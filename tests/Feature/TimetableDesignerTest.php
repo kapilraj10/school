@@ -10,14 +10,11 @@ use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimetableSlot;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
 
 class TimetableDesignerTest extends TestCase
 {
-    use RefreshDatabase;
-
     private User $user;
 
     private ClassRoom $classRoom;

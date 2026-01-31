@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Teachers\Tables;
 
+use App\Models\ClassRoom;
 use App\Models\Subject;
 use Filament\Support\Colors\Color;
 use Filament\Tables\Actions\BulkActionGroup;
@@ -12,6 +13,7 @@ use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\HtmlString;
 
 class TeachersTable
 {
@@ -21,11 +23,15 @@ class TeachersTable
             ->columns([
                 TextColumn::make('name')
                     ->label('Teacher')
-                    ->description(fn ($record) => implode(' • ', array_filter([
-                        $record->employee_id ? "ID: {$record->employee_id}" : null,
-                        $record->email,
-                        $record->phone,
-                    ])))
+                    ->description(function ($record) {
+                        $lines = array_filter([
+                            $record->employee_id ? "ID: {$record->employee_id}" : null,
+                            $record->email,
+                            $record->phone,
+                        ]);
+
+                        return new HtmlString(implode('<br>', $lines));
+                    })
                     ->searchable(['name', 'employee_id', 'email', 'phone'])
                     ->sortable()
                     ->weight('bold')
@@ -37,7 +43,8 @@ class TeachersTable
                         if (empty($record->subject_ids)) {
                             return 'None';
                         }
-                        $subjects = Subject::whereIn('id', $record->subject_ids)
+                        $subjects = Subject::query()
+                            ->whereIn('id', $record->subject_ids)
                             ->pluck('name')
                             ->toArray();
 
@@ -45,7 +52,28 @@ class TeachersTable
                     })
                     ->badge()
                     ->color(Color::Indigo)
-                    ->searchable(false),
+                    ->searchable(false)
+                    ->wrap(),
+
+                TextColumn::make('assigned_classes')
+                    ->label('Assigned Classes')
+                    ->formatStateUsing(function ($record) {
+                        if (empty($record->class_room_ids)) {
+                            return 'All Classes';
+                        }
+                        $classes = ClassRoom::query()
+                            ->whereIn('id', $record->class_room_ids)
+                            ->get()
+                            ->map(fn ($class) => "{$class->name}-{$class->section}")
+                            ->toArray();
+
+                        return implode(', ', $classes);
+                    })
+                    ->badge()
+                    ->color(Color::Amber)
+                    ->searchable(false)
+                    ->wrap()
+                    ->toggleable(),
 
                 TextColumn::make('max_periods_per_day')
                     ->label('Max/Day')
@@ -133,6 +161,22 @@ class TeachersTable
                     ->query(function ($query, $state) {
                         if (filled($state['value'])) {
                             return $query->whereJsonContains('subject_ids', (int) $state['value']);
+                        }
+                    })
+                    ->native(false),
+
+                SelectFilter::make('class_room_ids')
+                    ->label('Assigned Class')
+                    ->options(fn () => ClassRoom::active()
+                        ->get()
+                        ->sortBy(fn ($class) => $class->name.$class->section, SORT_NATURAL | SORT_FLAG_CASE)
+                        ->mapWithKeys(fn ($class) => [$class->id => $class->full_name]))
+                    ->query(function ($query, $state) {
+                        if (filled($state['value'])) {
+                            return $query->where(function ($q) use ($state) {
+                                $q->whereJsonContains('class_room_ids', (int) $state['value'])
+                                    ->orWhereNull('class_room_ids');
+                            });
                         }
                     })
                     ->native(false),
