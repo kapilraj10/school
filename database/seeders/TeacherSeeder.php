@@ -58,12 +58,21 @@ class TeacherSeeder extends Seeder
                 $teacherName = $subject->name.' Teacher ('.$class->name.' '.$class->section.')';
 
                 // Determine availability based on subject type
-                $availableDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+                $availableDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
                 $availablePeriods = [1, 2, 3, 4, 5, 6, 7, 8];
 
                 // For co-curricular subjects, limit availability slightly
                 if ($subject->type === 'co_curricular') {
-                    $availableDays = ['Sunday', 'Tuesday', 'Thursday', 'Friday'];
+                    $availableDays = ['Sun', 'Tue', 'Thu', 'Fri'];
+                }
+
+                // Build availability matrix
+                $availabilityMatrix = [];
+                foreach ($availableDays as $day) {
+                    $availabilityMatrix[$day] = [];
+                    foreach ($availablePeriods as $period) {
+                        $availabilityMatrix[$day][$period] = true;
+                    }
                 }
 
                 // Insert teacher record
@@ -75,8 +84,7 @@ class TeacherSeeder extends Seeder
                     'subject_ids' => json_encode([$subject->id]),
                     'max_periods_per_day' => 7,
                     'max_periods_per_week' => 40,
-                    'available_days' => json_encode($availableDays),
-                    'available_periods' => json_encode($availablePeriods),
+                    'availability_matrix' => json_encode($availabilityMatrix),
                     'status' => 'active',
                     'created_at' => $timestamp,
                     'updated_at' => $timestamp,

@@ -10,6 +10,7 @@ use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 
 class TeacherForm
 {
@@ -50,7 +51,9 @@ class TeacherForm
                                     ->label('Phone Number')
                                     ->tel()
                                     ->maxLength(20)
-                                    ->placeholder('+1234567890')
+                                    ->prefix('+977')
+                                    ->placeholder('98XXXXXXXX')
+                                    ->helperText('Enter 10-digit phone number')
                                     ->columnSpan(1),
 
                                 Select::make('status')
@@ -62,22 +65,9 @@ class TeacherForm
                                     ->default('active')
                                     ->required()
                                     ->native(false)
+                                    ->hiddenOn('create')
                                     ->columnSpan(2),
                             ]),
-                    ]),
-
-                Section::make('Subject Assignment')
-                    ->description('Select subjects this teacher can teach')
-                    ->schema([
-                        Select::make('subject_ids')
-                            ->label('Subjects Can Teach')
-                            ->multiple()
-                            ->options(fn () => Subject::active()->pluck('name', 'id'))
-                            ->required()
-                            ->searchable()
-                            ->preload()
-                            ->native(false)
-                            ->helperText('Select all subjects this teacher is qualified to teach'),
                     ]),
 
                 Section::make('Class Assignment')
@@ -94,7 +84,33 @@ class TeacherForm
                             ->searchable()
                             ->preload()
                             ->native(false)
-                            ->helperText('Leave empty to allow teaching all classes, or select specific classes'),
+                            ->live()
+                            ->helperText('Select specific classes to filter available subjects'),
+                    ]),
+
+                Section::make('Subject Assignment')
+                    ->description('Select subjects this teacher can teach')
+                    ->schema([
+                        Select::make('subject_ids')
+                            ->label('Subjects Can Teach')
+                            ->multiple()
+                            ->options(function (Get $get) {
+                                $classRoomIds = $get('class_room_ids');
+
+                                if (empty($classRoomIds)) {
+                                    return Subject::active()->pluck('name', 'id');
+                                }
+
+                                return Subject::active()
+                                    ->whereIn('class_room_id', $classRoomIds)
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id');
+                            })
+                            ->required()
+                            ->searchable()
+                            ->preload()
+                            ->native(false)
+                            ->helperText('Subjects are filtered based on selected classes'),
                     ]),
 
                 Section::make('Teaching Capacity')
@@ -131,13 +147,26 @@ class TeacherForm
                     ->schema([
                         AvailabilityGrid::make('availability')
                             ->label('Availability Grid')
+                            ->columnSpanFull()
                             ->required()
                             ->helperText('Click cells to toggle availability. Click headers to toggle entire rows/columns.')
                             ->afterStateHydrated(function (AvailabilityGrid $component, $state, $record) {
                                 if ($record) {
+                                    $matrix = $record->availability_matrix ?? [];
+                                    $days = ! empty($matrix) ? array_keys($matrix) : [];
+                                    $periods = [];
+                                    if (! empty($matrix)) {
+                                        foreach ($matrix as $dayPeriods) {
+                                            $periods = array_merge($periods, array_keys($dayPeriods));
+                                        }
+                                        $periods = array_unique($periods);
+                                        sort($periods);
+                                    }
+
                                     $component->state([
-                                        'days' => $record->available_days ?? [],
-                                        'periods' => $record->available_periods ?? [],
+                                        'days' => $days,
+                                        'periods' => $periods,
+                                        'matrix' => $matrix,
                                     ]);
                                 }
                             })
@@ -152,8 +181,26 @@ class TeacherForm
     public static function mutateFormDataBeforeSave(array $data): array
     {
         if (isset($data['availability'])) {
-            $data['available_days'] = $data['availability']['days'] ?? [];
-            $data['available_periods'] = $data['availability']['periods'] ?? [];
+            $availability = $data['availability'];
+
+            // If matrix is provided, use it directly
+            if (! empty($availability['matrix'])) {
+                $data['availability_matrix'] = $availability['matrix'];
+            }
+            // Otherwise, build matrix from days and periods
+            elseif (! empty($availability['days']) && ! empty($availability['periods'])) {
+                $matrix = [];
+                foreach ($availability['days'] as $day) {
+                    $matrix[$day] = [];
+                    foreach ($availability['periods'] as $period) {
+                        $matrix[$day][$period] = true;
+                    }
+                }
+                $data['availability_matrix'] = $matrix;
+            } else {
+                $data['availability_matrix'] = [];
+            }
+
             unset($data['availability']);
         }
 

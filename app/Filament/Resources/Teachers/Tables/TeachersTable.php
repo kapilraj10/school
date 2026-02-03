@@ -99,8 +99,12 @@ class TeachersTable
                 TextColumn::make('available_days')
                     ->label('Available Days')
                     ->formatStateUsing(function ($record) {
-                        $days = $record->available_days;
-                        if (empty($days) || ! is_array($days)) {
+                        if (empty($record->availability_matrix) || ! is_array($record->availability_matrix)) {
+                            return 'None';
+                        }
+
+                        $days = array_keys($record->availability_matrix);
+                        if (empty($days)) {
                             return 'None';
                         }
 
@@ -113,12 +117,24 @@ class TeachersTable
                 TextColumn::make('available_periods')
                     ->label('Available Periods')
                     ->formatStateUsing(function ($record) {
-                        $periods = $record->available_periods;
-                        if (empty($periods) || ! is_array($periods)) {
+                        if (empty($record->availability_matrix) || ! is_array($record->availability_matrix)) {
                             return 'None';
                         }
 
-                        return 'P'.implode(', P', $periods);
+                        $allPeriods = [];
+                        foreach ($record->availability_matrix as $day => $periods) {
+                            if (is_array($periods)) {
+                                $allPeriods = array_merge($allPeriods, $periods);
+                            }
+                        }
+                        $uniquePeriods = array_unique($allPeriods);
+                        sort($uniquePeriods);
+
+                        if (empty($uniquePeriods)) {
+                            return 'None';
+                        }
+
+                        return 'P'.implode(', P', $uniquePeriods);
                     })
                     ->wrap()
                     ->color(Color::Blue)
@@ -189,11 +205,11 @@ class TeachersTable
                     ])
                     ->query(function ($query, $state) {
                         if ($state['value'] === 'full_week') {
-                            return $query->whereNotNull('available_days')
-                                ->whereJsonLength('available_days', '>=', 6);
+                            return $query->whereNotNull('availability_matrix')
+                                ->whereRaw('JSON_LENGTH(JSON_KEYS(availability_matrix)) >= 6');
                         } elseif ($state['value'] === 'partial') {
-                            return $query->whereNotNull('available_days')
-                                ->whereJsonLength('available_days', '<', 6);
+                            return $query->whereNotNull('availability_matrix')
+                                ->whereRaw('JSON_LENGTH(JSON_KEYS(availability_matrix)) < 6');
                         }
                     })
                     ->native(false),

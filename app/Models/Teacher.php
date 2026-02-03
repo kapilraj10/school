@@ -20,8 +20,7 @@ class Teacher extends Model
         'class_room_ids',
         'max_periods_per_day',
         'max_periods_per_week',
-        'available_days',
-        'available_periods',
+        'availability_matrix',
         'status',
     ];
 
@@ -30,8 +29,7 @@ class Teacher extends Model
         'class_room_ids' => 'array',
         'max_periods_per_day' => 'integer',
         'max_periods_per_week' => 'integer',
-        'available_days' => 'array',
-        'available_periods' => 'array',
+        'availability_matrix' => 'array',
     ];
 
     /**
@@ -118,6 +116,60 @@ class Teacher extends Model
         }
 
         return true;
+    }
+
+    /**
+     * Get available days derived from availability matrix
+     */
+    public function getAvailableDays(): array
+    {
+        if (empty($this->availability_matrix)) {
+            return [];
+        }
+
+        $availableDays = [];
+        foreach ($this->availability_matrix as $dayShort => $periods) {
+            if (! empty(array_filter($periods))) {
+                $availableDays[] = $dayShort;
+            }
+        }
+
+        return $availableDays;
+    }
+
+    /**
+     * Get available periods derived from availability matrix
+     */
+    public function getAvailablePeriods(): array
+    {
+        if (empty($this->availability_matrix)) {
+            return [];
+        }
+
+        $availablePeriods = [];
+        foreach ($this->availability_matrix as $dayShort => $periods) {
+            foreach ($periods as $period => $isAvailable) {
+                if ($isAvailable && ! in_array($period, $availablePeriods)) {
+                    $availablePeriods[] = $period;
+                }
+            }
+        }
+
+        sort($availablePeriods);
+
+        return $availablePeriods;
+    }
+
+    /**
+     * Check if teacher is available at a specific day and period using availability matrix
+     */
+    public function isAvailableAt(string $dayShort, int $period): bool
+    {
+        if (empty($this->availability_matrix)) {
+            return true;
+        }
+
+        return $this->availability_matrix[$dayShort][$period] ?? false;
     }
 
     /**

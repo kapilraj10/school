@@ -36,8 +36,8 @@ class GeneticAlgorithmTimetableService
         int $maxGenerations = 100
     ): array {
         try {
-            set_time_limit(180);
-            ini_set('max_execution_time', '180');
+            set_time_limit(0);
+            ini_set('memory_limit', '-1');
 
             DB::beginTransaction();
 
@@ -200,7 +200,8 @@ class GeneticAlgorithmTimetableService
                 $teacherId,
                 $teacher->name,
                 array_map('strval', $teacher->subject_ids ?? []),
-                $teacher->max_periods_per_day ?? 7
+                $teacher->max_periods_per_day ?? 7,
+                $teacher->availability_matrix
             );
 
             $this->teachers[$teacherId] = $gaTeacher;

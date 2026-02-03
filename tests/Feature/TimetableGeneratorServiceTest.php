@@ -82,8 +82,14 @@ class TimetableGeneratorServiceTest extends TestCase
             'employee_id' => 'EMP'.uniqid(),
             'email' => 'teacher'.uniqid().'@test.com',
             'phone' => '1234567890',
-            'available_days' => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'], // Array, not JSON
-            'available_periods' => [1, 2, 3, 4, 5, 6, 7, 8], // Array, not JSON
+            'availability_matrix' => [
+                'Sun' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+                'Mon' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+                'Tue' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+                'Wed' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+                'Thu' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+                'Fri' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+            ],
             'max_periods_per_week' => 30,
             'status' => 'active',
         ], $attributes));
@@ -256,8 +262,9 @@ class TimetableGeneratorServiceTest extends TestCase
     {
         // Teacher only available on Sunday periods 1-4
         $teacher = $this->createTeacher([
-            'available_days' => ['Sun'],
-            'available_periods' => [1, 2, 3, 4],
+            'availability_matrix' => [
+                'Sun' => [1 => true, 2 => true, 3 => true, 4 => true],
+            ],
         ]);
 
         $subject = $this->createSubject();

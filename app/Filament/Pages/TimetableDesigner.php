@@ -486,8 +486,8 @@ class TimetableDesigner extends Page implements HasForms
             $result = $generator->generateTimetable(
                 $classRoom,
                 $academicTerm,
-                100,
-                1000
+                20,
+                150
             );
 
             if ($result['success']) {

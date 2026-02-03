@@ -27,8 +27,14 @@ class TeacherFactory extends Factory
             'subject_ids' => [],
             'max_periods_per_day' => 6,
             'max_periods_per_week' => 30,
-            'available_days' => [1, 2, 3, 4, 5, 6],
-            'available_periods' => [1, 2, 3, 4, 5, 6, 7, 8],
+            'availability_matrix' => [
+                'Sun' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+                'Mon' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+                'Tue' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+                'Wed' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+                'Thu' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+                'Fri' => [1 => true, 2 => true, 3 => true, 4 => true, 5 => true, 6 => true, 7 => true, 8 => true],
+            ],
             'status' => 'active',
         ];
     }
@@ -64,12 +70,20 @@ class TeacherFactory extends Factory
     }
 
     /**
-     * Set available days.
+     * Set available days with all periods enabled.
      */
     public function availableDays(array $days): static
     {
-        return $this->state(fn (array $attributes) => [
-            'available_days' => $days,
-        ]);
+        return $this->state(function (array $attributes) use ($days) {
+            $matrix = [];
+            foreach ($days as $day) {
+                $matrix[$day] = [
+                    1 => true, 2 => true, 3 => true, 4 => true,
+                    5 => true, 6 => true, 7 => true, 8 => true,
+                ];
+            }
+
+            return ['availability_matrix' => $matrix];
+        });
     }
 }

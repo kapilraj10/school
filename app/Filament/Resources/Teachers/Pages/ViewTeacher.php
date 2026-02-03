@@ -99,12 +99,32 @@ class ViewTeacher extends ViewRecord
                         ViewEntry::make('availability_grid')
                             ->label('')
                             ->view('filament.resources.teachers.availability-grid')
-                            ->viewData(fn ($record) => [
-                                'availableDays' => $record->available_days ?? [],
-                                'availablePeriods' => $record->available_periods ?? [],
-                                'schoolDays' => TimetableSetting::get('school_days', ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']),
-                                'periodsPerDay' => TimetableSetting::get('periods_per_day', 8),
-                            ]),
+                            ->viewData(function ($record) {
+                                $matrix = $record->availability_matrix ?? [];
+
+                                // Extract available days from the matrix
+                                $availableDays = array_keys($matrix);
+
+                                // Extract available periods: any period number where at least one day has it set to true
+                                $availablePeriods = [];
+                                foreach ($matrix as $day => $periods) {
+                                    if (is_array($periods)) {
+                                        foreach ($periods as $period => $isAvailable) {
+                                            if ($isAvailable && ! in_array($period, $availablePeriods)) {
+                                                $availablePeriods[] = $period;
+                                            }
+                                        }
+                                    }
+                                }
+                                sort($availablePeriods);
+
+                                return [
+                                    'availableDays' => $availableDays,
+                                    'availablePeriods' => $availablePeriods,
+                                    'schoolDays' => TimetableSetting::get('school_days', ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']),
+                                    'periodsPerDay' => TimetableSetting::get('periods_per_day', 8),
+                                ];
+                            }),
                     ]),
             ]);
     }

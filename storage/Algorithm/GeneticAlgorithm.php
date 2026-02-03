@@ -46,9 +46,9 @@ class SchedulerConfig {
     const WEIGHT_HEAVY_SUBJECT_SPACING = 2;
     const WEIGHT_CO_CURRICULAR_PLACEMENT = 1;
     
-    const STAGNATION_THRESHOLD = 6;
+    const STAGNATION_THRESHOLD = 4;
     const STAGNATION_TOLERANCE = 0.002;
-    const OPTIMAL_FITNESS_THRESHOLD = 0.88;
+    const OPTIMAL_FITNESS_THRESHOLD = 0.82;
     const MAX_POSSIBLE_VIOLATIONS = 1000;
     
     // Co-curricular placement preferences
@@ -119,6 +119,9 @@ class Teacher {
     /** @var int Maximum periods per day for this teacher */
     public $maxPeriodsPerDay;
     
+    /** @var array|null Availability matrix {"Sun": {1: true, 2: false}, "Mon": {...}} */
+    public $availabilityMatrix;
+    
     /**
      * Create a new Teacher instance
      * 
@@ -126,12 +129,14 @@ class Teacher {
      * @param string $name Teacher name
      * @param array $subjects Array of subject IDs
      * @param int $maxPeriodsPerDay Maximum periods per day (default: 7)
+     * @param array|null $availabilityMatrix Availability matrix (default: null means available all times)
      */
-    public function __construct($id, $name, $subjects, $maxPeriodsPerDay = 7) {
+    public function __construct($id, $name, $subjects, $maxPeriodsPerDay = 7, $availabilityMatrix = null) {
         $this->id = $id;
         $this->name = $name;
         $this->subjects = $subjects;
         $this->maxPeriodsPerDay = $maxPeriodsPerDay;
+        $this->availabilityMatrix = $availabilityMatrix;
     }
 }
 
@@ -296,17 +301,20 @@ class GeneticAlgorithmScheduler {
     /** @var array Locked slots that should not be modified [sectionId][day][period] */
     private $lockedSlots;
     
+    /** @var array Cache for fitness calculations to avoid redundant evaluations */
+    private $fitnessCache = [];
+    
     /**
      * Create a new scheduler instance
      * 
      * @param array $subjects Indexed array of Subject objects
      * @param array $teachers Indexed array of Teacher objects
      * @param array $sections Array of Section objects
-     * @param int $populationSize Population size (default: 100)
-     * @param int $maxGenerations Maximum generations (default: 1000)
+     * @param int $populationSize Population size (default: 20)
+     * @param int $maxGenerations Maximum generations (default: 150)
      * @param array $lockedSlots Pre-locked slots that must be preserved
      */
-    public function __construct($subjects, $teachers, $sections, $populationSize = 100, $maxGenerations = 1000, $lockedSlots = []) {
+    public function __construct($subjects, $teachers, $sections, $populationSize = 20, $maxGenerations = 150, $lockedSlots = []) {
         $this->subjects = $subjects;
         $this->teachers = $teachers;
         $this->sections = $sections;
@@ -377,8 +385,7 @@ class GeneticAlgorithmScheduler {
      * @param float $fitness Current best fitness
      */
     private function logProgress($generation, $fitness) {
-        // Only log every 10th generation to reduce I/O overhead
-        if ($generation % 10 == 0 || $generation == 0) {
+        if ($generation % 20 == 0 || $generation == 0) {
             echo "Generation $generation: Best Fitness = " . round($fitness, 4) . "\n";
         }
     }
@@ -837,7 +844,9 @@ class GeneticAlgorithmScheduler {
      */
     private function evaluatePopulation() {
         foreach ($this->population as $timetable) {
-            $timetable->fitness = $this->fitnessCalculator->calculate($timetable);
+            if ($timetable->fitness === null) {
+                $timetable->fitness = $this->fitnessCalculator->calculate($timetable);
+            }
         }
     }
     
@@ -1270,6 +1279,11 @@ class GeneticAlgorithmScheduler {
             return false;
         }
         
+        // Check if teacher has this time slot in their availability matrix
+        if (!$this->constraintChecker->hasTeacherAvailability($teacherId, $day, $period)) {
+            return false;
+        }
+        
         // Check if teacher is available at this time
         if (!$this->constraintChecker->isTeacherAvailable($teacherId, $day, $period, $timetable)) {
             return false;
@@ -1439,6 +1453,41 @@ class ConstraintChecker {
         }
         
         return true;
+    }
+    
+    /**
+     * Check if teacher is available based on their availability matrix
+     * 
+     * @param string $teacherId Teacher identifier
+     * @param int $day Day index (0-5 for Sun-Fri)
+     * @param int $period Period index (0-7)
+     * @return bool True if teacher has this time slot marked as available
+     */
+    public function hasTeacherAvailability($teacherId, $day, $period) {
+        if (!$teacherId || !isset($this->teachers[$teacherId])) {
+            return true; // Unknown teacher, assume available
+        }
+        
+        $teacher = $this->teachers[$teacherId];
+        
+        // If no availability matrix, assume available all times
+        if (!$teacher->availabilityMatrix || empty($teacher->availabilityMatrix)) {
+            return true;
+        }
+        
+        // Map day index to day short name
+        $dayMap = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+        $dayShort = $dayMap[$day] ?? null;
+        
+        if (!$dayShort || !isset($teacher->availabilityMatrix[$dayShort])) {
+            return false; // Day not in availability matrix
+        }
+        
+        // Period is 0-indexed in algorithm but 1-indexed in matrix
+        $periodKey = $period + 1;
+        
+        return isset($teacher->availabilityMatrix[$dayShort][$periodKey]) 
+            && $teacher->availabilityMatrix[$dayShort][$periodKey] === true;
     }
     
     /**
@@ -2467,6 +2516,9 @@ class TimetableRepair {
     /** @var array Array of Section objects */
     private $sections;
     
+    /** @var ConstraintChecker Constraint checker instance */
+    private $constraintChecker;
+    
     /**
      * Create a new TimetableRepair instance
      * 
@@ -2478,6 +2530,7 @@ class TimetableRepair {
         $this->subjects = $subjects;
         $this->teachers = $teachers;
         $this->sections = $sections;
+        $this->constraintChecker = new ConstraintChecker($subjects, $teachers, $sections);
     }
     
     /**
@@ -2891,6 +2944,11 @@ class TimetableRepair {
             if ($teacher->id === $excludeTeacherId) continue;
             
             if (in_array($subjectId, $teacher->subjects)) {
+                // Check if teacher has this time slot in their availability
+                if (!$this->constraintChecker->hasTeacherAvailability($teacher->id, $day, $period)) {
+                    continue;
+                }
+                
                 // Check if teacher is free at this time
                 $isFree = true;
                 foreach ($this->sections as $section) {

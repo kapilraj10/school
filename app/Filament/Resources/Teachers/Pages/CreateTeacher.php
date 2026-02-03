@@ -12,6 +12,10 @@ class CreateTeacher extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        if (! isset($data['status'])) {
+            $data['status'] = 'active';
+        }
+
         return TeacherForm::mutateFormDataBeforeSave($data);
     }
 }

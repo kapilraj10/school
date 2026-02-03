@@ -22,9 +22,23 @@ class EditTeacher extends EditRecord
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
+        // Derive days and periods from availability_matrix
+        $matrix = $data['availability_matrix'] ?? [];
+        $days = array_keys($matrix);
+        $periods = [];
+
+        if (! empty($matrix)) {
+            foreach ($matrix as $dayPeriods) {
+                $periods = array_merge($periods, array_keys($dayPeriods));
+            }
+            $periods = array_unique($periods);
+            sort($periods);
+        }
+
         $data['availability'] = [
-            'days' => $data['available_days'] ?? [],
-            'periods' => $data['available_periods'] ?? [],
+            'days' => $days,
+            'periods' => $periods,
+            'matrix' => $matrix,
         ];
 
         return $data;

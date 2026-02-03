@@ -58,6 +58,56 @@ class ConflictResolverService
     }
 
     /**
+     * Extract available days from availability_matrix
+     */
+    protected function getAvailableDaysFromMatrix(Teacher $teacher): array
+    {
+        if (empty($teacher->availability_matrix)) {
+            return array_keys($this->dayMap);
+        }
+
+        $availableDays = [];
+        foreach ($teacher->availability_matrix as $dayName => $periods) {
+            if (! empty($periods) && isset($this->dayNameToIndex[$dayName])) {
+                $availableDays[] = $this->dayNameToIndex[$dayName];
+            }
+        }
+
+        return ! empty($availableDays) ? $availableDays : array_keys($this->dayMap);
+    }
+
+    /**
+     * Extract available periods from availability_matrix for a specific day
+     */
+    protected function getAvailablePeriodsFromMatrix(Teacher $teacher, string $dayName): array
+    {
+        if (empty($teacher->availability_matrix)) {
+            return range(1, $this->periodsPerDay);
+        }
+
+        return $teacher->availability_matrix[$dayName] ?? [];
+    }
+
+    /**
+     * Get available day names from availability_matrix
+     */
+    protected function getAvailableDayNamesFromMatrix(Teacher $teacher): array
+    {
+        if (empty($teacher->availability_matrix)) {
+            return array_values($this->dayMap);
+        }
+
+        $availableDayNames = [];
+        foreach ($teacher->availability_matrix as $dayName => $periods) {
+            if (! empty($periods)) {
+                $availableDayNames[] = $dayName;
+            }
+        }
+
+        return ! empty($availableDayNames) ? $availableDayNames : array_values($this->dayMap);
+    }
+
+    /**
      * Load necessary data for conflict resolution
      */
     protected function loadData(): void
@@ -348,18 +398,9 @@ class ConflictResolverService
             return false;
         }
 
-        // Convert day names to indices if needed
-        $availableDayNames = $respectAvailability && $teacher->available_days
-            ? $teacher->available_days
-            : null;
-
-        $availableDays = [];
-        if ($availableDayNames) {
-            foreach ($availableDayNames as $dayName) {
-                if (isset($this->dayNameToIndex[$dayName])) {
-                    $availableDays[] = $this->dayNameToIndex[$dayName];
-                }
-            }
+        // Extract available days from availability_matrix
+        if ($respectAvailability) {
+            $availableDays = $this->getAvailableDaysFromMatrix($teacher);
         } else {
             $availableDays = range(0, $this->daysPerWeek - 1);
         }
@@ -391,15 +432,18 @@ class ConflictResolverService
             return false;
         }
 
-        // Check teacher availability - convert day index to name
+        // Check teacher availability using availability_matrix
         $dayName = $this->dayMap[$day] ?? null;
-        $availableDayNames = $teacher->available_days ?? [];
-
-        if (! empty($availableDayNames) && $dayName && ! in_array($dayName, $availableDayNames)) {
+        if (! $dayName) {
             return false;
         }
 
-        $availablePeriods = $teacher->available_periods ?? [];
+        $availableDayNames = $this->getAvailableDayNamesFromMatrix($teacher);
+        if (! empty($availableDayNames) && ! in_array($dayName, $availableDayNames)) {
+            return false;
+        }
+
+        $availablePeriods = $this->getAvailablePeriodsFromMatrix($teacher, $dayName);
         if (! empty($availablePeriods) && ! in_array($period, $availablePeriods)) {
             return false;
         }
@@ -631,16 +675,24 @@ class ConflictResolverService
             }
 
             $dayName = $this->dayMap[$slot->day] ?? null;
-            $availableDays = $teacher->available_days ?? [];
+            if (! $dayName) {
+                continue;
+            }
 
-            if (! empty($availableDays) && $dayName && ! in_array($dayName, $availableDays)) {
+            $availableDayNames = $this->getAvailableDayNamesFromMatrix($teacher);
+            $availablePeriods = $this->getAvailablePeriodsFromMatrix($teacher, $dayName);
+
+            $isDayUnavailable = ! empty($availableDayNames) && ! in_array($dayName, $availableDayNames);
+            $isPeriodUnavailable = ! empty($availablePeriods) && ! in_array($slot->period, $availablePeriods);
+
+            if ($isDayUnavailable || $isPeriodUnavailable) {
                 $violations[] = [
                     'id' => $slot->id,
                     'day' => $slot->day,
                     'period' => $slot->period,
                     'teacher_name' => $teacher->name,
-                    'available_days' => json_encode($availableDays),
-                    'available_periods' => json_encode($teacher->available_periods ?? []),
+                    'available_days' => json_encode($availableDayNames),
+                    'available_periods' => json_encode($availablePeriods),
                 ];
             }
         }

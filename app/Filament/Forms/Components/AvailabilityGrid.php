@@ -25,13 +25,27 @@ class AvailabilityGrid extends Field
                 $component->state([
                     'days' => [],
                     'periods' => [],
+                    'matrix' => [],
                 ]);
-            } else {
+
+                return;
+            }
+
+            if (is_array($state)) {
                 $component->state([
                     'days' => $state['days'] ?? [],
                     'periods' => $state['periods'] ?? [],
+                    'matrix' => $state['matrix'] ?? [],
                 ]);
+
+                return;
             }
+
+            $component->state([
+                'days' => [],
+                'periods' => [],
+                'matrix' => [],
+            ]);
         });
 
         $this->dehydrateStateUsing(function ($state) {

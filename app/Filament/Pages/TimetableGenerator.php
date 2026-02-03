@@ -306,8 +306,8 @@ class TimetableGenerator extends Page implements HasForms
                 $result = $service->generateTimetable(
                     $class,
                     $academicTerm,
-                    50,
-                    500
+                    20,
+                    150
                 );
 
                 $results[] = $result;

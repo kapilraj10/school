@@ -152,32 +152,27 @@ class TimetableGeneratorService
     }
 
     /**
-     * Check if teacher is available on a specific day and period - matching Algorithm.php
+     * Check if teacher is available on a specific day and period - using availability_matrix
      */
     private function isTeacherAvailable(Teacher $teacher, string $day, int $period): bool
     {
         $shortDay = $this->dayShortMap[$day] ?? '';
 
-        $availableDays = $teacher->available_days ?? [];
-        $availablePeriods = $teacher->available_periods ?? [];
+        $availabilityMatrix = $teacher->availability_matrix ?? [];
 
-        // If no restrictions set, teacher is available
-        if (empty($availableDays) && empty($availablePeriods)) {
+        // If no availability matrix set, teacher is available all the time
+        if (empty($availabilityMatrix)) {
             return true;
         }
 
-        // Check day availability (stored as strings like 'Sun', 'Mon', etc.)
-        $dayAvailable = empty($availableDays) || in_array($shortDay, $availableDays, true);
-
-        // Check period availability (may be stored as int or string)
-        $periodAvailable = empty($availablePeriods);
-        if (! $periodAvailable) {
-            // Check both int and string versions for compatibility
-            $periodAvailable = in_array($period, $availablePeriods, true)
-                || in_array((string) $period, $availablePeriods, true);
+        // Check if the day exists in the matrix and contains the period
+        if (! isset($availabilityMatrix[$shortDay])) {
+            return false;
         }
 
-        return $dayAvailable && $periodAvailable;
+        // Check if the period is in the available periods for this day
+        return in_array($period, $availabilityMatrix[$shortDay], true)
+            || in_array((string) $period, $availabilityMatrix[$shortDay], true);
     }
 
     /**

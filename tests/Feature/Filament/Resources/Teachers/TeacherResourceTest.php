@@ -37,8 +37,11 @@ class TeacherResourceTest extends TestCase
     {
         $teacher = Teacher::factory()->create([
             'name' => 'John Doe',
-            'available_days' => ['Mon', 'Tue', 'Wed'],
-            'available_periods' => [1, 2, 3, 4],
+            'availability_matrix' => [
+                'Mon' => [1 => true, 2 => true, 3 => true, 4 => true],
+                'Tue' => [1 => true, 2 => true, 3 => true, 4 => true],
+                'Wed' => [1 => true, 2 => true, 3 => true, 4 => true],
+            ],
         ]);
 
         Livewire::test(ViewTeacher::class, ['record' => $teacher->id])
@@ -75,8 +78,20 @@ class TeacherResourceTest extends TestCase
 
         $teacher = Teacher::where('email', 'jane@example.com')->first();
         $this->assertNotNull($teacher);
-        $this->assertEquals(['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], $teacher->available_days);
-        $this->assertEquals([1, 2, 3, 4, 5, 6], $teacher->available_periods);
+
+        // Verify availability_matrix has the correct days and periods
+        $matrix = $teacher->availability_matrix;
+        $this->assertIsArray($matrix);
+        $this->assertArrayHasKey('Mon', $matrix);
+        $this->assertArrayHasKey('Tue', $matrix);
+        $this->assertArrayHasKey('Wed', $matrix);
+        $this->assertArrayHasKey('Thu', $matrix);
+        $this->assertArrayHasKey('Fri', $matrix);
+
+        // Check that periods 1-6 are set for Monday
+        foreach ([1, 2, 3, 4, 5, 6] as $period) {
+            $this->assertTrue($matrix['Mon'][$period] ?? false);
+        }
     }
 
     public function test_can_edit_teacher_with_availability_grid(): void
@@ -85,8 +100,10 @@ class TeacherResourceTest extends TestCase
 
         $teacher = Teacher::factory()->create([
             'subject_ids' => [$subject->id],
-            'available_days' => ['Mon', 'Tue'],
-            'available_periods' => [1, 2],
+            'availability_matrix' => [
+                'Mon' => [1 => true, 2 => true],
+                'Tue' => [1 => true, 2 => true],
+            ],
         ]);
 
         Livewire::test(EditTeacher::class, ['record' => $teacher->id])
@@ -106,16 +123,31 @@ class TeacherResourceTest extends TestCase
             ->assertHasNoFormErrors();
 
         $teacher->refresh();
-        $this->assertEquals(['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], $teacher->available_days);
-        $this->assertEquals([1, 2, 3, 4, 5, 6, 7, 8], $teacher->available_periods);
+
+        // Verify availability_matrix was updated
+        $matrix = $teacher->availability_matrix;
+        $this->assertIsArray($matrix);
+        $this->assertArrayHasKey('Mon', $matrix);
+        $this->assertArrayHasKey('Tue', $matrix);
+        $this->assertArrayHasKey('Wed', $matrix);
+        $this->assertArrayHasKey('Thu', $matrix);
+        $this->assertArrayHasKey('Fri', $matrix);
+
+        // Check that all 8 periods are set for Monday
+        foreach ([1, 2, 3, 4, 5, 6, 7, 8] as $period) {
+            $this->assertTrue($matrix['Mon'][$period] ?? false);
+        }
     }
 
     public function test_availability_grid_displays_correctly_in_view(): void
     {
         $teacher = Teacher::factory()->create([
             'name' => 'Test Teacher',
-            'available_days' => ['Mon', 'Wed', 'Fri'],
-            'available_periods' => [1, 3, 5, 7],
+            'availability_matrix' => [
+                'Mon' => [1 => true, 3 => true, 5 => true, 7 => true],
+                'Wed' => [1 => true, 3 => true, 5 => true, 7 => true],
+                'Fri' => [1 => true, 3 => true, 5 => true, 7 => true],
+            ],
         ]);
 
         Livewire::test(ViewTeacher::class, ['record' => $teacher->id])
