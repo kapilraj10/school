@@ -57,88 +57,19 @@ class TeachersTable
 
                 TextColumn::make('assigned_classes')
                     ->label('Assigned Classes')
-                    ->formatStateUsing(function ($record) {
+                    ->state(function ($record) {
                         if (empty($record->class_room_ids)) {
                             return 'All Classes';
                         }
-                        $classes = ClassRoom::query()
-                            ->whereIn('id', $record->class_room_ids)
-                            ->get()
-                            ->map(fn ($class) => "{$class->name}-{$class->section}")
-                            ->toArray();
 
-                        return implode(', ', $classes);
+                        return $record->classRooms()
+                            ->pluck('full_name') // Accessor logic from Model
+                            ->join(', ');
                     })
                     ->badge()
                     ->color(Color::Amber)
                     ->searchable(false)
-                    ->wrap()
-                    ->toggleable(),
-
-                TextColumn::make('max_periods_per_day')
-                    ->label('Max/Day')
-                    ->sortable()
-                    ->suffix(' periods')
-                    ->alignEnd()
-                    ->toggleable(),
-
-                TextColumn::make('max_periods_per_week')
-                    ->label('Max/Week')
-                    ->sortable()
-                    ->suffix(' periods')
-                    ->alignEnd()
-                    ->toggleable(),
-
-                TextColumn::make('timetable_slots_count')
-                    ->label('Assigned Slots')
-                    ->counts('timetableSlots')
-                    ->sortable()
-                    ->alignEnd()
-                    ->toggleable(),
-
-                TextColumn::make('available_days')
-                    ->label('Available Days')
-                    ->formatStateUsing(function ($record) {
-                        if (empty($record->availability_matrix) || ! is_array($record->availability_matrix)) {
-                            return 'None';
-                        }
-
-                        $days = array_keys($record->availability_matrix);
-                        if (empty($days)) {
-                            return 'None';
-                        }
-
-                        return implode(', ', $days);
-                    })
-                    ->wrap()
-                    ->color(Color::Green)
-                    ->toggleable(),
-
-                TextColumn::make('available_periods')
-                    ->label('Available Periods')
-                    ->formatStateUsing(function ($record) {
-                        if (empty($record->availability_matrix) || ! is_array($record->availability_matrix)) {
-                            return 'None';
-                        }
-
-                        $allPeriods = [];
-                        foreach ($record->availability_matrix as $day => $periods) {
-                            if (is_array($periods)) {
-                                $allPeriods = array_merge($allPeriods, $periods);
-                            }
-                        }
-                        $uniquePeriods = array_unique($allPeriods);
-                        sort($uniquePeriods);
-
-                        if (empty($uniquePeriods)) {
-                            return 'None';
-                        }
-
-                        return 'P'.implode(', P', $uniquePeriods);
-                    })
-                    ->wrap()
-                    ->color(Color::Blue)
-                    ->toggleable(),
+                    ->wrap(),
 
                 TextColumn::make('status')
                     ->label('Status')
@@ -189,10 +120,7 @@ class TeachersTable
                         ->mapWithKeys(fn ($class) => [$class->id => $class->full_name]))
                     ->query(function ($query, $state) {
                         if (filled($state['value'])) {
-                            return $query->where(function ($q) use ($state) {
-                                $q->whereJsonContains('class_room_ids', (int) $state['value'])
-                                    ->orWhereNull('class_room_ids');
-                            });
+                            return $query->whereJsonContains('class_room_ids', (int) $state['value']);
                         }
                     })
                     ->native(false),
@@ -205,15 +133,30 @@ class TeachersTable
                     ])
                     ->query(function ($query, $state) {
                         if ($state['value'] === 'full_week') {
+                            // Teachers available all 6 days
                             return $query->whereNotNull('availability_matrix')
-                                ->whereRaw('JSON_LENGTH(JSON_KEYS(availability_matrix)) >= 6');
+                                ->whereRaw("json_extract(availability_matrix, '$.Mon') IS NOT NULL")
+                                ->whereRaw("json_extract(availability_matrix, '$.Tue') IS NOT NULL")
+                                ->whereRaw("json_extract(availability_matrix, '$.Wed') IS NOT NULL")
+                                ->whereRaw("json_extract(availability_matrix, '$.Thu') IS NOT NULL")
+                                ->whereRaw("json_extract(availability_matrix, '$.Fri') IS NOT NULL")
+                                ->whereRaw("json_extract(availability_matrix, '$.Sat') IS NOT NULL");
                         } elseif ($state['value'] === 'partial') {
+                            // Teachers available less than 6 days
                             return $query->whereNotNull('availability_matrix')
-                                ->whereRaw('JSON_LENGTH(JSON_KEYS(availability_matrix)) < 6');
+                                ->where(function ($q) {
+                                    $q->whereRaw("json_extract(availability_matrix, '$.Mon') IS NULL")
+                                        ->orWhereRaw("json_extract(availability_matrix, '$.Tue') IS NULL")
+                                        ->orWhereRaw("json_extract(availability_matrix, '$.Wed') IS NULL")
+                                        ->orWhereRaw("json_extract(availability_matrix, '$.Thu') IS NULL")
+                                        ->orWhereRaw("json_extract(availability_matrix, '$.Fri') IS NULL")
+                                        ->orWhereRaw("json_extract(availability_matrix, '$.Sat') IS NULL");
+                                });
                         }
                     })
                     ->native(false),
             ])
+            ->filtersLayout(\Filament\Tables\Enums\FiltersLayout::AboveContent)
             ->actions([
                 ViewAction::make(),
                 EditAction::make(),

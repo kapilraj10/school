@@ -14,25 +14,27 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\MaxWidth;
 
-class TimetableViewer extends Page implements HasForms
+class DailyTimetableView extends Page implements HasForms
 {
     use InteractsWithForms;
 
-    protected static ?string $navigationIcon = 'heroicon-o-calendar-days';
+    protected static ?string $navigationIcon = 'heroicon-o-table-cells';
 
-    protected static string $view = 'filament.pages.timetable-viewer';
+    protected static string $view = 'filament.pages.daily-timetable-view';
 
-    protected static ?string $navigationLabel = 'View Timetable';
+    protected static ?string $navigationLabel = 'Daily Timetable';
 
-    protected static ?string $title = 'Timetable Viewer';
+    protected static ?string $title = 'Daily Timetable View';
 
     protected static ?string $navigationGroup = 'View Timetable';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 1;
 
     public ?array $data = [];
 
     public $timetableData = null;
+
+    public $currentDay = 0; // 0 = Sunday
 
     public function getMaxContentWidth(): MaxWidth
     {
@@ -42,20 +44,18 @@ class TimetableViewer extends Page implements HasForms
     public function mount(): void
     {
         $currentTerm = AcademicTerm::where('is_active', true)->first();
-        $firstClass = ClassRoom::active()->first();
 
-        $classId = request('class_id');
+        // Set current day based on today (0 = Sunday)
+        $this->currentDay = (int) date('w');
+
         $termId = request('term_id');
-
         $selectedTermId = $termId ?: $currentTerm?->id;
-        $selectedClassId = $classId ?: $firstClass?->id;
 
         $this->form->fill([
             'academic_term_id' => $selectedTermId,
-            'class_room_id' => $selectedClassId,
         ]);
 
-        if ($selectedTermId && $selectedClassId) {
+        if ($selectedTermId) {
             $this->loadTimetable();
         }
     }
@@ -72,55 +72,81 @@ class TimetableViewer extends Page implements HasForms
                     ->afterStateUpdated(fn () => $this->loadTimetable())
                     ->native(false)
                     ->searchable(),
-
-                Select::make('class_room_id')
-                    ->label('Class')
-                    ->options(ClassRoom::active()->get()->mapWithKeys(fn ($c) => [$c->id => $c->full_name]))
-                    ->required()
-                    ->live()
-                    ->afterStateUpdated(fn () => $this->loadTimetable())
-                    ->native(false)
-                    ->searchable(),
             ])
-            ->statePath('data')
-            ->columns(2);
+            ->statePath('data');
     }
 
     public function loadTimetable(): void
     {
         $data = $this->form->getState();
 
-        if (! isset($data['academic_term_id']) || ! isset($data['class_room_id'])) {
+        if (! isset($data['academic_term_id'])) {
             $this->timetableData = null;
 
             return;
         }
 
+        // Get all active classes
+        $classes = ClassRoom::active()
+            ->orderBy('name')
+            ->orderBy('section')
+            ->get();
+
+        // Get all slots for the selected day and term
         $slots = TimetableSlot::where('academic_term_id', $data['academic_term_id'])
-            ->where('class_room_id', $data['class_room_id'])
-            ->with(['subject', 'teacher', 'combinedPeriod'])
-            ->orderBy('day')
+            ->where('day', $this->currentDay)
+            ->with(['subject', 'teacher', 'classRoom', 'combinedPeriod'])
             ->orderBy('period')
             ->get();
 
+        // Organize data by class and period
         $organized = [];
-        for ($day = 0; $day <= 5; $day++) {
-            $organized[$day] = [];
+        foreach ($classes as $class) {
+            $organized[$class->id] = [
+                'class' => $class,
+                'periods' => [],
+            ];
+
             for ($period = 1; $period <= 8; $period++) {
-                $slot = $slots->where('day', $day)->where('period', $period)->first();
-                $organized[$day][$period] = $slot;
+                $slot = $slots->where('class_room_id', $class->id)
+                    ->where('period', $period)
+                    ->first();
+
+                $organized[$class->id]['periods'][$period] = $slot;
             }
         }
 
         $this->timetableData = [
-            'slots' => $organized,
-            'days' => TimetableSlot::$days,
+            'classes' => $organized,
+            'day' => TimetableSlot::$days[$this->currentDay] ?? 'Unknown',
+            'dayNum' => $this->currentDay,
             'periods' => TimetableSlot::$periods,
-            'class' => ClassRoom::find($data['class_room_id']),
             'term' => AcademicTerm::find($data['academic_term_id']),
             'totalSlots' => $slots->count(),
             'filledSlots' => $slots->whereNotNull('subject_id')->count(),
         ];
+    }
+
+    public function previousDay(): void
+    {
+        $this->currentDay = ($this->currentDay - 1 + 6) % 6;
+        $this->loadTimetable();
+
+        Notification::make()
+            ->title('Switched to '.(TimetableSlot::$days[$this->currentDay] ?? 'Unknown'))
+            ->success()
+            ->send();
+    }
+
+    public function nextDay(): void
+    {
+        $this->currentDay = ($this->currentDay + 1) % 6;
+        $this->loadTimetable();
+
+        Notification::make()
+            ->title('Switched to '.(TimetableSlot::$days[$this->currentDay] ?? 'Unknown'))
+            ->success()
+            ->send();
     }
 
     public function refreshTimetable(): void
@@ -147,14 +173,7 @@ class TimetableViewer extends Page implements HasForms
                 ->icon('heroicon-m-printer')
                 ->color('gray')
                 ->extraAttributes(['onclick' => 'window.print()'])
-                ->visible(fn () => isset($this->data['academic_term_id']) && isset($this->data['class_room_id'])),
-
-            Action::make('goToPrintCenter')
-                ->label('Export PDF')
-                ->icon('heroicon-m-arrow-down-tray')
-                ->color('primary')
-                ->url(fn () => route('filament.admin.pages.print-center'))
-                ->visible(fn () => isset($this->data['academic_term_id']) && isset($this->data['class_room_id'])),
+                ->visible(fn () => isset($this->data['academic_term_id'])),
         ];
     }
 }

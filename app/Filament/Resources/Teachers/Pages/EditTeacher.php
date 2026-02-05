@@ -48,4 +48,9 @@ class EditTeacher extends EditRecord
     {
         return TeacherForm::mutateFormDataBeforeSave($data);
     }
+
+    protected function getRedirectUrl(): string
+    {
+        return $this->getResource()::getUrl('view', ['record' => $this->getRecord()]);
+    }
 }

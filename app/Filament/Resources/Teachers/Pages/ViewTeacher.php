@@ -4,6 +4,8 @@ namespace App\Filament\Resources\Teachers\Pages;
 
 use App\Filament\Resources\Teachers\TeacherResource;
 use App\Models\TimetableSetting;
+use Filament\Actions\Action;
+use Filament\Actions\EditAction;
 use Filament\Infolists\Components\Grid;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
@@ -14,6 +16,17 @@ use Filament\Resources\Pages\ViewRecord;
 class ViewTeacher extends ViewRecord
 {
     protected static string $resource = TeacherResource::class;
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            EditAction::make(),
+            Action::make('back')
+                ->label('Back')
+                ->url(static::getResource()::getUrl('index'))
+                ->color('gray'),
+        ];
+    }
 
     public function infolist(Infolist $infolist): Infolist
     {

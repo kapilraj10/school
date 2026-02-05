@@ -25,7 +25,7 @@ class TeacherSchedule extends Page implements HasForms
 
     protected static ?string $title = 'Teacher Schedule';
 
-    protected static ?string $navigationGroup = 'Timetable Management';
+    protected static ?string $navigationGroup = 'View Timetable';
 
     protected static ?int $navigationSort = 3;
 

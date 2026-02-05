@@ -4,6 +4,8 @@ namespace App\Filament\Resources\ClassRooms\Pages;
 
 use App\Filament\Resources\ClassRooms\ClassRoomResource;
 use App\Models\Subject;
+use Filament\Actions\Action;
+use Filament\Actions\EditAction;
 use Filament\Infolists\Components\Grid;
 use Filament\Infolists\Components\Section;
 use Filament\Infolists\Components\TextEntry;
@@ -14,6 +16,17 @@ use Filament\Support\Enums\FontWeight;
 class ViewClassRoom extends ViewRecord
 {
     protected static string $resource = ClassRoomResource::class;
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            EditAction::make(),
+            Action::make('back')
+                ->label('Back')
+                ->url(static::getResource()::getUrl('index'))
+                ->color('gray'),
+        ];
+    }
 
     public function infolist(Infolist $infolist): Infolist
     {

@@ -16,87 +16,89 @@ class TeacherSeeder extends Seeder
      */
     public function run(): void
     {
-        // Clear existing teachers and pivot table
+        // 1. Truncate tables to start fresh
         DB::table('teacher_subject')->truncate();
         DB::table('teachers')->truncate();
+
+        $this->command->info('Truncated teachers and pivot tables.');
 
         $timestamp = now();
         $teacherCount = 1;
 
-        // Get all active classes
-        $classes = ClassRoom::where('status', 'active')
+        // 2. Get active Grade Levels (grouped by name, e.g., "Class 1")
+        // We get all active classes and group them.
+        $gradeLevels = ClassRoom::where('status', 'active')
             ->orderBy('name')
             ->orderBy('section')
-            ->get();
+            ->get()
+            ->groupBy('name');
 
-        $this->command->info('Creating teachers for each class-subject combination...');
+        $this->command->info('Creating teachers assigned by Subject and Grade Level...');
 
-        foreach ($classes as $class) {
-            $this->command->info("Processing {$class->name} {$class->section}...");
+        foreach ($gradeLevels as $gradeName => $classes) {
+            $this->command->info("Processing Grade Level: {$gradeName}");
 
-            // Get all active subjects for this class
-            $classSubjects = ClassSubjectSetting::where('class_room_id', $class->id)
+            // Collect all class IDs for this grade level (e.g., 1A, 1B, 1C)
+            $classIds = $classes->pluck('id')->values()->toArray();
+            $sectionNames = $classes->pluck('section')->join(', ');
+
+            // 3. Find all distinct subjects taught in this grade level
+            // We look at settings for ANY of the classes in this grade.
+            // Ideally, they should be uniform, but we'll take the union of subjects.
+            $subjectIds = ClassSubjectSetting::whereIn('class_room_id', $classIds)
                 ->where('is_active', true)
-                ->with('subject')
-                ->get();
+                ->pluck('subject_id')
+                ->unique();
 
-            if ($classSubjects->isEmpty()) {
-                $this->command->warn("  No subjects configured for {$class->name} {$class->section}. Skipping.");
+            if ($subjectIds->isEmpty()) {
+                $this->command->warn("  No subjects configured for {$gradeName}. Skipping.");
 
                 continue;
             }
 
-            foreach ($classSubjects as $classSetting) {
-                $subject = $classSetting->subject;
+            $subjects = Subject::whereIn('id', $subjectIds)
+                ->where('status', 'active')
+                ->get();
 
-                if (! $subject || $subject->status !== 'active') {
-                    continue;
-                }
-
-                // Generate teacher name
+            foreach ($subjects as $subject) {
+                // 4. Create ONE teacher for this (Subject, Grade) combination
                 $teacherCode = sprintf('T%03d', $teacherCount);
-                $teacherName = $subject->name.' Teacher ('.$class->name.' '.$class->section.')';
+                // Name format: "English Teacher (Class 1)"
+                $teacherName = "{$subject->name} Teacher ({$gradeName})";
 
-                // Determine availability based on subject type
+                // Determine availability matrix based on subject type
+                // (Preserving the logic from the previous seeder for realism)
                 $availableDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-                $availablePeriods = [1, 2, 3, 4, 5, 6, 7, 8];
-
-                // For co-curricular subjects, limit availability slightly
                 if ($subject->type === 'co_curricular') {
                     $availableDays = ['Sun', 'Tue', 'Thu', 'Fri'];
                 }
 
-                // Build availability matrix
-                $availabilityMatrix = [];
-                foreach ($availableDays as $day) {
-                    $availabilityMatrix[$day] = [];
-                    foreach ($availablePeriods as $period) {
-                        $availabilityMatrix[$day][$period] = true;
-                    }
-                }
+                $availabilityMatrix = $this->generateAvailabilityMatrix($availableDays);
 
-                // Insert teacher record
-                $teacherId = DB::table('teachers')->insertGetId([
+                // Create the teacher using the Factory
+                $teacher = Teacher::factory()->create([
                     'name' => $teacherName,
                     'employee_id' => $teacherCode,
                     'email' => strtolower($teacherCode).'@school.edu',
+                    // Factory provides phone, but let's keep it sequential or random as per factory default?
+                    // User asked to establish full profile columns. Factory handles most.
+                    // We'll override specific ones to match our deterministic seeding pattern if desired,
+                    // but Factory 'phone' is fake()->numerify('##########'). Let's stick to consistent data for demo.
                     'phone' => '98'.str_pad($teacherCount, 8, '0', STR_PAD_LEFT),
-                    'subject_ids' => json_encode([$subject->id]),
-                    'max_periods_per_day' => 7,
-                    'max_periods_per_week' => 40,
-                    'availability_matrix' => json_encode($availabilityMatrix),
+                    'subject_ids' => [$subject->id], // JSON column
+                    'class_room_ids' => $classIds,   // JSON column: Assign to ALL sections of this grade
+                    'availability_matrix' => $availabilityMatrix, // Array cast handles JSON encoding
                     'status' => 'active',
+                ]);
+
+                // 5. Populate the Pivot Table
+                // The relationship is Many-to-Many.
+                $teacher->subjects()->attach($subject->id, [
                     'created_at' => $timestamp,
                     'updated_at' => $timestamp,
                 ]);
 
-                // Insert into teacher_subject pivot table
-                DB::table('teacher_subject')->insert([
-                    'teacher_id' => $teacherId,
-                    'subject_id' => $subject->id,
-                    'created_at' => $timestamp,
-                    'updated_at' => $timestamp,
-                ]);
+                $this->command->info("  Created {$teacher->name} -> Assigned to {$gradeName} [Sections: {$sectionNames}]");
 
                 $teacherCount++;
             }
@@ -104,6 +106,24 @@ class TeacherSeeder extends Seeder
 
         $totalTeachers = $teacherCount - 1;
         $this->command->info("\nSuccessfully seeded {$totalTeachers} teachers.");
-        $this->command->info('Each class-subject combination now has a dedicated teacher.');
+    }
+
+    /**
+     * Generate availability matrix.
+     */
+    private function generateAvailabilityMatrix(array $days): array
+    {
+        $matrix = [];
+        // Assuming 8 periods
+        $periods = [1, 2, 3, 4, 5, 6, 7, 8];
+
+        foreach ($days as $day) {
+            $matrix[$day] = [];
+            foreach ($periods as $period) {
+                $matrix[$day][$period] = true;
+            }
+        }
+
+        return $matrix;
     }
 }
