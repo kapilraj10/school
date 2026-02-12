@@ -38,12 +38,30 @@
                     </div>
                 </x-slot>
 
+                {{-- Quick Day Navigation --}}
+                <div class="mb-4">
+                    <h4 class="text-sm font-semibold mb-2">Quick Day Navigation</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        @foreach(\App\Models\TimetableSlot::$days as $dayNum => $dayName)
+                            <x-filament::button 
+                                wire:click="$set('currentDay', {{ $dayNum }})" 
+                                wire:then="loadTimetable"
+                                color="{{ $currentDay === $dayNum ? 'primary' : 'gray' }}"
+                                size="lg"
+                                class="w-full"
+                            >
+                                {{ $dayName }}
+                            </x-filament::button>
+                        @endforeach
+                    </div>
+                </div>
+
                 <div class="overflow-x-auto">
                     <table class="w-full border-collapse">
                         <thead>
                             <tr class="bg-gray-100 dark:bg-gray-800">
                                 <th class="border border-gray-300 dark:border-gray-600 p-3 text-left font-semibold sticky left-0 bg-gray-100 dark:bg-gray-800 z-10">
-                                    Class/Period
+                                    {{ $timetableData['rowHeaderLabel'] }}
                                 </th>
                                 @foreach($timetableData['periods'] as $period => $periodLabel)
                                     <th class="border border-gray-300 dark:border-gray-600 p-3 text-center font-semibold">
@@ -53,31 +71,34 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach($timetableData['classes'] as $classId => $classData)
+                            @foreach($timetableData['rows'] as $rowData)
                                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                     <td class="border border-gray-300 dark:border-gray-600 p-3 font-medium bg-gray-50 dark:bg-gray-800 sticky left-0 z-10">
-                                        {{ $classData['class']->full_name }}
+                                        {{ $rowData['label'] }}
                                     </td>
                                     @foreach($timetableData['periods'] as $period => $periodLabel)
                                         @php
-                                            $slot = $classData['periods'][$period] ?? null;
+                                            $slot = $rowData['periods'][$period] ?? null;
+                                            $metaText = $timetableData['viewMode'] === 'teacher'
+                                                ? ($slot?->classRoom?->full_name ?? ($slot?->class_room_id ? 'Class #'.$slot->class_room_id : 'Class Not Set'))
+                                                : ($slot?->teacher?->employee_id ?? ($slot?->teacher_id ? 'Teacher #'.$slot->teacher_id : 'Teacher Not Set'));
                                         @endphp
                                         <td class="border border-gray-300 dark:border-gray-600 p-2 min-w-[150px]">
                                             @if($slot && $slot->subject_id)
                                                 <div class="space-y-1">
                                                     <div class="font-semibold text-sm {{ $slot->is_combined ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400' }}">
-                                                        {{ $slot->subject?->name ?? 'N/A' }}
+                                                        {{ $slot->subject?->code ?? 'N/A' }}
                                                         @if($slot->is_combined)
                                                             <span class="text-xs">(C)</span>
                                                         @endif
                                                     </div>
-                                                    <div class="text-xs text-gray-600 dark:text-gray-400 line-clamp-1" title="{{ $slot->teacher?->name ?? 'No Teacher' }}">
-                                                        {{ $slot->teacher?->name ?? 'No Teacher' }}
+                                                    <div class="text-xs text-gray-600 dark:text-gray-400 line-clamp-1" title="{{ $metaText }}">
+                                                        {{ $metaText }}
                                                     </div>
                                                 </div>
                                             @else
-                                                <div class="text-center text-gray-400 dark:text-gray-600 text-xs">
-                                                    —
+                                                <div class="text-center text-gray-500 dark:text-gray-500 text-xs font-medium">
+                                                    Free
                                                 </div>
                                             @endif
                                         </td>
@@ -107,26 +128,6 @@
                 </div>
             </x-filament::section>
 
-            {{-- Quick Day Navigation --}}
-            <x-filament::section>
-                <x-slot name="heading">
-                    Quick Day Navigation
-                </x-slot>
-
-                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                    @foreach(\App\Models\TimetableSlot::$days as $dayNum => $dayName)
-                        <x-filament::button 
-                            wire:click="$set('currentDay', {{ $dayNum }})" 
-                            wire:then="loadTimetable"
-                            color="{{ $currentDay === $dayNum ? 'primary' : 'gray' }}"
-                            size="lg"
-                            class="w-full"
-                        >
-                            {{ $dayName }}
-                        </x-filament::button>
-                    @endforeach
-                </div>
-            </x-filament::section>
         @else
             <x-filament::section>
                 <div class="text-center py-12 text-gray-500 dark:text-gray-400">

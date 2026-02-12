@@ -43,16 +43,13 @@
                                             @if($slot)
                                                 <div class="space-y-1">
                                                     <div class="font-semibold text-sm {{ $slot->is_combined ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400' }}">
-                                                        {{ $slot->subject?->name ?? 'N/A' }}
+                                                        {{ $slot->subject?->code ?? 'N/A' }}
                                                         @if($slot->is_combined)
                                                             <span class="text-xs">(Combined)</span>
                                                         @endif
                                                     </div>
                                                     <div class="text-xs text-gray-600 dark:text-gray-400">
-                                                        {{ $slot->teacher?->name ?? 'No Teacher' }}
-                                                    </div>
-                                                    <div class="text-xs text-gray-500">
-                                                        {{ $slot->subject?->code ?? '' }}
+                                                        {{ $slot->teacher?->employee_id ?? 'No Teacher' }}
                                                     </div>
                                                 </div>
                                             @else

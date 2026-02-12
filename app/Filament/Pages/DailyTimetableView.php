@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
+use App\Models\Teacher;
 use App\Models\TimetableSlot;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -53,6 +54,7 @@ class DailyTimetableView extends Page implements HasForms
 
         $this->form->fill([
             'academic_term_id' => $selectedTermId,
+            'view_mode' => 'class',
         ]);
 
         if ($selectedTermId) {
@@ -72,8 +74,21 @@ class DailyTimetableView extends Page implements HasForms
                     ->afterStateUpdated(fn () => $this->loadTimetable())
                     ->native(false)
                     ->searchable(),
+
+                Select::make('view_mode')
+                    ->label('View Mode')
+                    ->options([
+                        'class' => 'Class',
+                        'teacher' => 'Teacher',
+                    ])
+                    ->required()
+                    ->default('class')
+                    ->live()
+                    ->afterStateUpdated(fn () => $this->loadTimetable())
+                    ->native(false),
             ])
-            ->statePath('data');
+            ->statePath('data')
+            ->columns(2);
     }
 
     public function loadTimetable(): void
@@ -86,11 +101,7 @@ class DailyTimetableView extends Page implements HasForms
             return;
         }
 
-        // Get all active classes
-        $classes = ClassRoom::active()
-            ->orderBy('name')
-            ->orderBy('section')
-            ->get();
+        $viewMode = $data['view_mode'] ?? 'class';
 
         // Get all slots for the selected day and term
         $slots = TimetableSlot::where('academic_term_id', $data['academic_term_id'])
@@ -99,25 +110,97 @@ class DailyTimetableView extends Page implements HasForms
             ->orderBy('period')
             ->get();
 
-        // Organize data by class and period
-        $organized = [];
-        foreach ($classes as $class) {
-            $organized[$class->id] = [
-                'class' => $class,
-                'periods' => [],
-            ];
+        $rows = [];
 
-            for ($period = 1; $period <= 8; $period++) {
-                $slot = $slots->where('class_room_id', $class->id)
-                    ->where('period', $period)
-                    ->first();
+        if ($viewMode === 'teacher') {
+            $teacherIds = $slots
+                ->pluck('teacher_id')
+                ->filter()
+                ->unique()
+                ->values();
 
-                $organized[$class->id]['periods'][$period] = $slot;
+            $teachers = Teacher::query()
+                ->whereIn('id', $teacherIds)
+                ->orderBy('name')
+                ->get()
+                ->keyBy('id');
+
+            $teacherIds = $teacherIds
+                ->sortBy(function ($teacherId) use ($slots, $teachers) {
+                    $teacherCode = strtolower($teachers->get($teacherId)?->employee_id ?? "teacher-{$teacherId}");
+
+                    $firstClassSlot = $slots
+                        ->where('teacher_id', $teacherId)
+                        ->filter(fn ($slot) => $slot->classRoom)
+                        ->sortBy(fn ($slot) => [
+                            (int) filter_var($slot->classRoom->name, FILTER_SANITIZE_NUMBER_INT),
+                            strtoupper($slot->classRoom->section),
+                            $slot->period,
+                        ])
+                        ->first();
+
+                    if (! $firstClassSlot || ! $firstClassSlot->classRoom) {
+                        return [9999, 'ZZZ', $teacherCode];
+                    }
+
+                    return [
+                        (int) filter_var($firstClassSlot->classRoom->name, FILTER_SANITIZE_NUMBER_INT),
+                        strtoupper($firstClassSlot->classRoom->section),
+                        $teacherCode,
+                    ];
+                })
+                ->values();
+
+            foreach ($teacherIds as $teacherId) {
+                $teacher = $teachers->get($teacherId);
+                $teacherLabel = $teacher?->employee_id ?: "Teacher #{$teacherId}";
+
+                $rows[$teacherId] = [
+                    'label' => $teacherLabel,
+                    'entity_type' => 'teacher',
+                    'entity_id' => $teacherId,
+                    'periods' => [],
+                ];
+
+                for ($period = 1; $period <= 8; $period++) {
+                    $slot = $slots->where('teacher_id', $teacherId)
+                        ->where('period', $period)
+                        ->first();
+
+                    $rows[$teacherId]['periods'][$period] = $slot;
+                }
+            }
+        } else {
+            $classes = ClassRoom::active()
+                ->get()
+                ->sortBy(fn (ClassRoom $class) => [
+                    (int) filter_var($class->name, FILTER_SANITIZE_NUMBER_INT),
+                    strtoupper($class->section),
+                ]);
+
+            foreach ($classes as $class) {
+                $rows[$class->id] = [
+                    'label' => $class->full_name,
+                    'entity_type' => 'class',
+                    'entity_id' => $class->id,
+                    'periods' => [],
+                ];
+
+                for ($period = 1; $period <= 8; $period++) {
+                    $slot = $slots->where('class_room_id', $class->id)
+                        ->where('period', $period)
+                        ->first();
+
+                    $rows[$class->id]['periods'][$period] = $slot;
+                }
             }
         }
 
         $this->timetableData = [
-            'classes' => $organized,
+            'rows' => $rows,
+            'viewMode' => $viewMode,
+            'rowHeaderLabel' => $viewMode === 'teacher' ? 'Teacher/Period' : 'Class/Period',
+            'cellMetaLabel' => $viewMode === 'teacher' ? 'Class' : 'Teacher',
             'day' => TimetableSlot::$days[$this->currentDay] ?? 'Unknown',
             'dayNum' => $this->currentDay,
             'periods' => TimetableSlot::$periods,

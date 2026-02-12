@@ -20,6 +20,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\HtmlString;
 
 class TimetableGenerator extends Page implements HasForms
 {
@@ -122,11 +123,9 @@ class TimetableGenerator extends Page implements HasForms
                                     $totalPeriods = $classes->sum('weekly_periods');
                                     $totalSubjects = $classes->sum('total_subjects');
 
-                                    // Get subject distribution for selected classes
-                                    $relevantRanges = $this->getRelevantRangesForClasses($classes);
-
+                                    // Get subject count for selected classes
                                     $subjectStats = Subject::active()
-                                        ->whereIn('class_range', $relevantRanges)
+                                        ->whereIn('class_room_id', $classIds)
                                         ->count();
 
                                     return view('filament.components.selection-stats', [
@@ -182,14 +181,8 @@ class TimetableGenerator extends Page implements HasForms
                                             ->pluck('name', 'id');
                                     }
 
-                                    $classes = ClassRoom::whereIn('id', $classIds)
-                                        ->select('name')
-                                        ->get();
-
-                                    $relevantRanges = $this->getRelevantRangesForClasses($classes);
-
                                     return Subject::active()
-                                        ->whereIn('class_range', $relevantRanges)
+                                        ->whereIn('class_room_id', $classIds)
                                         ->select('id', 'name')
                                         ->orderBy('name')
                                         ->pluck('name', 'id');
@@ -225,10 +218,8 @@ class TimetableGenerator extends Page implements HasForms
                                     // Get additional validation info
                                     $validationData = [];
                                     if (! empty($classIds)) {
-                                        $relevantRanges = $this->getRelevantRangesForClasses($classes);
-
                                         $validationData['availableSubjects'] = Subject::active()
-                                            ->whereIn('class_range', $relevantRanges)
+                                            ->whereIn('class_room_id', $classIds)
                                             ->count();
 
                                         $validationData['activeTeachers'] = \App\Models\Teacher::where('status', 'active')->count();
@@ -253,7 +244,9 @@ class TimetableGenerator extends Page implements HasForms
                         ]),
                 ])
                     ->persistStepInQueryString()
-                    ->submitAction(view('filament.components.wizard-submit-action')),
+                    ->submitAction(new HtmlString(view('filament.components.wizard-submit-action', [
+                        'estimatedGenerationSeconds' => $this->getEstimatedGenerationSeconds(),
+                    ])->render())),
             ])
             ->statePath('data');
     }
@@ -285,7 +278,8 @@ class TimetableGenerator extends Page implements HasForms
                 return;
             }
 
-            $service = new GeneticAlgorithmTimetableService;
+            $service = (new GeneticAlgorithmTimetableService)
+                ->setClearExisting((bool) ($data['clear_existing'] ?? true));
             $academicTerm = AcademicTerm::find($data['academic_term_id']);
             $classes = ClassRoom::whereIn('id', $data['class_ids'])->get();
 
@@ -370,7 +364,17 @@ class TimetableGenerator extends Page implements HasForms
                     }
                 }
 
-                $this->js('setTimeout(() => window.location.href = "'.route('filament.admin.pages.timetable-viewer').'", 2000)');
+                // Reset generation state before redirecting
+                $this->isGenerating = false;
+
+                $redirectUrl = route('filament.admin.pages.timetable-viewer', [
+                    'term_id' => $academicTerm?->id,
+                    'class_id' => $data['class_ids'][0] ?? null,
+                ]);
+
+                $this->js('window.location.href = '.json_encode($redirectUrl).';');
+
+                return;
             } else {
                 Notification::make()
                     ->title('Generation Failed')

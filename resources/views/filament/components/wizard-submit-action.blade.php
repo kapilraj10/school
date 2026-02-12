@@ -1,6 +1,6 @@
 <div
     x-data="{
-        estimate: {{ (int) ($this->getEstimatedGenerationSeconds() ?? 0) }},
+        estimate: {{ (int) ($estimatedGenerationSeconds ?? 0) }},
         startAt: null,
         now: Date.now(),
         timer: null,
@@ -33,9 +33,6 @@
         }
     }"
     class="flex flex-col items-center gap-4 w-full"
-    @if($this->isGenerating ?? false)
-        wire:poll.750ms
-    @endif
 >
     <x-filament::button
         type="submit"
@@ -47,22 +44,12 @@
         x-on:click="begin()"
         class="w-full sm:w-auto"
     >
-        @if($this->isGenerating ?? false)
-            <span class="flex flex-col items-center gap-2">
-                <span class="text-sm font-semibold">Generating Timetable</span>
-                <span class="text-xs opacity-80">
-                    {{ ($this->totalClasses ?? 0) > 0 ? round((($this->currentClassIndex ?? 0) / $this->totalClasses * 100), 1) : 0 }}%
-                </span>
-                <span class="w-full rounded-full bg-white/20">
-                    <span
-                        class="block h-1.5 rounded-full bg-white transition-all duration-700"
-                        style="width: {{ ($this->totalClasses ?? 0) > 0 ? round((($this->currentClassIndex ?? 0) / $this->totalClasses * 100), 1) : 0 }}%"
-                    ></span>
-                </span>
-            </span>
-        @else
+        <span wire:loading.remove wire:target="generateTimetable">
             Generate Timetable
-        @endif
+        </span>
+        <span wire:loading.inline-flex wire:target="generateTimetable" class="items-center gap-2">
+            <span class="text-sm font-semibold">Generating Timetable</span>
+        </span>
     </x-filament::button>
 
     <div wire:loading wire:target="generateTimetable" class="w-full max-w-lg">

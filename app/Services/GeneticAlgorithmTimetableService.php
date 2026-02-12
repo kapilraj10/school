@@ -7,7 +7,7 @@ use App\Models\ClassRoom;
 use App\Models\ClassSubjectSetting;
 use App\Models\CombinedPeriod;
 use App\Models\Subject;
-use App\Models\Teacher;
+use App\Models\Teacher as TeacherModel;
 use App\Models\TimetableSlot;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -24,9 +24,18 @@ class GeneticAlgorithmTimetableService
 
     private array $warnings = [];
 
+    private bool $clearExisting = true;
+
     public function __construct()
     {
         require_once storage_path('Algorithm/GeneticAlgorithm.php');
+    }
+
+    public function setClearExisting(bool $clearExisting): self
+    {
+        $this->clearExisting = $clearExisting;
+
+        return $this;
     }
 
     public function generateTimetable(
@@ -43,6 +52,11 @@ class GeneticAlgorithmTimetableService
 
             $this->errors = [];
             $this->warnings = [];
+
+            // Reset state for each class to prevent data accumulation
+            $this->subjects = [];
+            $this->teachers = [];
+            $this->sections = [];
 
             $this->loadClassData($classRoom);
 
@@ -66,10 +80,24 @@ class GeneticAlgorithmTimetableService
                 $lockedSlots
             );
 
+            $generationStartedAt = microtime(true);
+
             Log::info("Starting genetic algorithm for class: {$classRoom->full_name}");
             $bestTimetable = $scheduler->generateTimetable();
+            $generationDurationSeconds = round(microtime(true) - $generationStartedAt, 3);
 
-            $slotsCreated = $this->saveTimetableToDatabase($bestTimetable, $classRoom, $academicTerm);
+            Log::info('Genetic algorithm completed', [
+                'class' => $classRoom->full_name,
+                'duration_seconds' => $generationDurationSeconds,
+                'population_size' => $populationSize,
+                'max_generations' => $maxGenerations,
+                'subjects_count' => count($this->subjects),
+                'teachers_count' => count($this->teachers),
+                'fitness' => $bestTimetable->fitness,
+                'clear_existing' => $this->clearExisting,
+            ]);
+
+            $slotsCreated = $this->saveTimetableToDatabase($bestTimetable, $classRoom, $academicTerm, $this->clearExisting);
 
             DB::commit();
 
@@ -167,22 +195,22 @@ class GeneticAlgorithmTimetableService
                 $section->coCurricularSubjects[] = (string) $subject->id;
             }
 
-            $this->loadTeachersForSubject($subject);
+            $this->loadTeachersForSubject($subject, $classRoom);
         }
 
         $this->sections[] = $section;
     }
 
-    private function loadTeachersForSubject(Subject $subject): void
+    private function loadTeachersForSubject(Subject $subject, ClassRoom $classRoom): void
     {
-        $teachers = Teacher::active()
+        /** @var \Illuminate\Database\Eloquent\Collection<int, TeacherModel> $teachers */
+        $teachers = TeacherModel::active()
             ->whereJsonContains('subject_ids', $subject->id)
             ->get();
 
-        $classRoomId = $this->sections[0]->name ?? null;
-
+        /** @var TeacherModel $teacher */
         foreach ($teachers as $teacher) {
-            if ($classRoomId && ! $teacher->canTeachClass((int) $classRoomId)) {
+            if (! $teacher->canTeachClass($classRoom->id)) {
                 continue;
             }
 
@@ -211,18 +239,29 @@ class GeneticAlgorithmTimetableService
     private function saveTimetableToDatabase(
         \Timetable $timetable,
         ClassRoom $classRoom,
-        AcademicTerm $academicTerm
+        AcademicTerm $academicTerm,
+        bool $clearExisting = true
     ): int {
-        $lockedSlots = TimetableSlot::where('class_room_id', $classRoom->id)
+        $existingSlots = TimetableSlot::where('class_room_id', $classRoom->id)
             ->where('academic_term_id', $academicTerm->id)
+            ->get();
+
+        $lockedSlots = $existingSlots
             ->where('is_locked', true)
-            ->get()
             ->keyBy(fn ($slot) => "{$slot->day}_{$slot->period}");
 
-        TimetableSlot::where('class_room_id', $classRoom->id)
-            ->where('academic_term_id', $academicTerm->id)
+        $existingUnlockedSlots = $existingSlots
             ->where('is_locked', false)
-            ->delete();
+            ->keyBy(fn ($slot) => "{$slot->day}_{$slot->period}");
+
+        if ($clearExisting) {
+            TimetableSlot::where('class_room_id', $classRoom->id)
+                ->where('academic_term_id', $academicTerm->id)
+                ->where('is_locked', false)
+                ->delete();
+
+            $existingUnlockedSlots = collect();
+        }
 
         $slotsToInsert = [];
         $sectionId = (string) $classRoom->id;
@@ -245,6 +284,11 @@ class GeneticAlgorithmTimetableService
                 // Skip positions where locked slots exist (preserve locked entries)
                 $slotKey = "{$dayIndex}_".($periodIndex + 1);
                 if ($lockedSlots->has($slotKey)) {
+                    continue;
+                }
+
+                // When preserving existing timetable, don't overwrite existing unlocked slots
+                if (! $clearExisting && $existingUnlockedSlots->has($slotKey)) {
                     continue;
                 }
 
@@ -280,7 +324,7 @@ class GeneticAlgorithmTimetableService
             TimetableSlot::insert($slotsToInsert);
         }
 
-        return count($slotsToInsert) + $lockedSlots->count();
+        return count($slotsToInsert) + $lockedSlots->count() + $existingUnlockedSlots->count();
     }
 
     private function loadCombinedPeriodsCache(AcademicTerm $academicTerm): array

@@ -45,7 +45,7 @@
         @if($scheduleData)
             <x-filament::section>
                 <x-slot name="heading">
-                    {{ $scheduleData['teacher']->name }} - {{ $scheduleData['term']->name }}
+                    {{ $scheduleData['teacher']->employee_id ?? 'N/A' }} - {{ $scheduleData['term']->name }}
                 </x-slot>
 
                 <x-slot name="description">
@@ -85,7 +85,7 @@
                                                         {{ $slot->classRoom?->full_name }}
                                                     </div>
                                                     <div class="text-xs text-gray-600 dark:text-gray-400">
-                                                        {{ $slot->subject?->name }}
+                                                        {{ $slot->subject?->code ?? 'N/A' }}
                                                     </div>
                                                 </div>
                                             @else
