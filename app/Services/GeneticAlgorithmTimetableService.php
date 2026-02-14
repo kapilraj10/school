@@ -86,6 +86,10 @@ class GeneticAlgorithmTimetableService
             $bestTimetable = $scheduler->generateTimetable();
             $generationDurationSeconds = round(microtime(true) - $generationStartedAt, 3);
 
+            // Apply a final repair pass on the best timetable before saving
+            $finalRepair = new \TimetableRepair($this->subjects, $this->teachers, $this->sections);
+            $finalRepair->repair($bestTimetable);
+
             Log::info('Genetic algorithm completed', [
                 'class' => $classRoom->full_name,
                 'duration_seconds' => $generationDurationSeconds,

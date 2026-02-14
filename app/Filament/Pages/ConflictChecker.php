@@ -3,7 +3,11 @@
 namespace App\Filament\Pages;
 
 use App\Models\AcademicTerm;
+use App\Models\ClassRoom;
+use App\Models\ClassSubjectSetting;
 use App\Models\Conflict;
+use App\Models\Subject;
+use App\Models\TimetableSlot;
 use App\Services\ConflictResolverService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -12,6 +16,7 @@ use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ConflictChecker extends Page implements HasForms
@@ -33,6 +38,16 @@ class ConflictChecker extends Page implements HasForms
     public ?array $data = [];
 
     public $conflicts = null;
+
+    /**
+     * Physical / co-curricular subject codes that should be placed in period 5.
+     */
+    protected array $physicalSubjectCodes = ['sports', 'sport', 'taekwondo', 'dance'];
+
+    /**
+     * Mentally heavy subject types/codes used for soft-check on consecutive scheduling.
+     */
+    protected array $heavySubjectCodes = ['english', 'math', 'maths', 'mathematics', 'science'];
 
     public function mount(): void
     {
@@ -63,6 +78,8 @@ class ConflictChecker extends Page implements HasForms
             ->statePath('data');
     }
 
+    // ─── Main entry ───────────────────────────────────────────────
+
     public function checkConflicts(): void
     {
         $data = $this->form->getState();
@@ -75,6 +92,49 @@ class ConflictChecker extends Page implements HasForms
 
         $termId = $data['academic_term_id'];
 
+        // Pre-load all slots for the term once
+        $allSlots = TimetableSlot::where('academic_term_id', $termId)
+            ->with(['subject', 'teacher', 'classRoom'])
+            ->get();
+
+        // Truncate old conflicts
+        Conflict::truncateForTerm($termId);
+
+        // ─── Hard constraints ──────────────────────────────────
+        $this->checkTeacherDoubleBooking($termId);
+        $this->checkClassroomDoubleBooking($termId);
+        $this->checkTeacherUnavailability($termId, $allSlots);
+        $this->checkWeeklyOverload($termId);
+        $this->checkDailyOverloadHard($termId);
+        $this->checkMinMaxPeriods($termId);
+        $this->checkCombinedPeriodAdjacencyViolations($termId);
+        $this->checkEmptySlots($termId, $allSlots);
+        $this->checkTotalPeriodsPerWeek($termId, $allSlots);
+        $this->checkCoCurricularSameDay($termId, $allSlots);
+        $this->checkCoCurricularConsecutive($termId, $allSlots);
+        $this->checkSubjectDailyExcess($termId, $allSlots);
+        $this->checkCombinedGradeSameDay($termId, $allSlots);
+        $this->checkPhysicalPeriodPlacement($termId, $allSlots);
+
+        // ─── Soft constraints ──────────────────────────────────
+        $this->checkPositionalConsistency($termId, $allSlots);
+        $this->checkCoreSubjectConsistency($termId, $allSlots);
+        $this->checkConsecutiveHeavySubjects($termId, $allSlots);
+        $this->checkCoCurricularPlacement($termId, $allSlots);
+        $this->checkSubjectDailyBalance($termId, $allSlots);
+
+        // Reload grouped conflicts
+        $this->conflicts = Conflict::getGroupedByType($termId);
+        $this->conflicts['term'] = AcademicTerm::find($termId);
+    }
+
+    // ─── HARD CONSTRAINTS ─────────────────────────────────────────
+
+    /**
+     * H1 – Teacher cannot teach two classes in the same period.
+     */
+    protected function checkTeacherDoubleBooking(int $termId): void
+    {
         $teacherConflicts = DB::table('timetable_slots as t1')
             ->join('timetable_slots as t2', function ($join) use ($termId) {
                 $join->on('t1.teacher_id', '=', 't2.teacher_id')
@@ -101,54 +161,6 @@ class ConflictChecker extends Page implements HasForms
             )
             ->get();
 
-        $unavailableViolations = DB::table('timetable_slots as ts')
-            ->join('teachers as t', 'ts.teacher_id', '=', 't.id')
-            ->where('ts.academic_term_id', $termId)
-            ->select('ts.id', 'ts.day', 'ts.period', 't.name as teacher_name', 't.availability_matrix')
-            ->get()
-            ->filter(function ($slot) {
-                // Check if teacher is unavailable at this day/period combination
-                $availabilityMatrix = json_decode($slot->availability_matrix, true);
-
-                // If no matrix defined, consider teacher available
-                if (empty($availabilityMatrix)) {
-                    return false;
-                }
-
-                // Check if the specific day/period slot is marked as available
-                // Matrix structure: [day][period] = true/false
-                $isAvailable = $availabilityMatrix[$slot->day][$slot->period] ?? false;
-
-                // Return true if NOT available (i.e., it's a violation)
-                return ! $isAvailable;
-            });
-
-        $overloadedTeachers = DB::table('timetable_slots as ts')
-            ->join('teachers as t', 'ts.teacher_id', '=', 't.id')
-            ->where('ts.academic_term_id', $termId)
-            ->select(
-                't.id',
-                't.name',
-                't.max_periods_per_week',
-                DB::raw('COUNT(*) as assigned_periods')
-            )
-            ->groupBy('t.id', 't.name', 't.max_periods_per_week')
-            ->havingRaw('COUNT(*) > t.max_periods_per_week')
-            ->get();
-
-        // Check classroom conflicts
-        $classroomConflicts = $this->checkClassroomConflicts($termId);
-
-        // Check daily teacher overload
-        $dailyOverloads = $this->checkDailyOverload($termId);
-
-        // Check class subject settings violations
-        $classSubjectViolations = $this->checkClassSubjectSettingsViolations($termId);
-
-        // Truncate old conflicts for this term
-        Conflict::truncateForTerm($termId);
-
-        // Save teacher conflicts
         foreach ($teacherConflicts as $conflict) {
             Conflict::create([
                 'academic_term_id' => $termId,
@@ -159,114 +171,21 @@ class ConflictChecker extends Page implements HasForms
                 'data' => (array) $conflict,
             ]);
         }
-
-        // Save unavailable violations
-        foreach ($unavailableViolations as $violation) {
-            Conflict::create([
-                'academic_term_id' => $termId,
-                'type' => 'unavailable_violation',
-                'severity' => 'high',
-                'entity_type' => 'teacher',
-                'entity_id' => null,
-                'data' => (array) $violation,
-            ]);
-        }
-
-        // Save overloaded teachers
-        foreach ($overloadedTeachers as $teacher) {
-            Conflict::create([
-                'academic_term_id' => $termId,
-                'type' => 'overloaded_teacher',
-                'severity' => 'high',
-                'entity_type' => 'teacher',
-                'entity_id' => $teacher->id,
-                'data' => (array) $teacher,
-            ]);
-        }
-
-        // Save classroom conflicts
-        foreach ($classroomConflicts as $conflict) {
-            Conflict::create([
-                'academic_term_id' => $termId,
-                'type' => 'classroom_conflict',
-                'severity' => 'critical',
-                'entity_type' => 'classroom',
-                'entity_id' => $conflict->classroom_id,
-                'data' => (array) $conflict,
-            ]);
-        }
-
-        // Save daily overload violations
-        foreach ($dailyOverloads as $overload) {
-            Conflict::create([
-                'academic_term_id' => $termId,
-                'type' => 'daily_overload',
-                'severity' => 'high',
-                'entity_type' => 'teacher',
-                'entity_id' => $overload['teacher_id'],
-                'data' => $overload,
-            ]);
-        }
-
-        // Save min period violations
-        foreach ($classSubjectViolations['min_period_violations'] as $violation) {
-            Conflict::create([
-                'academic_term_id' => $termId,
-                'type' => 'min_period_violation',
-                'severity' => 'medium',
-                'entity_type' => 'class_subject',
-                'entity_id' => null,
-                'data' => $violation,
-            ]);
-        }
-
-        // Save max period violations
-        foreach ($classSubjectViolations['max_period_violations'] as $violation) {
-            Conflict::create([
-                'academic_term_id' => $termId,
-                'type' => 'max_period_violation',
-                'severity' => 'medium',
-                'entity_type' => 'class_subject',
-                'entity_id' => null,
-                'data' => $violation,
-            ]);
-        }
-
-        // Save combined period violations
-        foreach ($classSubjectViolations['combined_period_violations'] as $violation) {
-            Conflict::create([
-                'academic_term_id' => $termId,
-                'type' => 'combined_period_violation',
-                'severity' => 'medium',
-                'entity_type' => 'class_subject',
-                'entity_id' => null,
-                'data' => $violation,
-            ]);
-        }
-
-        // Load conflicts from database
-        $this->conflicts = Conflict::getGroupedByType($termId);
-        $this->conflicts['term'] = AcademicTerm::find($termId);
     }
 
-    protected function checkClassroomConflicts(int $termId)
+    /**
+     * H2 – Same class cannot have two different subjects in the same period.
+     */
+    protected function checkClassroomDoubleBooking(int $termId): void
     {
-        // This query finds when the SAME classroom is assigned to DIFFERENT classes at the same time
-        // Note: In timetable_slots, class_room_id refers to the CLASS (not physical classroom)
-        // So we need to check if different classes (class_room_id) are scheduled at same day/period
-        // This would indicate a scheduling conflict where a class is double-booked
-
-        // Actually, let's check for physical classroom conflicts by looking at the classroom field if it exists
-        // For now, we'll look for cases where same physical space would be needed
-
-        return DB::table('timetable_slots as t1')
+        $classroomConflicts = DB::table('timetable_slots as t1')
             ->join('timetable_slots as t2', function ($join) use ($termId) {
                 $join->on('t1.day', '=', 't2.day')
                     ->on('t1.period', '=', 't2.period')
                     ->where('t1.academic_term_id', $termId)
                     ->where('t2.academic_term_id', $termId)
                     ->whereColumn('t1.id', '<', 't2.id')
-                    ->whereColumn('t1.class_room_id', '=', 't2.class_room_id'); // Same class, different subjects
+                    ->whereColumn('t1.class_room_id', '=', 't2.class_room_id');
             })
             ->join('class_rooms as cr', 't1.class_room_id', '=', 'cr.id')
             ->join('subjects as s1', 't1.subject_id', '=', 's1.id')
@@ -284,12 +203,98 @@ class ConflictChecker extends Page implements HasForms
                 'teacher2.name as teacher2'
             )
             ->get();
+
+        foreach ($classroomConflicts as $conflict) {
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'classroom_conflict',
+                'severity' => 'critical',
+                'entity_type' => 'classroom',
+                'entity_id' => $conflict->classroom_id,
+                'data' => (array) $conflict,
+            ]);
+        }
     }
 
-    protected function checkDailyOverload(int $termId): array
+    /**
+     * H3 – Teacher scheduled when marked unavailable.
+     */
+    protected function checkTeacherUnavailability(int $termId, Collection $allSlots): void
     {
-        $violations = [];
+        // Map integer day indices to the short-name keys used in availability_matrix
+        $dayKeyMap = [0 => 'Sun', 1 => 'Mon', 2 => 'Tue', 3 => 'Wed', 4 => 'Thu', 5 => 'Fri'];
 
+        $violations = $allSlots->filter(function ($slot) use ($dayKeyMap) {
+            if (! $slot->teacher) {
+                return false;
+            }
+            $matrix = is_string($slot->teacher->availability_matrix)
+                ? json_decode($slot->teacher->availability_matrix, true)
+                : $slot->teacher->availability_matrix;
+
+            if (empty($matrix)) {
+                return false;
+            }
+
+            $dayKey = $dayKeyMap[$slot->day] ?? null;
+            if ($dayKey === null || ! isset($matrix[$dayKey])) {
+                return false;
+            }
+
+            return ! ($matrix[$dayKey][$slot->period] ?? false);
+        });
+
+        foreach ($violations as $slot) {
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'unavailable_violation',
+                'severity' => 'high',
+                'entity_type' => 'teacher',
+                'entity_id' => $slot->teacher_id,
+                'data' => [
+                    'teacher_name' => $slot->teacher->name,
+                    'day' => $slot->day,
+                    'period' => $slot->period,
+                ],
+            ]);
+        }
+    }
+
+    /**
+     * H4 – Teacher exceeds max periods per week.
+     */
+    protected function checkWeeklyOverload(int $termId): void
+    {
+        $overloaded = DB::table('timetable_slots as ts')
+            ->join('teachers as t', 'ts.teacher_id', '=', 't.id')
+            ->where('ts.academic_term_id', $termId)
+            ->select(
+                't.id',
+                't.name',
+                't.max_periods_per_week',
+                DB::raw('COUNT(*) as assigned_periods')
+            )
+            ->groupBy('t.id', 't.name', 't.max_periods_per_week')
+            ->havingRaw('COUNT(*) > t.max_periods_per_week')
+            ->get();
+
+        foreach ($overloaded as $teacher) {
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'overloaded_teacher',
+                'severity' => 'high',
+                'entity_type' => 'teacher',
+                'entity_id' => $teacher->id,
+                'data' => (array) $teacher,
+            ]);
+        }
+    }
+
+    /**
+     * H5 – Teacher exceeds max periods per day (hard cap 7).
+     */
+    protected function checkDailyOverloadHard(int $termId): void
+    {
         $dailyAssignments = DB::table('timetable_slots as ts')
             ->join('teachers as t', 'ts.teacher_id', '=', 't.id')
             ->where('ts.academic_term_id', $termId)
@@ -303,31 +308,34 @@ class ConflictChecker extends Page implements HasForms
             ->groupBy('t.id', 't.name', 't.max_periods_per_day', 'ts.day')
             ->get();
 
-        foreach ($dailyAssignments as $assignment) {
-            if ($assignment->max_periods_per_day > 0 && $assignment->daily_periods > $assignment->max_periods_per_day) {
-                $dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                $violations[] = [
-                    'teacher_id' => $assignment->teacher_id,
-                    'teacher_name' => $assignment->teacher_name,
-                    'day' => $assignment->day,
-                    'day_name' => $dayNames[$assignment->day] ?? "Day {$assignment->day}",
-                    'assigned_periods' => $assignment->daily_periods,
-                    'max_periods' => $assignment->max_periods_per_day,
-                    'excess' => $assignment->daily_periods - $assignment->max_periods_per_day,
-                ];
+        foreach ($dailyAssignments as $row) {
+            $maxAllowed = min($row->max_periods_per_day ?: 7, 7);
+            if ($row->daily_periods > $maxAllowed) {
+                Conflict::create([
+                    'academic_term_id' => $termId,
+                    'type' => 'daily_overload',
+                    'severity' => 'high',
+                    'entity_type' => 'teacher',
+                    'entity_id' => $row->teacher_id,
+                    'data' => [
+                        'teacher_id' => $row->teacher_id,
+                        'teacher_name' => $row->teacher_name,
+                        'day' => $row->day,
+                        'day_name' => TimetableSlot::$days[$row->day] ?? "Day {$row->day}",
+                        'assigned_periods' => $row->daily_periods,
+                        'max_periods' => $maxAllowed,
+                        'excess' => $row->daily_periods - $maxAllowed,
+                    ],
+                ]);
             }
         }
-
-        return $violations;
     }
 
-    protected function checkClassSubjectSettingsViolations(int $termId): array
+    /**
+     * H6 – Min / max weekly period allocation per class-subject.
+     */
+    protected function checkMinMaxPeriods(int $termId): void
     {
-        $minPeriodViolations = collect();
-        $maxPeriodViolations = collect();
-        $combinedPeriodViolations = collect();
-
-        // Get all timetable slots grouped by class and subject
         $slotsByClassSubject = DB::table('timetable_slots as ts')
             ->join('class_rooms as cr', 'ts.class_room_id', '=', 'cr.id')
             ->join('subjects as s', 'ts.subject_id', '=', 's.id')
@@ -344,8 +352,7 @@ class ConflictChecker extends Page implements HasForms
             ->get();
 
         foreach ($slotsByClassSubject as $slot) {
-            // Get the class subject setting
-            $setting = \App\Models\ClassSubjectSetting::where('class_room_id', $slot->class_room_id)
+            $setting = ClassSubjectSetting::where('class_room_id', $slot->class_room_id)
                 ->where('subject_id', $slot->subject_id)
                 ->where('is_active', true)
                 ->first();
@@ -356,99 +363,701 @@ class ConflictChecker extends Page implements HasForms
 
             $className = $slot->class_name.($slot->class_section ? ' - '.$slot->class_section : '');
 
-            // Check minimum periods per week
             if ($slot->assigned_periods < $setting->min_periods_per_week) {
-                $minPeriodViolations->push([
-                    'class_name' => $className,
-                    'subject_name' => $slot->subject_name,
-                    'assigned' => $slot->assigned_periods,
-                    'minimum' => $setting->min_periods_per_week,
-                    'deficit' => $setting->min_periods_per_week - $slot->assigned_periods,
-                ]);
-            }
-
-            // Check maximum periods per week
-            if ($slot->assigned_periods > $setting->max_periods_per_week) {
-                $maxPeriodViolations->push([
-                    'class_name' => $className,
-                    'subject_name' => $slot->subject_name,
-                    'assigned' => $slot->assigned_periods,
-                    'maximum' => $setting->max_periods_per_week,
-                    'excess' => $slot->assigned_periods - $setting->max_periods_per_week,
-                ]);
-            }
-
-            // Check combined period constraints
-            if ($setting->single_combined === 'combined') {
-                // Fetch period details for this specific class-subject combination
-                $periods = DB::table('timetable_slots')
-                    ->where('academic_term_id', $termId)
-                    ->where('class_room_id', $slot->class_room_id)
-                    ->where('subject_id', $slot->subject_id)
-                    ->orderBy('day')
-                    ->orderBy('period')
-                    ->select('day', 'period', 'is_combined')
-                    ->get();
-
-                $violations = $this->checkCombinedPeriodAdjacency($periods);
-
-                if (! empty($violations)) {
-                    $combinedPeriodViolations->push([
+                Conflict::create([
+                    'academic_term_id' => $termId,
+                    'type' => 'min_period_violation',
+                    'severity' => 'high',
+                    'entity_type' => 'class_subject',
+                    'entity_id' => null,
+                    'data' => [
                         'class_name' => $className,
                         'subject_name' => $slot->subject_name,
-                        'issue' => 'Combined subject must have adjacent periods',
-                        'details' => implode('; ', $violations),
+                        'assigned' => $slot->assigned_periods,
+                        'minimum' => $setting->min_periods_per_week,
+                        'deficit' => $setting->min_periods_per_week - $slot->assigned_periods,
+                    ],
+                ]);
+            }
+
+            if ($slot->assigned_periods > $setting->max_periods_per_week) {
+                Conflict::create([
+                    'academic_term_id' => $termId,
+                    'type' => 'max_period_violation',
+                    'severity' => 'high',
+                    'entity_type' => 'class_subject',
+                    'entity_id' => null,
+                    'data' => [
+                        'class_name' => $className,
+                        'subject_name' => $slot->subject_name,
+                        'assigned' => $slot->assigned_periods,
+                        'maximum' => $setting->max_periods_per_week,
+                        'excess' => $slot->assigned_periods - $setting->max_periods_per_week,
+                    ],
+                ]);
+            }
+        }
+    }
+
+    /**
+     * H7 – Combined subjects must have adjacent periods on the same day.
+     */
+    protected function checkCombinedPeriodAdjacencyViolations(int $termId): void
+    {
+        $combinedSettings = ClassSubjectSetting::where('single_combined', 'combined')
+            ->where('is_active', true)
+            ->with(['classRoom', 'subject'])
+            ->get();
+
+        foreach ($combinedSettings as $setting) {
+            if (! $setting->classRoom || ! $setting->subject) {
+                continue;
+            }
+
+            $periods = TimetableSlot::where('academic_term_id', $termId)
+                ->where('class_room_id', $setting->class_room_id)
+                ->where('subject_id', $setting->subject_id)
+                ->orderBy('day')
+                ->orderBy('period')
+                ->get(['day', 'period']);
+
+            $dayPeriods = $periods->groupBy('day');
+
+            foreach ($dayPeriods as $day => $daySlots) {
+                if ($daySlots->count() < 2) {
+                    continue;
+                }
+
+                $periodNumbers = $daySlots->pluck('period')->sort()->values()->all();
+
+                for ($i = 0; $i < count($periodNumbers) - 1; $i++) {
+                    if ($periodNumbers[$i + 1] - $periodNumbers[$i] > 1) {
+                        $dayName = TimetableSlot::$days[$day] ?? "Day $day";
+                        Conflict::create([
+                            'academic_term_id' => $termId,
+                            'type' => 'combined_period_violation',
+                            'severity' => 'high',
+                            'entity_type' => 'class_subject',
+                            'entity_id' => null,
+                            'data' => [
+                                'class_name' => $setting->classRoom->full_name,
+                                'subject_name' => $setting->subject->name,
+                                'issue' => 'Combined subject must have adjacent periods',
+                                'details' => "Non-adjacent periods on {$dayName}: Period {$periodNumbers[$i]} and Period {$periodNumbers[$i + 1]}",
+                            ],
+                        ]);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * H8 – All 48 periods must be filled per class per week (no empty slots).
+     */
+    protected function checkEmptySlots(int $termId, Collection $allSlots): void
+    {
+        $classes = ClassRoom::active()->get();
+
+        foreach ($classes as $class) {
+            $classSlots = $allSlots->where('class_room_id', $class->id);
+
+            // Count filled slots (slots with a subject assigned)
+            $filledCount = $classSlots->whereNotNull('subject_id')->count();
+
+            // Check for missing slot positions (should have 6 days × 8 periods = 48)
+            $expectedTotal = 48;
+            $existingPositions = $classSlots->map(fn ($s) => $s->day.'-'.$s->period)->unique()->count();
+
+            if ($existingPositions < $expectedTotal || $filledCount < $expectedTotal) {
+                $emptyCount = $expectedTotal - $filledCount;
+                $missingCount = $expectedTotal - $existingPositions;
+
+                Conflict::create([
+                    'academic_term_id' => $termId,
+                    'type' => 'empty_slot_violation',
+                    'severity' => 'critical',
+                    'entity_type' => 'classroom',
+                    'entity_id' => $class->id,
+                    'data' => [
+                        'class_name' => $class->full_name,
+                        'expected' => $expectedTotal,
+                        'filled' => $filledCount,
+                        'empty' => $emptyCount,
+                        'missing_slots' => $missingCount,
+                    ],
+                ]);
+            }
+        }
+    }
+
+    /**
+     * H9 – Each class must have exactly 8 periods taught per day.
+     */
+    protected function checkTotalPeriodsPerWeek(int $termId, Collection $allSlots): void
+    {
+        $classes = ClassRoom::active()->get();
+
+        foreach ($classes as $class) {
+            $classSlots = $allSlots->where('class_room_id', $class->id);
+
+            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+                $daySlots = $classSlots->where('day', $dayNum)->whereNotNull('subject_id');
+                if ($daySlots->count() !== 8) {
+                    Conflict::create([
+                        'academic_term_id' => $termId,
+                        'type' => 'total_period_violation',
+                        'severity' => 'high',
+                        'entity_type' => 'classroom',
+                        'entity_id' => $class->id,
+                        'data' => [
+                            'class_name' => $class->full_name,
+                            'day' => $dayNum,
+                            'day_name' => $dayName,
+                            'expected' => 8,
+                            'actual' => $daySlots->count(),
+                        ],
                     ]);
                 }
             }
         }
-
-        return [
-            'min_period_violations' => $minPeriodViolations,
-            'max_period_violations' => $maxPeriodViolations,
-            'combined_period_violations' => $combinedPeriodViolations,
-        ];
     }
 
-    protected function checkCombinedPeriodAdjacency($periods): array
+    /**
+     * H10 – No two different co-curricular subjects in a single day for a class.
+     */
+    protected function checkCoCurricularSameDay(int $termId, Collection $allSlots): void
     {
-        $violations = [];
-        $dayPeriods = [];
+        $coCurricularSubjectIds = Subject::where('type', 'co_curricular')
+            ->where('status', 'active')
+            ->pluck('id', 'id');
 
-        // Group periods by day
-        foreach ($periods as $period) {
-            $day = $period->day;
-            $periodNumber = $period->period;
-
-            if (! isset($dayPeriods[$day])) {
-                $dayPeriods[$day] = [];
-            }
-            $dayPeriods[$day][] = (int) $periodNumber;
+        if ($coCurricularSubjectIds->isEmpty()) {
+            return;
         }
 
-        // Check each day for non-adjacent combined periods
-        foreach ($dayPeriods as $day => $periodNumbers) {
-            if (count($periodNumbers) < 2) {
-                continue;
-            }
+        $classes = ClassRoom::active()->get();
 
-            // Sort by period number
-            sort($periodNumbers);
+        foreach ($classes as $class) {
+            $classSlots = $allSlots->where('class_room_id', $class->id);
 
-            // Check for gaps between periods on the same day
-            for ($i = 0; $i < count($periodNumbers) - 1; $i++) {
-                $currentPeriod = $periodNumbers[$i];
-                $nextPeriod = $periodNumbers[$i + 1];
+            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+                $dayCoCurricular = $classSlots
+                    ->where('day', $dayNum)
+                    ->whereIn('subject_id', $coCurricularSubjectIds->keys())
+                    ->pluck('subject_id')
+                    ->unique();
 
-                if ($nextPeriod - $currentPeriod > 1) {
-                    $dayName = \App\Models\TimetableSlot::$days[$day] ?? "Day $day";
-                    $violations[] = "Non-adjacent periods on {$dayName}: Period {$currentPeriod} and {$nextPeriod}";
+                if ($dayCoCurricular->count() > 1) {
+                    $subjectNames = Subject::whereIn('id', $dayCoCurricular)->pluck('name')->implode(', ');
+                    Conflict::create([
+                        'academic_term_id' => $termId,
+                        'type' => 'cocurricular_same_day',
+                        'severity' => 'critical',
+                        'entity_type' => 'classroom',
+                        'entity_id' => $class->id,
+                        'data' => [
+                            'class_name' => $class->full_name,
+                            'day' => $dayNum,
+                            'day_name' => $dayName,
+                            'subjects' => $subjectNames,
+                            'count' => $dayCoCurricular->count(),
+                        ],
+                    ]);
                 }
             }
         }
-
-        return $violations;
     }
+
+    /**
+     * H11 – Co-curricular: max 2 periods/day, must be same subject & consecutive.
+     *        e.g. dance-dance OK; dance-sport or dance-math-dance NOT OK.
+     */
+    protected function checkCoCurricularConsecutive(int $termId, Collection $allSlots): void
+    {
+        $coCurricularIds = Subject::where('type', 'co_curricular')
+            ->where('status', 'active')
+            ->pluck('id', 'id');
+
+        if ($coCurricularIds->isEmpty()) {
+            return;
+        }
+
+        $classes = ClassRoom::active()->get();
+
+        foreach ($classes as $class) {
+            $classSlots = $allSlots->where('class_room_id', $class->id);
+
+            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+                $dayCoCurricular = $classSlots
+                    ->where('day', $dayNum)
+                    ->whereIn('subject_id', $coCurricularIds->keys())
+                    ->sortBy('period');
+
+                if ($dayCoCurricular->count() <= 1) {
+                    continue;
+                }
+
+                // All must be the same subject
+                $uniqueSubjects = $dayCoCurricular->pluck('subject_id')->unique();
+                if ($uniqueSubjects->count() > 1) {
+                    // Already caught by H10; skip duplicate
+                    continue;
+                }
+
+                // Max 2 periods
+                if ($dayCoCurricular->count() > 2) {
+                    $subjectName = $dayCoCurricular->first()->subject->name ?? 'Unknown';
+                    Conflict::create([
+                        'academic_term_id' => $termId,
+                        'type' => 'cocurricular_consecutive',
+                        'severity' => 'critical',
+                        'entity_type' => 'classroom',
+                        'entity_id' => $class->id,
+                        'data' => [
+                            'class_name' => $class->full_name,
+                            'day_name' => $dayName,
+                            'subject' => $subjectName,
+                            'issue' => "Co-curricular '{$subjectName}' has {$dayCoCurricular->count()} periods (max 2)",
+                        ],
+                    ]);
+
+                    continue;
+                }
+
+                // Exactly 2 – must be consecutive
+                $periods = $dayCoCurricular->pluck('period')->sort()->values();
+                if ($periods->count() === 2 && ($periods[1] - $periods[0]) !== 1) {
+                    $subjectName = $dayCoCurricular->first()->subject->name ?? 'Unknown';
+                    Conflict::create([
+                        'academic_term_id' => $termId,
+                        'type' => 'cocurricular_consecutive',
+                        'severity' => 'critical',
+                        'entity_type' => 'classroom',
+                        'entity_id' => $class->id,
+                        'data' => [
+                            'class_name' => $class->full_name,
+                            'day_name' => $dayName,
+                            'subject' => $subjectName,
+                            'issue' => "Co-curricular '{$subjectName}' periods {$periods[0]} & {$periods[1]} are not consecutive",
+                        ],
+                    ]);
+                }
+            }
+        }
+    }
+
+    /**
+     * H12 – Not more than 2 periods of the same subject in a single day.
+     */
+    protected function checkSubjectDailyExcess(int $termId, Collection $allSlots): void
+    {
+        $classes = ClassRoom::active()->get();
+
+        foreach ($classes as $class) {
+            $classSlots = $allSlots->where('class_room_id', $class->id);
+
+            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+                $daySlots = $classSlots->where('day', $dayNum)->whereNotNull('subject_id');
+
+                $subjectCounts = $daySlots->groupBy('subject_id');
+
+                foreach ($subjectCounts as $subjectId => $slots) {
+                    if ($slots->count() > 2) {
+                        $subjectName = $slots->first()->subject->name ?? 'Unknown';
+                        Conflict::create([
+                            'academic_term_id' => $termId,
+                            'type' => 'subject_daily_excess',
+                            'severity' => 'critical',
+                            'entity_type' => 'classroom',
+                            'entity_id' => $class->id,
+                            'data' => [
+                                'class_name' => $class->full_name,
+                                'day_name' => $dayName,
+                                'subject_name' => $subjectName,
+                                'count' => $slots->count(),
+                                'max_allowed' => 2,
+                            ],
+                        ]);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * H13 – Combined subjects must be scheduled for the same grade, same day, same periods.
+     *        e.g. Sport on Tue P5-6 for Class 1A & 1B is OK.
+     *        Sport on Tue P5-6 for Class 1A & Class 2A is NOT OK (different grades).
+     */
+    protected function checkCombinedGradeSameDay(int $termId, Collection $allSlots): void
+    {
+        // Get all combined-type slots
+        $combinedSlots = $allSlots->where('is_combined', true)->whereNotNull('combined_period_id');
+
+        if ($combinedSlots->isEmpty()) {
+            return;
+        }
+
+        // Group by combined_period_id
+        $byCombinedPeriod = $combinedSlots->groupBy('combined_period_id');
+
+        foreach ($byCombinedPeriod as $combinedPeriodId => $slots) {
+            // Extract unique class grade numbers from class names
+            $classGrades = $slots->map(function ($slot) {
+                if (! $slot->classRoom) {
+                    return null;
+                }
+
+                return (int) filter_var($slot->classRoom->name, FILTER_SANITIZE_NUMBER_INT);
+            })->filter()->unique();
+
+            if ($classGrades->count() > 1) {
+                $subjectName = $slots->first()->subject->name ?? 'Unknown';
+                $classNames = $slots->map(fn ($s) => $s->classRoom?->full_name)->filter()->unique()->implode(', ');
+                $dayName = TimetableSlot::$days[$slots->first()->day] ?? 'Unknown';
+
+                Conflict::create([
+                    'academic_term_id' => $termId,
+                    'type' => 'combined_grade_violation',
+                    'severity' => 'critical',
+                    'entity_type' => 'class_subject',
+                    'entity_id' => null,
+                    'data' => [
+                        'subject_name' => $subjectName,
+                        'classes' => $classNames,
+                        'grades' => $classGrades->values()->implode(', '),
+                        'day_name' => $dayName,
+                        'issue' => "Combined subject '{$subjectName}' spans different grades ({$classGrades->values()->implode(', ')}). It must be within the same grade.",
+                    ],
+                ]);
+            }
+
+            // Also check that all sections of the combined period share the same day
+            $uniqueDays = $slots->pluck('day')->unique();
+
+            if ($uniqueDays->count() > 1) {
+                $subjectName = $slots->first()->subject->name ?? 'Unknown';
+                Conflict::create([
+                    'academic_term_id' => $termId,
+                    'type' => 'combined_grade_violation',
+                    'severity' => 'critical',
+                    'entity_type' => 'class_subject',
+                    'entity_id' => null,
+                    'data' => [
+                        'subject_name' => $subjectName,
+                        'classes' => $slots->map(fn ($s) => $s->classRoom?->full_name)->filter()->unique()->implode(', '),
+                        'day_name' => $uniqueDays->map(fn ($d) => TimetableSlot::$days[$d] ?? $d)->implode(', '),
+                        'issue' => "Combined subject '{$subjectName}' is scheduled on different days for different sections.",
+                    ],
+                ]);
+            }
+        }
+    }
+
+    /**
+     * H14 – Physical subjects (sports, taekwondo, dance) must NOT be in period 5.
+     */
+    protected function checkPhysicalPeriodPlacement(int $termId, Collection $allSlots): void
+    {
+        $physicalSubjects = Subject::where('status', 'active')
+            ->where(function ($q) {
+                foreach ($this->physicalSubjectCodes as $code) {
+                    $q->orWhereRaw('LOWER(code) LIKE ?', ['%'.$code.'%'])
+                        ->orWhereRaw('LOWER(name) LIKE ?', ['%'.$code.'%']);
+                }
+            })
+            ->pluck('name', 'id');
+
+        if ($physicalSubjects->isEmpty()) {
+            return;
+        }
+
+        $violations = $allSlots
+            ->whereIn('subject_id', $physicalSubjects->keys())
+            ->where('period', 5);
+
+        // Group by class + day to reduce noise
+        $grouped = $violations->groupBy(fn ($s) => $s->class_room_id.'-'.$s->day);
+
+        foreach ($grouped as $slots) {
+            $first = $slots->first();
+            $subjectName = $physicalSubjects[$first->subject_id] ?? 'Unknown';
+            $className = $first->classRoom?->full_name ?? 'Unknown';
+            $dayName = TimetableSlot::$days[$first->day] ?? "Day {$first->day}";
+
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'physical_period_violation',
+                'severity' => 'high',
+                'entity_type' => 'classroom',
+                'entity_id' => $first->class_room_id,
+                'data' => [
+                    'class_name' => $className,
+                    'subject_name' => $subjectName,
+                    'day_name' => $dayName,
+                    'wrong_period' => 5,
+                    'issue' => "Physical subject '{$subjectName}' must NOT be in period 5 but is scheduled there on {$dayName}",
+                ],
+            ]);
+        }
+    }
+
+    // ─── SOFT CONSTRAINTS ─────────────────────────────────────────
+
+    /**
+     * S1 – Positional consistency: subjects should retain the same period-order across days.
+     */
+    protected function checkPositionalConsistency(int $termId, Collection $allSlots): void
+    {
+        $classes = ClassRoom::active()->get();
+
+        foreach ($classes as $class) {
+            $classSlots = $allSlots->where('class_room_id', $class->id)->whereNotNull('subject_id');
+
+            // Build subject order per day (excluding co-curricular)
+            $coCurricularIds = Subject::where('type', 'co_curricular')->pluck('id');
+
+            $dayOrders = [];
+            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+                $daySlots = $classSlots
+                    ->where('day', $dayNum)
+                    ->whereNotIn('subject_id', $coCurricularIds)
+                    ->sortBy('period');
+
+                $dayOrders[$dayNum] = $daySlots->pluck('subject_id')->values()->all();
+            }
+
+            // Use Sunday (day 0) as reference
+            $reference = $dayOrders[0] ?? [];
+            if (empty($reference)) {
+                continue;
+            }
+
+            foreach ($dayOrders as $dayNum => $order) {
+                if ($dayNum === 0 || empty($order)) {
+                    continue;
+                }
+
+                $mismatches = 0;
+                $totalComparable = min(count($reference), count($order));
+                for ($i = 0; $i < $totalComparable; $i++) {
+                    if (($reference[$i] ?? null) !== ($order[$i] ?? null)) {
+                        $mismatches++;
+                    }
+                }
+
+                // Flag if more than 30% of positions differ
+                if ($totalComparable > 0 && ($mismatches / $totalComparable) > 0.3) {
+                    Conflict::create([
+                        'academic_term_id' => $termId,
+                        'type' => 'positional_consistency',
+                        'severity' => 'low',
+                        'entity_type' => 'classroom',
+                        'entity_id' => $class->id,
+                        'data' => [
+                            'class_name' => $class->full_name,
+                            'day_name' => TimetableSlot::$days[$dayNum] ?? "Day {$dayNum}",
+                            'mismatches' => $mismatches,
+                            'total' => $totalComparable,
+                            'percentage' => round(($mismatches / $totalComparable) * 100),
+                        ],
+                    ]);
+                }
+            }
+        }
+    }
+
+    /**
+     * S2 – Core subjects (English, Math, Science) should preferably be in the same period slot daily.
+     */
+    protected function checkCoreSubjectConsistency(int $termId, Collection $allSlots): void
+    {
+        $coreSubjects = Subject::where('type', 'core')
+            ->where('status', 'active')
+            ->whereIn(DB::raw('LOWER(name)'), $this->heavySubjectCodes)
+            ->get();
+
+        if ($coreSubjects->isEmpty()) {
+            return;
+        }
+
+        $classes = ClassRoom::active()->get();
+
+        foreach ($classes as $class) {
+            $classSlots = $allSlots->where('class_room_id', $class->id);
+
+            foreach ($coreSubjects as $subject) {
+                $subjectSlots = $classSlots->where('subject_id', $subject->id);
+                $periodsPerDay = $subjectSlots->groupBy('day')->map(fn ($s) => $s->pluck('period')->sort()->first());
+
+                $uniquePeriods = $periodsPerDay->unique()->count();
+                $totalDays = $periodsPerDay->count();
+
+                // If the subject appears on 3+ days and uses 3+ different first-period positions
+                if ($totalDays >= 3 && $uniquePeriods >= 3) {
+                    Conflict::create([
+                        'academic_term_id' => $termId,
+                        'type' => 'core_subject_consistency',
+                        'severity' => 'low',
+                        'entity_type' => 'classroom',
+                        'entity_id' => $class->id,
+                        'data' => [
+                            'class_name' => $class->full_name,
+                            'subject_name' => $subject->name,
+                            'distinct_periods' => $uniquePeriods,
+                            'days_scheduled' => $totalDays,
+                            'issue' => "Core subject '{$subject->name}' is placed in {$uniquePeriods} different period positions across {$totalDays} days",
+                        ],
+                    ]);
+                }
+            }
+        }
+    }
+
+    /**
+     * S3 – Avoid scheduling mentally heavy subjects consecutively.
+     */
+    protected function checkConsecutiveHeavySubjects(int $termId, Collection $allSlots): void
+    {
+        $heavyIds = Subject::where('status', 'active')
+            ->where(function ($q) {
+                foreach ($this->heavySubjectCodes as $code) {
+                    $q->orWhereRaw('LOWER(name) LIKE ?', ['%'.$code.'%']);
+                }
+            })
+            ->pluck('id');
+
+        if ($heavyIds->isEmpty()) {
+            return;
+        }
+
+        $classes = ClassRoom::active()->get();
+
+        foreach ($classes as $class) {
+            $classSlots = $allSlots->where('class_room_id', $class->id);
+
+            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+                $daySlots = $classSlots->where('day', $dayNum)->sortBy('period');
+                $previous = null;
+                $consecutiveCount = 0;
+
+                foreach ($daySlots as $slot) {
+                    if ($heavyIds->contains($slot->subject_id)) {
+                        $consecutiveCount++;
+                        if ($consecutiveCount >= 2 && $previous) {
+                            Conflict::create([
+                                'academic_term_id' => $termId,
+                                'type' => 'consecutive_heavy',
+                                'severity' => 'low',
+                                'entity_type' => 'classroom',
+                                'entity_id' => $class->id,
+                                'data' => [
+                                    'class_name' => $class->full_name,
+                                    'day_name' => $dayName,
+                                    'subject1' => $previous->subject->name ?? 'Unknown',
+                                    'subject2' => $slot->subject->name ?? 'Unknown',
+                                    'periods' => ($slot->period - 1).' & '.$slot->period,
+                                    'issue' => "Heavy subjects '{$previous->subject->name}' and '{$slot->subject->name}' are consecutive",
+                                ],
+                            ]);
+                        }
+                    } else {
+                        $consecutiveCount = 0;
+                    }
+                    $previous = $slot;
+                }
+            }
+        }
+    }
+
+    /**
+     * S4 – Co-curricular subjects should preferably be in middle or last periods (4-8).
+     */
+    protected function checkCoCurricularPlacement(int $termId, Collection $allSlots): void
+    {
+        $coCurricularIds = Subject::where('type', 'co_curricular')
+            ->where('status', 'active')
+            ->pluck('name', 'id');
+
+        if ($coCurricularIds->isEmpty()) {
+            return;
+        }
+
+        $earlySlots = $allSlots
+            ->whereIn('subject_id', $coCurricularIds->keys())
+            ->where('period', '<', 4);
+
+        $grouped = $earlySlots->groupBy(fn ($s) => $s->class_room_id.'-'.$s->day);
+
+        foreach ($grouped as $slots) {
+            $first = $slots->first();
+            Conflict::create([
+                'academic_term_id' => $termId,
+                'type' => 'cocurricular_placement',
+                'severity' => 'low',
+                'entity_type' => 'classroom',
+                'entity_id' => $first->class_room_id,
+                'data' => [
+                    'class_name' => $first->classRoom?->full_name ?? 'Unknown',
+                    'day_name' => TimetableSlot::$days[$first->day] ?? "Day {$first->day}",
+                    'subject_name' => $coCurricularIds[$first->subject_id] ?? 'Unknown',
+                    'period' => $slots->pluck('period')->sort()->implode(', '),
+                    'issue' => 'Co-curricular subject scheduled in early periods (before period 4)',
+                ],
+            ]);
+        }
+    }
+
+    /**
+     * S5 – Subject allocations should be balanced across the week (not overloaded on one day).
+     *       Soft: prefer not more than 1 period of same subject per day.
+     */
+    protected function checkSubjectDailyBalance(int $termId, Collection $allSlots): void
+    {
+        $classes = ClassRoom::active()->get();
+
+        foreach ($classes as $class) {
+            $classSlots = $allSlots->where('class_room_id', $class->id)->whereNotNull('subject_id');
+
+            // Group by subject, then check daily distribution
+            $bySubject = $classSlots->groupBy('subject_id');
+
+            foreach ($bySubject as $subjectId => $subjectSlots) {
+                $dayDistribution = $subjectSlots->groupBy('day')->map(fn ($slots) => $slots->count());
+                $maxInOneDay = $dayDistribution->max();
+
+                // Co-curricular allowed 2 per day, so skip those
+                $subject = $subjectSlots->first()->subject;
+                if ($subject && $subject->type === 'co_curricular') {
+                    continue;
+                }
+
+                // Soft: flag if a non-co-curricular subject appears 2+ times in a day
+                if ($maxInOneDay >= 2) {
+                    $worstDay = $dayDistribution->filter(fn ($c) => $c >= 2)->keys()->first();
+                    $dayName = TimetableSlot::$days[$worstDay] ?? "Day {$worstDay}";
+
+                    Conflict::create([
+                        'academic_term_id' => $termId,
+                        'type' => 'subject_daily_balance',
+                        'severity' => 'medium',
+                        'entity_type' => 'classroom',
+                        'entity_id' => $class->id,
+                        'data' => [
+                            'class_name' => $class->full_name,
+                            'subject_name' => $subject->name ?? 'Unknown',
+                            'day_name' => $dayName,
+                            'count' => $maxInOneDay,
+                            'issue' => "Subject '{$subject->name}' appears {$maxInOneDay} times on {$dayName} (prefer max 1 per day)",
+                        ],
+                    ]);
+                }
+            }
+        }
+    }
+
+    // ─── Actions ──────────────────────────────────────────────────
 
     public function refreshCheck(): void
     {
@@ -507,7 +1116,7 @@ class ConflictChecker extends Page implements HasForms
                 ->modalDescription('This will attempt to automatically resolve conflicts by rescheduling slots. This action cannot be undone.')
                 ->modalSubmitActionLabel('Yes, Resolve')
                 ->action('autoResolveConflicts')
-                ->visible(fn () => isset($this->conflicts) && $this->conflicts['total_conflicts'] > 0),
+                ->visible(fn () => isset($this->conflicts) && ($this->conflicts['total_conflicts'] ?? 0) > 0),
 
             Action::make('refresh')
                 ->label('Recheck')
@@ -526,7 +1135,7 @@ class ConflictChecker extends Page implements HasForms
                         ->body('Export functionality will be implemented soon.')
                         ->send();
                 })
-                ->visible(fn () => isset($this->conflicts) && $this->conflicts['total_conflicts'] > 0),
+                ->visible(fn () => isset($this->conflicts) && ($this->conflicts['total_conflicts'] ?? 0) > 0),
         ];
     }
 }

@@ -36,51 +36,55 @@ class SchedulerConfig
 
     const TOURNAMENT_SIZE = 4;
 
-    // Constraint weights
-    const HARD_CONSTRAINT_WEIGHT = 100;
+    // Constraint weights — individual check weights already encode importance
+    const HARD_CONSTRAINT_WEIGHT = 1;
 
     const SOFT_CONSTRAINT_WEIGHT = 1;
 
     // Hard constraint weights (higher = more critical)
     const WEIGHT_NO_EMPTY_SLOTS = 50;              // Must fill all 48 periods
 
+    const WEIGHT_TEACHER_UNAVAILABILITY = 45;      // Teacher must be available at scheduled time
+
     const WEIGHT_TEACHER_CONFLICTS = 40;           // No teacher double-booking
 
     const WEIGHT_TEACHER_WORKLOAD = 35;            // Max 7 periods per day per teacher
 
-    const WEIGHT_NO_PHYSICAL_AFTER_BREAK = 32;     // No physical/co-curricular after break
+    const WEIGHT_PHYSICAL_NOT_IN_PERIOD_5 = 50;    // Physical/sports subjects must NOT be in period 5
 
     const WEIGHT_CO_CURRICULAR_SAME_DAY = 30;      // Only 1 co-curricular per day
 
     const WEIGHT_CO_CURRICULAR_CONSECUTIVE = 25;   // Co-curricular 2 periods must be consecutive
 
+    const WEIGHT_SUBJECT_WEEKLY_ALLOCATION = 25;   // Meet min/max weekly requirements
+
+    const WEIGHT_COMBINED_SUBJECTS = 25;           // Combined subjects same time
+
     const WEIGHT_MAX_TWO_PERIODS_PER_DAY = 20;     // Max 2 periods per subject per day
 
-    const WEIGHT_COMBINED_SUBJECTS = 18;           // Combined subjects same time
-
-    const WEIGHT_SUBJECT_WEEKLY_ALLOCATION = 15;   // Meet min/max weekly requirements
-
     // Soft constraint weights
-    const WEIGHT_POSITIONAL_CONSISTENCY = 3;
+    const WEIGHT_POSITIONAL_CONSISTENCY = 20;
 
-    const WEIGHT_MAX_ONE_PER_SUBJECT_PER_DAY = 2;
+    const WEIGHT_MAX_ONE_PER_SUBJECT_PER_DAY = 20;
 
-    const WEIGHT_CORE_SUBJECT_CONSISTENCY = 2;
+    const WEIGHT_CORE_SUBJECT_CONSISTENCY = 18;
 
-    const WEIGHT_HEAVY_SUBJECT_SPACING = 2;
+    const WEIGHT_HEAVY_SUBJECT_SPACING = 22;
 
-    const WEIGHT_CO_CURRICULAR_PLACEMENT = 1;
+    const WEIGHT_CO_CURRICULAR_PLACEMENT = 15;
+
+    const WEIGHT_COMBINED_PERIOD_ADJACENCY = 25;
 
     const STAGNATION_THRESHOLD = 4;
 
     const STAGNATION_TOLERANCE = 0.002;
 
-    const OPTIMAL_FITNESS_THRESHOLD = 0.82;
+    const OPTIMAL_FITNESS_THRESHOLD = 0.98;
 
-    const MAX_POSSIBLE_VIOLATIONS = 1000;
+    const MAX_POSSIBLE_VIOLATIONS = 20000;
 
-    // Co-curricular placement preferences
-    const CO_CURRICULAR_PREFERRED_START_PERIOD = 4;
+    // Co-curricular placement preferences (0-indexed: 3 = DB period 4, matching ConflictChecker's period < 4)
+    const CO_CURRICULAR_PREFERRED_START_PERIOD = 3;
 
     const MAX_PERIODS_PER_SUBJECT_PER_DAY = 2;
 
@@ -283,7 +287,7 @@ class Timetable
                 }
             }
         }
-        $this->fitness = 0;
+        $this->fitness = null;
     }
 
     /**
@@ -822,10 +826,24 @@ class GeneticAlgorithmScheduler
                     $subjectPeriods[$subjectId]++;
                     $totalPeriods++;
                 } elseif ($totalPeriods > SchedulerConfig::TOTAL_PERIODS && ! empty($subjectPeriods)) {
-                    $subjectId = array_rand($subjectPeriods);
-                    if ($subjectPeriods[$subjectId] > 0) {
-                        $subjectPeriods[$subjectId]--;
-                        $totalPeriods--;
+                    // Find a subject above minimum to reduce
+                    $reduced = false;
+                    foreach ($subjectPeriods as $sid => $cnt) {
+                        $subject = $this->subjects[$sid];
+                        if ($cnt > $subject->minPeriodsPerWeek) {
+                            $subjectPeriods[$sid]--;
+                            $totalPeriods--;
+                            $reduced = true;
+                            break;
+                        }
+                    }
+                    // Only as a last resort, reduce any subject with > 0 periods
+                    if (! $reduced) {
+                        $subjectId = array_rand($subjectPeriods);
+                        if ($subjectPeriods[$subjectId] > 0) {
+                            $subjectPeriods[$subjectId]--;
+                            $totalPeriods--;
+                        }
                     }
                 }
             }
@@ -870,7 +888,7 @@ class GeneticAlgorithmScheduler
         for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
             for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
                 $subjectId = $subjectPool[$index];
-                $teacherId = $this->assignTeacher($subjectId);
+                $teacherId = $this->assignTeacher($subjectId, $day, $period);
 
                 $timetable->slots[$section->id][$day][$period]->subjectId = $subjectId;
                 $timetable->slots[$section->id][$day][$period]->teacherId = $teacherId;
@@ -881,16 +899,34 @@ class GeneticAlgorithmScheduler
     }
 
     /**
-     * Assign a random eligible teacher to a subject
+     * Assign an eligible teacher to a subject, preferring available teachers
      *
      * @param  string  $subjectId  Subject identifier
+     * @param  int|null  $day  Day index (0-indexed) for availability check
+     * @param  int|null  $period  Period index (0-indexed) for availability check
      * @return string|null Teacher ID or null if no eligible teacher
      */
-    private function assignTeacher($subjectId)
+    private function assignTeacher($subjectId, $day = null, $period = null)
     {
         $eligibleTeachers = $this->getEligibleTeachers($subjectId);
 
-        return ! empty($eligibleTeachers) ? $eligibleTeachers[array_rand($eligibleTeachers)] : null;
+        if (empty($eligibleTeachers)) {
+            return null;
+        }
+
+        // If day/period provided, prefer teachers who are available at that time
+        if ($day !== null && $period !== null) {
+            $availableTeachers = array_filter($eligibleTeachers, function ($teacherId) use ($day, $period) {
+                return $this->constraintChecker->hasTeacherAvailability($teacherId, $day, $period);
+            });
+
+            if (! empty($availableTeachers)) {
+                return $availableTeachers[array_rand($availableTeachers)];
+            }
+        }
+
+        // Fallback to any eligible teacher
+        return $eligibleTeachers[array_rand($eligibleTeachers)];
     }
 
     /**
@@ -1261,10 +1297,18 @@ class GeneticAlgorithmScheduler
             return false;
         }
 
-        // Check if physical/co-curricular subject is being placed immediately after break
-        if ($subject->type === SchedulerConfig::TYPE_CO_CURRICULAR &&
-            $period === SchedulerConfig::BREAK_PERIOD) {
-            return false;
+        // Block physical/co-curricular subjects from period 5
+        if ($period === SchedulerConfig::BREAK_PERIOD) {
+            if ($subject->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
+                return false;
+            }
+            $physicalKeywords = ['sport', 'sports', 'taekwondo', 'dance', 'physical', 'pe'];
+            $lName = strtolower($subject->name);
+            foreach ($physicalKeywords as $kw) {
+                if (strpos($lName, $kw) !== false) {
+                    return false;
+                }
+            }
         }
 
         // Check daily limit for this subject
@@ -1934,7 +1978,7 @@ class ConstraintChecker
 
     /**
      * Check that co-curricular periods (if 2) are consecutive
-     * ENHANCED: Better handling of co-curricular scheduling
+     * ENHANCED: Skips multi-subject days (caught by checkNoTwoCoCurricularSameDay)
      *
      * @param  Timetable  $timetable  Timetable to check
      * @return int Violation count
@@ -1958,6 +2002,12 @@ class ConstraintChecker
                     }
                 }
 
+                // Skip if multiple different co-curricular subjects on same day
+                // (already caught by checkNoTwoCoCurricularSameDay)
+                if (count($coCurricularPeriods) > 1) {
+                    continue;
+                }
+
                 // Check each co-curricular subject's period arrangement
                 foreach ($coCurricularPeriods as $subjectId => $periods) {
                     if (count($periods) == 2) {
@@ -1977,27 +2027,59 @@ class ConstraintChecker
     }
 
     /**
-     * Check that physical/co-curricular subjects are not scheduled immediately after break
-     * Hard requirement: After break (period 4), no physical period should be scheduled
+     * Check that physical/co-curricular subjects are NOT placed in period 5 (0-indexed: 4)
+     * Hard requirement: Physical subjects must NOT be scheduled in period 5
      *
      * @param  Timetable  $timetable  Timetable to check
      * @return int Violation count
      */
-    public function checkNoPhysicalAfterBreak($timetable)
+    public function checkPhysicalPeriodPlacement($timetable)
     {
         $violations = 0;
+        $forbiddenPeriod = SchedulerConfig::BREAK_PERIOD; // Period 5 in 1-indexed = 4 in 0-indexed
 
-        // Period immediately after break (period 5 in 1-indexed, period 4 in 0-indexed)
-        $periodAfterBreak = SchedulerConfig::BREAK_PERIOD;
+        $physicalKeywords = ['sport', 'sports', 'taekwondo', 'dance', 'physical', 'pe'];
 
         foreach ($this->sections as $section) {
             for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                $subjectId = $timetable->slots[$section->id][$day][$periodAfterBreak]->subjectId;
+                $subjectId = $timetable->slots[$section->id][$day][$forbiddenPeriod]->subjectId;
 
-                if ($subjectId &&
-                    isset($this->subjects[$subjectId]) &&
-                    $this->subjects[$subjectId]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
-                    $violations++;
+                if (! $subjectId || ! isset($this->subjects[$subjectId])) {
+                    continue;
+                }
+
+                $subject = $this->subjects[$subjectId];
+                $lowerName = strtolower($subject->name);
+
+                foreach ($physicalKeywords as $keyword) {
+                    if (strpos($lowerName, $keyword) !== false) {
+                        $violations++;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return $violations;
+    }
+
+    /**
+     * Check that teachers are not scheduled during unavailable times
+     *
+     * @param  Timetable  $timetable  Timetable to check
+     * @return int Violation count
+     */
+    public function checkTeacherUnavailability($timetable)
+    {
+        $violations = 0;
+
+        foreach ($this->sections as $section) {
+            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                    $teacherId = $timetable->slots[$section->id][$day][$period]->teacherId;
+                    if ($teacherId && ! $this->hasTeacherAvailability($teacherId, $day, $period)) {
+                        $violations++;
+                    }
                 }
             }
         }
@@ -2258,7 +2340,9 @@ class ConstraintChecker
     // ========================================
 
     /**
-     * Check positional consistency across days
+     * Check positional consistency across days (aligned with ConflictChecker).
+     * Excludes co-curricular subjects from the order sequence.
+     * Uses day 0 as reference. Only flags a day if >30% of positions differ.
      *
      * @param  Timetable  $timetable  Timetable to check
      * @return int Violation count
@@ -2268,30 +2352,44 @@ class ConstraintChecker
         $violations = 0;
 
         foreach ($this->sections as $section) {
-            $dayPatterns = [];
+            // Build subject order per day, EXCLUDING co-curricular
+            $dayOrders = [];
 
             for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                $pattern = [];
+                $order = [];
                 for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
                     $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
-                    $subject = $subjectId ? $this->subjects[$subjectId] : null;
-
-                    if ($subject && $subject->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
-                        $pattern[] = 'CO_CURRICULAR';
-                    } else {
-                        $pattern[] = $subjectId;
+                    if ($subjectId && isset($this->subjects[$subjectId]) &&
+                        $this->subjects[$subjectId]->type !== SchedulerConfig::TYPE_CO_CURRICULAR) {
+                        $order[] = $subjectId;
                     }
                 }
-                $dayPatterns[] = $pattern;
+                $dayOrders[$day] = $order;
             }
 
-            for ($i = 1; $i < count($dayPatterns); $i++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
-                    if ($dayPatterns[0][$period] !== 'CO_CURRICULAR' &&
-                        $dayPatterns[$i][$period] !== 'CO_CURRICULAR' &&
-                        $dayPatterns[0][$period] !== $dayPatterns[$i][$period]) {
-                        $violations++;
+            // Use day 0 as reference
+            $reference = $dayOrders[0];
+            if (empty($reference)) {
+                continue;
+            }
+
+            for ($day = 1; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+                $order = $dayOrders[$day];
+                if (empty($order)) {
+                    continue;
+                }
+
+                $mismatches = 0;
+                $totalComparable = min(count($reference), count($order));
+                for ($i = 0; $i < $totalComparable; $i++) {
+                    if (($reference[$i] ?? null) !== ($order[$i] ?? null)) {
+                        $mismatches++;
                     }
+                }
+
+                // Only flag if more than 30% differ (matches ConflictChecker)
+                if ($totalComparable > 0 && ($mismatches / $totalComparable) > 0.3) {
+                    $violations++;
                 }
             }
         }
@@ -2300,7 +2398,7 @@ class ConstraintChecker
     }
 
     /**
-     * Prefer only one period per subject per day
+     * Prefer only one period per subject per day (skip co-curricular — they're allowed 2/day)
      *
      * @param  Timetable  $timetable  Timetable to check
      * @return int Violation count
@@ -2313,7 +2411,12 @@ class ConstraintChecker
             for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
                 $subjectCounts = $this->countSubjectsOnDay($timetable, $section, $day);
 
-                foreach ($subjectCounts as $count) {
+                foreach ($subjectCounts as $subjectId => $count) {
+                    // Skip co-curricular subjects — they're allowed 2 per day
+                    if (isset($this->subjects[$subjectId]) &&
+                        $this->subjects[$subjectId]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
+                        continue;
+                    }
                     if ($count > 1) {
                         $violations += $count - 1;
                     }
@@ -2325,7 +2428,9 @@ class ConstraintChecker
     }
 
     /**
-     * Check core subjects maintain consistent positions
+     * Check core subjects maintain consistent positions (aligned with ConflictChecker).
+     * Uses case-insensitive keyword matching. Takes FIRST period per day.
+     * Only flags if subject appears on >=3 days AND uses >=3 different first-period positions.
      *
      * @param  Timetable  $timetable  Timetable to check
      * @return int Violation count
@@ -2333,7 +2438,7 @@ class ConstraintChecker
     public function checkCoreSubjectConsistency($timetable)
     {
         $violations = 0;
-        $coreSubjects = ['English', 'Math', 'Science'];
+        $coreKeywords = ['english', 'math', 'maths', 'mathematics', 'science'];
 
         foreach ($this->sections as $section) {
             $corePositions = [];
@@ -2341,19 +2446,35 @@ class ConstraintChecker
             for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
                 for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
                     $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
-                    if ($subjectId) {
-                        $subject = $this->subjects[$subjectId];
-                        if (in_array($subject->name, $coreSubjects)) {
-                            $corePositions[$subject->name][$day] = $period;
+                    if (! $subjectId || ! isset($this->subjects[$subjectId])) {
+                        continue;
+                    }
+
+                    $subject = $this->subjects[$subjectId];
+                    $lowerName = strtolower($subject->name);
+
+                    $isCore = false;
+                    foreach ($coreKeywords as $keyword) {
+                        if (strpos($lowerName, $keyword) !== false) {
+                            $isCore = true;
+                            break;
                         }
+                    }
+
+                    // Take FIRST period per day per subject (matches ConflictChecker)
+                    if ($isCore && ! isset($corePositions[$subjectId][$day])) {
+                        $corePositions[$subjectId][$day] = $period;
                     }
                 }
             }
 
-            foreach ($corePositions as $subjectName => $positions) {
-                $uniquePositions = array_unique($positions);
-                if (count($uniquePositions) > 1) {
-                    $violations += count($uniquePositions) - 1;
+            foreach ($corePositions as $subjectId => $positions) {
+                $uniquePositions = count(array_unique($positions));
+                $totalDays = count($positions);
+
+                // Match ConflictChecker: only flag if >=3 days AND >=3 unique positions
+                if ($totalDays >= 3 && $uniquePositions >= 3) {
+                    $violations++;
                 }
             }
         }
@@ -2370,7 +2491,7 @@ class ConstraintChecker
     public function checkHeavySubjectSpacing($timetable)
     {
         $violations = 0;
-        $heavySubjects = ['Math', 'Science'];
+        $heavyKeywords = ['math', 'maths', 'mathematics', 'science', 'english'];
 
         foreach ($this->sections as $section) {
             for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
@@ -2382,8 +2503,21 @@ class ConstraintChecker
                         $currentSubject = $this->subjects[$current];
                         $nextSubject = $this->subjects[$next];
 
-                        if (in_array($currentSubject->name, $heavySubjects) &&
-                            in_array($nextSubject->name, $heavySubjects)) {
+                        $currentIsHeavy = false;
+                        $nextIsHeavy = false;
+                        $currentLower = strtolower($currentSubject->name);
+                        $nextLower = strtolower($nextSubject->name);
+
+                        foreach ($heavyKeywords as $keyword) {
+                            if (strpos($currentLower, $keyword) !== false) {
+                                $currentIsHeavy = true;
+                            }
+                            if (strpos($nextLower, $keyword) !== false) {
+                                $nextIsHeavy = true;
+                            }
+                        }
+
+                        if ($currentIsHeavy && $nextIsHeavy) {
                             $violations++;
                         }
                     }
@@ -2416,6 +2550,72 @@ class ConstraintChecker
         }
 
         return $violations;
+    }
+
+    /**
+     * Check that combined subjects have adjacent periods on the same day.
+     * This catches the 'combined_period_violation' from ConflictChecker which
+     * was previously MISSING entirely from the GA.
+     *
+     * @param  Timetable  $timetable  Timetable to check
+     * @return int Violation count
+     */
+    public function checkCombinedPeriodAdjacency($timetable)
+    {
+        $violations = 0;
+
+        foreach ($this->sections as $section) {
+            foreach ($this->subjects as $subject) {
+                if (! $subject->isCombined) {
+                    continue;
+                }
+
+                for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+                    $periods = [];
+                    for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                        if ($timetable->slots[$section->id][$day][$period]->subjectId === $subject->id) {
+                            $periods[] = $period;
+                        }
+                    }
+
+                    if (count($periods) < 2) {
+                        continue;
+                    }
+
+                    sort($periods);
+                    for ($i = 0; $i < count($periods) - 1; $i++) {
+                        if ($periods[$i + 1] - $periods[$i] > 1) {
+                            $violations++;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $violations;
+    }
+
+    /**
+     * Helper: check if a subject is "heavy" (mentally demanding)
+     *
+     * @param  Subject  $subject  Subject to check
+     * @param  array  $keywords  Heavy subject keywords
+     * @return bool True if subject is heavy
+     */
+    public function isHeavySubject($subject, $keywords = null)
+    {
+        if ($keywords === null) {
+            $keywords = ['math', 'maths', 'mathematics', 'science', 'english'];
+        }
+
+        $lower = strtolower($subject->name);
+        foreach ($keywords as $kw) {
+            if (strpos($lower, $kw) !== false) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 
@@ -2466,14 +2666,16 @@ class FitnessCalculator
     {
         $violations = 0;
 
+        $violations += $this->checker->checkTeacherUnavailability($timetable) *
+                       SchedulerConfig::WEIGHT_TEACHER_UNAVAILABILITY;
         $violations += $this->checker->checkNoTwoCoCurricularSameDay($timetable) *
                        SchedulerConfig::WEIGHT_CO_CURRICULAR_SAME_DAY;
         $violations += $this->checker->checkMaxTwoPeriodsPerSubjectPerDay($timetable) *
                        SchedulerConfig::WEIGHT_MAX_TWO_PERIODS_PER_DAY;
         $violations += $this->checker->checkCoCurricularConsecutive($timetable) *
                        SchedulerConfig::WEIGHT_CO_CURRICULAR_CONSECUTIVE;
-        $violations += $this->checker->checkNoPhysicalAfterBreak($timetable) *
-                       SchedulerConfig::WEIGHT_NO_PHYSICAL_AFTER_BREAK;
+        $violations += $this->checker->checkPhysicalPeriodPlacement($timetable) *
+                       SchedulerConfig::WEIGHT_PHYSICAL_NOT_IN_PERIOD_5;
         $violations += $this->checker->checkSubjectWeeklyAllocation($timetable) *
                        SchedulerConfig::WEIGHT_SUBJECT_WEEKLY_ALLOCATION;
         $violations += $this->checker->checkTeacherConflicts($timetable) *
@@ -2484,6 +2686,8 @@ class FitnessCalculator
                        SchedulerConfig::WEIGHT_NO_EMPTY_SLOTS;
         $violations += $this->checker->checkCombinedSubjects($timetable) *
                        SchedulerConfig::WEIGHT_COMBINED_SUBJECTS;
+        $violations += $this->checker->checkCombinedPeriodAdjacency($timetable) *
+                       SchedulerConfig::WEIGHT_COMBINED_PERIOD_ADJACENCY;
 
         return $violations;
     }
@@ -2530,6 +2734,9 @@ class GeneticOperations
     /** @var TimetableRepair Repair helper instance */
     private $repairHelper;
 
+    /** @var ConstraintChecker Constraint checker instance */
+    private $constraintChecker;
+
     /**
      * Create a new GeneticOperations instance
      *
@@ -2543,6 +2750,7 @@ class GeneticOperations
         $this->teachers = $teachers;
         $this->sections = $sections;
         $this->repairHelper = new TimetableRepair($subjects, $teachers, $sections);
+        $this->constraintChecker = new ConstraintChecker($subjects, $teachers, $sections);
     }
 
     /**
@@ -2600,6 +2808,9 @@ class GeneticOperations
         }
 
         $this->repairHelper->repair($timetable);
+
+        // Reset fitness so it gets recalculated
+        $timetable->fitness = null;
     }
 
     /**
@@ -2657,25 +2868,38 @@ class GeneticOperations
         );
 
         $newSubjectId = $allSubjects[array_rand($allSubjects)];
-        $newTeacherId = $this->assignTeacher($newSubjectId);
+        $newTeacherId = $this->assignTeacher($newSubjectId, $day, $period);
 
         $timetable->slots[$section->id][$day][$period]->subjectId = $newSubjectId;
         $timetable->slots[$section->id][$day][$period]->teacherId = $newTeacherId;
     }
 
     /**
-     * Assign a random eligible teacher to a subject
+     * Assign an eligible teacher to a subject, preferring available teachers
      *
      * @param  string  $subjectId  Subject identifier
+     * @param  int|null  $day  Day index for availability check
+     * @param  int|null  $period  Period index for availability check
      * @return string|null Teacher ID or null
      */
-    private function assignTeacher($subjectId)
+    private function assignTeacher($subjectId, $day = null, $period = null)
     {
         $eligibleTeachers = [];
+        $availableTeachers = [];
+
         foreach ($this->teachers as $teacher) {
             if (in_array($subjectId, $teacher->subjects)) {
                 $eligibleTeachers[] = $teacher->id;
+                if ($day !== null && $period !== null &&
+                    $this->constraintChecker->hasTeacherAvailability($teacher->id, $day, $period)) {
+                    $availableTeachers[] = $teacher->id;
+                }
             }
+        }
+
+        // Prefer available teachers
+        if (! empty($availableTeachers)) {
+            return $availableTeachers[array_rand($availableTeachers)];
         }
 
         return ! empty($eligibleTeachers) ? $eligibleTeachers[array_rand($eligibleTeachers)] : null;
@@ -2733,7 +2957,6 @@ class TimetableRepair
             }
             $this->ensureTotalPeriods($timetable, $section);
             $this->fixSubjectAllocations($timetable, $section);
-            $this->fixCoCurricularConstraints($timetable, $section);
             $this->fixDailySubjectLimits($timetable, $section);
         }
 
@@ -2741,10 +2964,42 @@ class TimetableRepair
             echo "    Fixing teacher constraints...\n";
         }
         $this->fixTeacherConstraints($timetable);
+        $this->fixTeacherAvailability($timetable);
         if ($debug) {
             echo "    Fixing combined subjects...\n";
         }
         $this->fixCombinedSubjects($timetable);
+
+        // Fix subject daily balance (non-co-curricular appearing 2+ per day)
+        foreach ($this->sections as $section) {
+            $this->fixSubjectDailyBalance($timetable, $section);
+        }
+
+        // Break up consecutive heavy subjects
+        foreach ($this->sections as $section) {
+            $this->fixConsecutiveHeavySubjects($timetable, $section);
+        }
+
+        // Move co-curricular from early periods to later ones
+        foreach ($this->sections as $section) {
+            $this->fixCoCurricularPlacement($timetable, $section);
+        }
+
+        // Run co-curricular fixes (same-day, consecutiveness)
+        foreach ($this->sections as $section) {
+            $this->fixCoCurricularConstraints($timetable, $section);
+        }
+
+        // Move physical subjects OUT of period 5 — LAST so other repairs don't undo it
+        foreach ($this->sections as $section) {
+            $this->fixPhysicalPeriodPlacement($timetable, $section);
+        }
+
+        // Final lightweight cleanup: fix any weekly max and daily >2 violations
+        // without touching co-curricular subjects
+        foreach ($this->sections as $section) {
+            $this->fixRemainingHardViolations($timetable, $section);
+        }
     }
 
     /**
@@ -2776,7 +3031,7 @@ class TimetableRepair
                 for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
                     if ($timetable->slots[$section->id][$day][$period]->subjectId === null) {
                         $subjectId = $allSubjects[array_rand($allSubjects)];
-                        $teacherId = $this->assignTeacher($subjectId);
+                        $teacherId = $this->assignTeacher($subjectId, $day, $period);
 
                         $timetable->slots[$section->id][$day][$period]->subjectId = $subjectId;
                         $timetable->slots[$section->id][$day][$period]->teacherId = $teacherId;
@@ -2847,7 +3102,7 @@ class TimetableRepair
                         }
 
                         if ($replacementSubjectId) {
-                            $newTeacherId = $this->assignTeacher($replacementSubjectId);
+                            $newTeacherId = $this->assignTeacher($replacementSubjectId, $day, $period);
                             $timetable->slots[$section->id][$day][$period]->subjectId = $replacementSubjectId;
                             $timetable->slots[$section->id][$day][$period]->teacherId = $newTeacherId;
                             $removed++;
@@ -2876,7 +3131,7 @@ class TimetableRepair
 
                             // Only swap if current subject is above minimum
                             if ($currentCount > $currentSubject->minPeriodsPerWeek) {
-                                $newTeacherId = $this->assignTeacher($neededSubjectId);
+                                $newTeacherId = $this->assignTeacher($neededSubjectId, $day, $period);
                                 $timetable->slots[$section->id][$day][$period]->subjectId = $neededSubjectId;
                                 $timetable->slots[$section->id][$day][$period]->teacherId = $newTeacherId;
 
@@ -2927,14 +3182,8 @@ class TimetableRepair
                     $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
 
                     if ($subjectId && $this->subjects[$subjectId]->type === 'co_curricular' && $subjectId !== $keepSubjectId) {
-                        // Replace with a compulsory or optional subject
-                        $replacementSubjects = array_merge(
-                            $section->compulsorySubjects,
-                            $section->optionalSubjects
-                        );
-
-                        $newSubjectId = $replacementSubjects[array_rand($replacementSubjects)];
-                        $newTeacherId = $this->assignTeacher($newSubjectId);
+                        $newSubjectId = $this->findBestReplacementSubject($timetable, $section, $day);
+                        $newTeacherId = $this->assignTeacher($newSubjectId, $day, $period);
 
                         $timetable->slots[$section->id][$day][$period]->subjectId = $newSubjectId;
                         $timetable->slots[$section->id][$day][$period]->teacherId = $newTeacherId;
@@ -2967,13 +3216,10 @@ class TimetableRepair
                     // Replace excess periods with other subjects
                     for ($i = 2; $i < count($positions); $i++) {
                         $periodToReplace = $positions[$i];
-                        $replacementSubjects = array_merge(
-                            $section->compulsorySubjects,
-                            $section->optionalSubjects
-                        );
 
-                        $newSubjectId = $replacementSubjects[array_rand($replacementSubjects)];
-                        $newTeacherId = $this->assignTeacher($newSubjectId);
+                        $newSubjectId = $this->findBestReplacementSubject($timetable, $section, $day);
+                        $newTeacherId = $this->assignTeacher($newSubjectId, $day, $periodToReplace);
+                        $newTeacherId = $this->assignTeacher($newSubjectId, $day, $periodToReplace);
 
                         $timetable->slots[$section->id][$day][$periodToReplace]->subjectId = $newSubjectId;
                         $timetable->slots[$section->id][$day][$periodToReplace]->teacherId = $newTeacherId;
@@ -3033,7 +3279,7 @@ class TimetableRepair
                         }
 
                         if ($replacementSubjectId) {
-                            $newTeacherId = $this->assignTeacher($replacementSubjectId);
+                            $newTeacherId = $this->assignTeacher($replacementSubjectId, $day, $periodToReplace);
                             $timetable->slots[$section->id][$day][$periodToReplace]->subjectId = $replacementSubjectId;
                             $timetable->slots[$section->id][$day][$periodToReplace]->teacherId = $newTeacherId;
 
@@ -3164,6 +3410,43 @@ class TimetableRepair
     }
 
     /**
+     * Fix teacher availability violations - swap unavailable teachers for available ones
+     *
+     * @param  Timetable  $timetable  Timetable to repair
+     */
+    private function fixTeacherAvailability($timetable)
+    {
+        foreach ($this->sections as $section) {
+            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                    $teacherId = $timetable->slots[$section->id][$day][$period]->teacherId;
+                    $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
+
+                    if (! $teacherId || ! $subjectId) {
+                        continue;
+                    }
+
+                    // Check if teacher is available at this time
+                    if (! $this->constraintChecker->hasTeacherAvailability($teacherId, $day, $period)) {
+                        // Find an alternative teacher who is available
+                        $newTeacherId = $this->findAlternativeTeacher(
+                            $subjectId,
+                            $teacherId,
+                            $day,
+                            $period,
+                            $timetable
+                        );
+
+                        if ($newTeacherId !== $teacherId) {
+                            $timetable->slots[$section->id][$day][$period]->teacherId = $newTeacherId;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Fix combined subjects (must be scheduled simultaneously across sections of same grade)
      *
      * @param  Timetable  $timetable  Timetable to repair
@@ -3223,7 +3506,7 @@ class TimetableRepair
 
                         // Add subject at reference periods
                         foreach ($periods as $p) {
-                            $teacherId = $this->assignTeacher($subjectId);
+                            $teacherId = $this->assignTeacher($subjectId, $day, $p);
                             $timetable->slots[$section->id][$day][$p]->subjectId = $subjectId;
                             $timetable->slots[$section->id][$day][$p]->teacherId = $teacherId;
                         }
@@ -3234,18 +3517,662 @@ class TimetableRepair
     }
 
     /**
+     * Fix physical/sports subjects that ARE in period 5 (0-indexed: 4).
+     * Swaps them AWAY from period 5 to another available period.
+     */
+    private function fixPhysicalPeriodPlacement($timetable, $section)
+    {
+        $physicalKeywords = ['sport', 'sports', 'taekwondo', 'dance', 'physical', 'pe'];
+        $forbiddenPeriod = SchedulerConfig::BREAK_PERIOD; // 4 (0-indexed) = period 5
+
+        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            // Check if period 5 has a physical subject
+            $sid = $timetable->slots[$section->id][$day][$forbiddenPeriod]->subjectId;
+            if (! $sid || ! isset($this->subjects[$sid])) {
+                continue;
+            }
+
+            $lowerName = strtolower($this->subjects[$sid]->name);
+            $isPhysical = false;
+            foreach ($physicalKeywords as $kw) {
+                if (strpos($lowerName, $kw) !== false) {
+                    $isPhysical = true;
+                    break;
+                }
+            }
+
+            if (! $isPhysical) {
+                continue;
+            }
+
+            // Find a non-physical subject in another period to swap with
+            $swapped = false;
+            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                if ($period === $forbiddenPeriod) {
+                    continue;
+                }
+
+                $otherSid = $timetable->slots[$section->id][$day][$period]->subjectId;
+                if (! $otherSid || ! isset($this->subjects[$otherSid])) {
+                    continue;
+                }
+
+                // Make sure the swap target is NOT physical
+                $otherLower = strtolower($this->subjects[$otherSid]->name);
+                $otherIsPhysical = false;
+                foreach ($physicalKeywords as $kw) {
+                    if (strpos($otherLower, $kw) !== false) {
+                        $otherIsPhysical = true;
+                        break;
+                    }
+                }
+
+                if ($otherIsPhysical) {
+                    continue;
+                }
+
+                // Swap physical out of period 5
+                $temp = clone $timetable->slots[$section->id][$day][$forbiddenPeriod];
+                $timetable->slots[$section->id][$day][$forbiddenPeriod] = clone $timetable->slots[$section->id][$day][$period];
+                $timetable->slots[$section->id][$day][$period] = $temp;
+                $swapped = true;
+                break;
+            }
+        }
+    }
+
+    /**
+     * Lightweight final cleanup: fix weekly max/min violations and daily >2 excess.
+     * Does NOT touch co-curricular subjects or period-5 physical subjects.
+     * Runs multiple passes to stabilize.
+     */
+    private function fixRemainingHardViolations($timetable, $section)
+    {
+        $physicalKeywords = ['sport', 'sports', 'taekwondo', 'dance', 'physical', 'pe'];
+
+        // Helper: check if a slot is protected (co-curricular only)
+        $isProtected = function ($subjectId, $period) use ($physicalKeywords) {
+            if (! isset($this->subjects[$subjectId])) {
+                return true;
+            }
+            $subject = $this->subjects[$subjectId];
+            if ($subject->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
+                return true;
+            }
+
+            return false;
+        };
+
+        // Helper: count weekly allocations fresh
+        $countWeekly = function () use ($timetable, $section) {
+            $counts = [];
+            for ($d = 0; $d < SchedulerConfig::DAYS_PER_WEEK; $d++) {
+                for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+                    $sid = $timetable->slots[$section->id][$d][$p]->subjectId;
+                    if ($sid) {
+                        $counts[$sid] = ($counts[$sid] ?? 0) + 1;
+                    }
+                }
+            }
+
+            return $counts;
+        };
+
+        // Helper: find subject below minimum that can go on this day
+        $findUnderMinSubject = function ($day) use ($timetable, $section, $countWeekly) {
+            $weeklyCounts = $countWeekly();
+            $dailyCounts = [];
+            for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+                $sid = $timetable->slots[$section->id][$day][$p]->subjectId;
+                if ($sid) {
+                    $dailyCounts[$sid] = ($dailyCounts[$sid] ?? 0) + 1;
+                }
+            }
+
+            $best = null;
+            $bestDeficit = 0;
+            $allSubjects = array_merge(
+                $section->compulsorySubjects,
+                $section->optionalSubjects,
+                $section->coCurricularSubjects ?? []
+            );
+            foreach ($allSubjects as $candidateId) {
+                if (! isset($this->subjects[$candidateId])) {
+                    continue;
+                }
+                $subject = $this->subjects[$candidateId];
+                $weeklyCount = $weeklyCounts[$candidateId] ?? 0;
+                $dailyCount = $dailyCounts[$candidateId] ?? 0;
+                $deficit = $subject->minPeriodsPerWeek - $weeklyCount;
+                if ($deficit > 0 && $weeklyCount < $subject->maxPeriodsPerWeek
+                    && $dailyCount < SchedulerConfig::MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+                    if ($deficit > $bestDeficit) {
+                        $bestDeficit = $deficit;
+                        $best = $candidateId;
+                    }
+                }
+            }
+
+            return $best;
+        };
+
+        // Iterate all 3 passes up to 3 times to catch cascading fixes
+        for ($iteration = 0; $iteration < 3; $iteration++) {
+            $changed = false;
+
+        // Pass 1: Fix subjects exceeding max weekly periods
+        $weeklyCounts = $countWeekly();
+        foreach ($weeklyCounts as $subjectId => $count) {
+            if (! isset($this->subjects[$subjectId])) {
+                continue;
+            }
+            $subject = $this->subjects[$subjectId];
+            $excess = $count - $subject->maxPeriodsPerWeek;
+            if ($excess <= 0) {
+                continue;
+            }
+
+            for ($d = SchedulerConfig::DAYS_PER_WEEK - 1; $d >= 0 && $excess > 0; $d--) {
+                for ($p = SchedulerConfig::PERIODS_PER_DAY - 1; $p >= 0 && $excess > 0; $p--) {
+                    if ($timetable->slots[$section->id][$d][$p]->subjectId !== $subjectId) {
+                        continue;
+                    }
+                    if ($isProtected($subjectId, $p)) {
+                        continue;
+                    }
+
+                    // Prefer under-minimum subjects, then general best replacement
+                    $newSubjectId = $findUnderMinSubject($d)
+                        ?? $this->findBestReplacementSubject($timetable, $section, $d);
+                    $timetable->slots[$section->id][$d][$p]->subjectId = $newSubjectId;
+                    $timetable->slots[$section->id][$d][$p]->teacherId = $this->assignTeacher($newSubjectId, $d, $p);
+                    $excess--;
+                    $changed = true;
+                }
+            }
+        }
+
+        // Pass 2: Fix subjects below min weekly periods (swap over-allocated slots)
+        $weeklyCounts = $countWeekly();
+        $allSubjects = array_merge(
+            $section->compulsorySubjects,
+            $section->optionalSubjects,
+            $section->coCurricularSubjects ?? []
+        );
+        foreach ($allSubjects as $subjectId) {
+            if (! isset($this->subjects[$subjectId])) {
+                continue;
+            }
+            $subject = $this->subjects[$subjectId];
+            $weeklyCount = $weeklyCounts[$subjectId] ?? 0;
+            $deficit = $subject->minPeriodsPerWeek - $weeklyCount;
+            if ($deficit <= 0) {
+                continue;
+            }
+
+            // Find slots of over-allocated subjects to replace
+            $weeklyCounts = $countWeekly(); // Recount fresh
+            $isCoCurricular = ($subject->type === SchedulerConfig::TYPE_CO_CURRICULAR);
+            for ($d = 0; $d < SchedulerConfig::DAYS_PER_WEEK && $deficit > 0; $d++) {
+                // Check daily count of target subject on this day
+                $dailyTarget = 0;
+                $hasDifferentCoCurricular = false;
+                for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+                    $slotSid = $timetable->slots[$section->id][$d][$p]->subjectId;
+                    if ($slotSid === $subjectId) {
+                        $dailyTarget++;
+                    }
+                    // Check if day already has a different co-curricular subject
+                    if ($isCoCurricular && $slotSid && $slotSid !== $subjectId
+                        && isset($this->subjects[$slotSid])
+                        && $this->subjects[$slotSid]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
+                        $hasDifferentCoCurricular = true;
+                    }
+                }
+                if ($dailyTarget >= SchedulerConfig::MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+                    continue;
+                }
+                // Don't place co-curricular on a day with another co-curricular
+                if ($isCoCurricular && $hasDifferentCoCurricular) {
+                    continue;
+                }
+
+                for ($p = SchedulerConfig::PERIODS_PER_DAY - 1; $p >= 0 && $deficit > 0; $p--) {
+                    $existingSid = $timetable->slots[$section->id][$d][$p]->subjectId;
+                    if (! $existingSid || $existingSid === $subjectId) {
+                        continue;
+                    }
+                    if ($isProtected($existingSid, $p)) {
+                        continue;
+                    }
+                    if (! isset($this->subjects[$existingSid])) {
+                        continue;
+                    }
+
+                    // Only replace if existing subject is above its minimum
+                    $existingWeekly = $weeklyCounts[$existingSid] ?? 0;
+                    if ($existingWeekly <= $this->subjects[$existingSid]->minPeriodsPerWeek) {
+                        continue;
+                    }
+
+                    $timetable->slots[$section->id][$d][$p]->subjectId = $subjectId;
+                    $timetable->slots[$section->id][$d][$p]->teacherId = $this->assignTeacher($subjectId, $d, $p);
+                    $deficit--;
+                    $dailyTarget++;
+                    $weeklyCounts[$subjectId] = ($weeklyCounts[$subjectId] ?? 0) + 1;
+                    $weeklyCounts[$existingSid]--;
+                    $changed = true;
+                }
+            }
+        }
+
+        // Pass 3: Fix subjects appearing >2 per day
+        for ($d = 0; $d < SchedulerConfig::DAYS_PER_WEEK; $d++) {
+            $dailyCounts = [];
+            for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+                $sid = $timetable->slots[$section->id][$d][$p]->subjectId;
+                if ($sid) {
+                    $dailyCounts[$sid] = ($dailyCounts[$sid] ?? 0) + 1;
+                }
+            }
+
+            foreach ($dailyCounts as $subjectId => $count) {
+                if ($count <= 2 || ! isset($this->subjects[$subjectId])) {
+                    continue;
+                }
+                if ($isProtected($subjectId, -1)) {
+                    // co-curricular; skip
+                    continue;
+                }
+
+                $excess = $count - 2;
+                for ($p = SchedulerConfig::PERIODS_PER_DAY - 1; $p >= 0 && $excess > 0; $p--) {
+                    if ($timetable->slots[$section->id][$d][$p]->subjectId !== $subjectId) {
+                        continue;
+                    }
+                    if ($isProtected($subjectId, $p)) {
+                        continue;
+                    }
+
+                    $newSubjectId = $findUnderMinSubject($d)
+                        ?? $this->findBestReplacementSubject($timetable, $section, $d);
+                    if ($newSubjectId === $subjectId) {
+                        continue; // Don't replace with same subject
+                    }
+                    $timetable->slots[$section->id][$d][$p]->subjectId = $newSubjectId;
+                    $timetable->slots[$section->id][$d][$p]->teacherId = $this->assignTeacher($newSubjectId, $d, $p);
+                    $excess--;
+                    $changed = true;
+                }
+            }
+        }
+
+            if (! $changed) {
+                break; // No more fixes possible
+            }
+        } // end iteration loop
+    }
+
+    /**
+     * Fix non-co-curricular subjects appearing 2+ times on the same day.
+     * Moves one occurrence to a day where the subject is absent or appears less.
+     */
+    private function fixSubjectDailyBalance($timetable, $section)
+    {
+        $physicalKeywords = ['sport', 'sports', 'taekwondo', 'dance', 'physical', 'pe'];
+
+        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            $subjectPositions = [];
+            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                $sid = $timetable->slots[$section->id][$day][$period]->subjectId;
+                if ($sid) {
+                    $subjectPositions[$sid][] = $period;
+                }
+            }
+
+            foreach ($subjectPositions as $subjectId => $positions) {
+                if (count($positions) < 2) {
+                    continue;
+                }
+                if (! isset($this->subjects[$subjectId])) {
+                    continue;
+                }
+                // Skip co-curricular (allowed 2/day)
+                if ($this->subjects[$subjectId]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
+                    continue;
+                }
+
+                // Try to swap excess occurrences with a slot on another day
+                for ($i = 1; $i < count($positions); $i++) {
+                    $sourcePeriod = $positions[$i];
+                    $swapped = false;
+
+                    for ($otherDay = 0; $otherDay < SchedulerConfig::DAYS_PER_WEEK && ! $swapped; $otherDay++) {
+                        if ($otherDay === $day) {
+                            continue;
+                        }
+
+                        // Count how many times this subject already appears on otherDay
+                        $countOnOther = 0;
+                        for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+                            if ($timetable->slots[$section->id][$otherDay][$p]->subjectId === $subjectId) {
+                                $countOnOther++;
+                            }
+                        }
+                        if ($countOnOther >= 1) {
+                            continue; // otherDay already has this subject
+                        }
+
+                        // Try all periods on otherDay for a swap candidate
+                        for ($targetPeriod = 0; $targetPeriod < SchedulerConfig::PERIODS_PER_DAY && ! $swapped; $targetPeriod++) {
+                            $targetSid = $timetable->slots[$section->id][$otherDay][$targetPeriod]->subjectId;
+
+                            // Don't swap co-curricular
+                            if ($targetSid && isset($this->subjects[$targetSid]) &&
+                                $this->subjects[$targetSid]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
+                                continue;
+                            }
+
+                            // Don't swap physical subjects INTO period 5
+                            if ($targetPeriod === SchedulerConfig::BREAK_PERIOD) {
+                                $srcSid = $timetable->slots[$section->id][$day][$sourcePeriod]->subjectId;
+                                if ($srcSid && isset($this->subjects[$srcSid])) {
+                                    $sLower = strtolower($this->subjects[$srcSid]->name);
+                                    foreach ($physicalKeywords as $kw) {
+                                        if (strpos($sLower, $kw) !== false) {
+                                            continue 2;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Check that the target subject won't create a new balance violation on $day
+                            if ($targetSid) {
+                                $targetCountOnDay = 0;
+                                for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+                                    if ($timetable->slots[$section->id][$day][$p]->subjectId === $targetSid) {
+                                        $targetCountOnDay++;
+                                    }
+                                }
+                                if ($targetCountOnDay >= 1 && isset($this->subjects[$targetSid]) &&
+                                    $this->subjects[$targetSid]->type !== SchedulerConfig::TYPE_CO_CURRICULAR) {
+                                    continue; // Would create a new balance violation
+                                }
+                            }
+
+                            // Swap
+                            $temp = clone $timetable->slots[$section->id][$otherDay][$targetPeriod];
+                            $timetable->slots[$section->id][$otherDay][$targetPeriod] = clone $timetable->slots[$section->id][$day][$sourcePeriod];
+                            $timetable->slots[$section->id][$day][$sourcePeriod] = $temp;
+
+                            // Re-assign teachers for availability
+                            $timetable->slots[$section->id][$day][$sourcePeriod]->teacherId =
+                                $this->assignTeacher($timetable->slots[$section->id][$day][$sourcePeriod]->subjectId, $day, $sourcePeriod);
+                            $timetable->slots[$section->id][$otherDay][$targetPeriod]->teacherId =
+                                $this->assignTeacher($timetable->slots[$section->id][$otherDay][$targetPeriod]->subjectId, $otherDay, $targetPeriod);
+
+                            $swapped = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Break up consecutive heavy subjects (math, science, english) by swapping with non-heavy.
+     * Avoids swapping physical subjects out of period 5.
+     */
+    private function fixConsecutiveHeavySubjects($timetable, $section)
+    {
+        $heavyKeywords = ['math', 'maths', 'mathematics', 'science', 'english'];
+        $physicalKeywords = ['sport', 'sports', 'taekwondo', 'dance', 'physical', 'pe'];
+
+        // Run multiple passes to handle chains of 3+ heavy subjects
+        for ($pass = 0; $pass < 2; $pass++) {
+            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY - 1; $period++) {
+                    $curId = $timetable->slots[$section->id][$day][$period]->subjectId;
+                    $nextId = $timetable->slots[$section->id][$day][$period + 1]->subjectId;
+
+                    if (! $curId || ! $nextId || ! isset($this->subjects[$curId]) || ! isset($this->subjects[$nextId])) {
+                        continue;
+                    }
+
+                    $curHeavy = $this->isHeavySubject($this->subjects[$curId]->name, $heavyKeywords);
+                    $nextHeavy = $this->isHeavySubject($this->subjects[$nextId]->name, $heavyKeywords);
+
+                    if (! $curHeavy || ! $nextHeavy) {
+                        continue;
+                    }
+
+                    // Find a non-heavy, non-co-curricular slot to swap with the second heavy
+                    $swapped = false;
+
+                    // Check all periods in the day (after, then before)
+                    $candidates = [];
+                    for ($s = $period + 2; $s < SchedulerConfig::PERIODS_PER_DAY; $s++) {
+                        $candidates[] = $s;
+                    }
+                    for ($s = 0; $s < $period; $s++) {
+                        $candidates[] = $s;
+                    }
+
+                    foreach ($candidates as $swap) {
+                        if ($swapped) {
+                            break;
+                        }
+                        $swapId = $timetable->slots[$section->id][$day][$swap]->subjectId;
+                        if (! $swapId || ! isset($this->subjects[$swapId])) {
+                            continue;
+                        }
+                        if ($this->isHeavySubject($this->subjects[$swapId]->name, $heavyKeywords)) {
+                            continue;
+                        }
+                        if ($this->subjects[$swapId]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
+                            continue;
+                        }
+                        // Don't swap physical INTO period 5
+                        if ($period + 1 === SchedulerConfig::BREAK_PERIOD || $swap === SchedulerConfig::BREAK_PERIOD) {
+                            // Check if a physical subject would end up at period 5
+                            $checkId = ($swap === SchedulerConfig::BREAK_PERIOD) ? $timetable->slots[$section->id][$day][$period + 1]->subjectId : $swapId;
+                            if ($checkId && isset($this->subjects[$checkId])) {
+                                $cLower = strtolower($this->subjects[$checkId]->name);
+                                $isPhys = false;
+                                foreach ($physicalKeywords as $kw) {
+                                    if (strpos($cLower, $kw) !== false) {
+                                        $isPhys = true;
+                                        break;
+                                    }
+                                }
+                                if ($isPhys) {
+                                    continue;
+                                }
+                            }
+                        }
+
+                        // Would the swap create a new consecutive-heavy pair?
+                        // Check neighbors of swap position after swapping
+                        $wouldCreateNew = false;
+                        if ($swap > 0) {
+                            $neighborId = $timetable->slots[$section->id][$day][$swap - 1]->subjectId;
+                            if ($neighborId && isset($this->subjects[$neighborId]) &&
+                                $this->isHeavySubject($this->subjects[$neighborId]->name, $heavyKeywords) &&
+                                $neighborId !== $nextId) {
+                                $wouldCreateNew = true;
+                            }
+                        }
+                        if (! $wouldCreateNew && $swap < SchedulerConfig::PERIODS_PER_DAY - 1) {
+                            $neighborId = $timetable->slots[$section->id][$day][$swap + 1]->subjectId;
+                            if ($neighborId && isset($this->subjects[$neighborId]) &&
+                                $this->isHeavySubject($this->subjects[$neighborId]->name, $heavyKeywords) &&
+                                $neighborId !== $nextId) {
+                                $wouldCreateNew = true;
+                            }
+                        }
+
+                        if ($wouldCreateNew) {
+                            continue;
+                        }
+
+                        // Swap period+1 with swap
+                        $temp = clone $timetable->slots[$section->id][$day][$swap];
+                        $timetable->slots[$section->id][$day][$swap] = clone $timetable->slots[$section->id][$day][$period + 1];
+                        $timetable->slots[$section->id][$day][$period + 1] = $temp;
+                        $swapped = true;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Move co-curricular subjects from early periods (< 4, 1-indexed) to later periods.
+     */
+    private function fixCoCurricularPlacement($timetable, $section)
+    {
+        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($period = 0; $period < SchedulerConfig::CO_CURRICULAR_PREFERRED_START_PERIOD; $period++) {
+                $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
+                if (! $subjectId || ! isset($this->subjects[$subjectId])) {
+                    continue;
+                }
+                if ($this->subjects[$subjectId]->type !== SchedulerConfig::TYPE_CO_CURRICULAR) {
+                    continue;
+                }
+
+                // Find a later non-co-curricular slot to swap with
+                $swapped = false;
+                for ($swap = SchedulerConfig::CO_CURRICULAR_PREFERRED_START_PERIOD; $swap < SchedulerConfig::PERIODS_PER_DAY && ! $swapped; $swap++) {
+                    $swapId = $timetable->slots[$section->id][$day][$swap]->subjectId;
+                    if ($swapId && isset($this->subjects[$swapId]) &&
+                        $this->subjects[$swapId]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
+                        continue; // Don't swap with another co-curricular
+                    }
+
+                    $temp = clone $timetable->slots[$section->id][$day][$swap];
+                    $timetable->slots[$section->id][$day][$swap] = clone $timetable->slots[$section->id][$day][$period];
+                    $timetable->slots[$section->id][$day][$period] = $temp;
+                    $swapped = true;
+                }
+            }
+        }
+    }
+
+    /**
+     * Find the best replacement subject that won't violate weekly max or daily limits.
+     */
+    private function findBestReplacementSubject($timetable, $section, $day)
+    {
+        $replacementSubjects = array_merge(
+            $section->compulsorySubjects,
+            $section->optionalSubjects
+        );
+
+        // Count weekly allocations
+        $weeklyCounts = [];
+        for ($d = 0; $d < SchedulerConfig::DAYS_PER_WEEK; $d++) {
+            for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+                $sid = $timetable->slots[$section->id][$d][$p]->subjectId;
+                if ($sid) {
+                    $weeklyCounts[$sid] = ($weeklyCounts[$sid] ?? 0) + 1;
+                }
+            }
+        }
+
+        // Count daily allocations for this day
+        $dailyCounts = [];
+        for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+            $sid = $timetable->slots[$section->id][$day][$p]->subjectId;
+            if ($sid) {
+                $dailyCounts[$sid] = ($dailyCounts[$sid] ?? 0) + 1;
+            }
+        }
+
+        // Score candidates: prefer subjects under weekly max and under daily limit
+        $candidates = [];
+        foreach ($replacementSubjects as $candidateId) {
+            if (! isset($this->subjects[$candidateId])) {
+                continue;
+            }
+            $subject = $this->subjects[$candidateId];
+            $weeklyCount = $weeklyCounts[$candidateId] ?? 0;
+            $dailyCount = $dailyCounts[$candidateId] ?? 0;
+
+            // Skip if would exceed weekly max
+            if ($weeklyCount >= $subject->maxPeriodsPerWeek) {
+                continue;
+            }
+            // Skip if would exceed daily limit
+            if ($dailyCount >= SchedulerConfig::MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+                continue;
+            }
+
+            // Prefer subjects that are under their minimum (need more periods)
+            $score = 0;
+            if ($weeklyCount < $subject->minPeriodsPerWeek) {
+                $score = 10; // High priority — needs more periods
+            } elseif ($dailyCount === 0) {
+                $score = 5; // Not on this day yet
+            } else {
+                $score = 1;
+            }
+            $candidates[] = ['id' => $candidateId, 'score' => $score];
+        }
+
+        if (empty($candidates)) {
+            // Fallback to random
+            return $replacementSubjects[array_rand($replacementSubjects)];
+        }
+
+        // Sort by score descending and pick from top candidates
+        usort($candidates, fn ($a, $b) => $b['score'] - $a['score']);
+        $topScore = $candidates[0]['score'];
+        $topCandidates = array_filter($candidates, fn ($c) => $c['score'] === $topScore);
+        $picked = $topCandidates[array_rand($topCandidates)];
+
+        return $picked['id'];
+    }
+
+    /**
+     * Check if a subject name matches heavy subject keywords.
+     */
+    private function isHeavySubject(string $name, array $keywords): bool
+    {
+        $lower = strtolower($name);
+        foreach ($keywords as $kw) {
+            if (strpos($lower, $kw) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Assign a random eligible teacher to a subject
      *
      * @param  string  $subjectId  Subject identifier
      * @return string|null Teacher ID or null
      */
-    private function assignTeacher($subjectId)
+    private function assignTeacher($subjectId, $day = null, $period = null)
     {
         $eligibleTeachers = [];
+        $availableTeachers = [];
+
         foreach ($this->teachers as $teacher) {
             if (in_array($subjectId, $teacher->subjects)) {
                 $eligibleTeachers[] = $teacher->id;
+                if ($day !== null && $period !== null &&
+                    $this->constraintChecker->hasTeacherAvailability($teacher->id, $day, $period)) {
+                    $availableTeachers[] = $teacher->id;
+                }
             }
+        }
+
+        // Prefer available teachers
+        if (! empty($availableTeachers)) {
+            return $availableTeachers[array_rand($availableTeachers)];
         }
 
         return ! empty($eligibleTeachers) ? $eligibleTeachers[array_rand($eligibleTeachers)] : null;

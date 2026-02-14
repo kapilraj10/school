@@ -65,6 +65,17 @@ class ClassRoomForm
                                     ->native(false)
                                     ->helperText('The class teacher will be assigned Period 1 each day')
                                     ->columnSpanFull(),
+
+                                Select::make('status')
+                                    ->label('Active Status')
+                                    ->options([
+                                        'active' => 'Active',
+                                        'inactive' => 'Inactive',
+                                    ])
+                                    ->default('active')
+                                    ->required()
+                                    ->native(false)
+                                    ->columnSpan(1),
                             ]),
                     ]),
 

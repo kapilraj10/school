@@ -47,7 +47,8 @@ class DailyTimetableView extends Page implements HasForms
         $currentTerm = AcademicTerm::where('is_active', true)->first();
 
         // Set current day based on today (0 = Sunday)
-        $this->currentDay = (int) date('w');
+        $today = (int) date('w');
+        $this->currentDay = $today === 6 ? 0 : $today;
 
         $termId = request('term_id');
         $selectedTermId = $termId ?: $currentTerm?->id;
@@ -214,22 +215,22 @@ class DailyTimetableView extends Page implements HasForms
     {
         $this->currentDay = ($this->currentDay - 1 + 6) % 6;
         $this->loadTimetable();
-
-        Notification::make()
-            ->title('Switched to '.(TimetableSlot::$days[$this->currentDay] ?? 'Unknown'))
-            ->success()
-            ->send();
     }
 
     public function nextDay(): void
     {
         $this->currentDay = ($this->currentDay + 1) % 6;
         $this->loadTimetable();
+    }
 
-        Notification::make()
-            ->title('Switched to '.(TimetableSlot::$days[$this->currentDay] ?? 'Unknown'))
-            ->success()
-            ->send();
+    public function setDay(int $day): void
+    {
+        if (! array_key_exists($day, TimetableSlot::$days)) {
+            return;
+        }
+
+        $this->currentDay = $day;
+        $this->loadTimetable();
     }
 
     public function refreshTimetable(): void
