@@ -10,6 +10,9 @@ class TimetableSlot extends Model
 {
     use HasFactory;
 
+    /**
+     * @deprecated Use TimetableSlot::getDays() for settings-aware values
+     */
     public static $days = [
         0 => 'Sunday',
         1 => 'Monday',
@@ -19,6 +22,9 @@ class TimetableSlot extends Model
         5 => 'Friday',
     ];
 
+    /**
+     * @deprecated Use TimetableSlot::getPeriods() for settings-aware values
+     */
     public static $periods = [
         1 => 'Period 1',
         2 => 'Period 2',
@@ -29,6 +35,52 @@ class TimetableSlot extends Model
         7 => 'Period 7',
         8 => 'Period 8',
     ];
+
+    /**
+     * Get school days from TimetableSetting, indexed from 0.
+     *
+     * @return array<int, string>
+     */
+    public static function getDays(): array
+    {
+        $schoolDays = TimetableSetting::get('school_days', ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']);
+
+        return array_values($schoolDays) === $schoolDays
+            ? array_combine(range(0, count($schoolDays) - 1), $schoolDays)
+            : $schoolDays;
+    }
+
+    /**
+     * Get periods from TimetableSetting, indexed from 1.
+     *
+     * @return array<int, string>
+     */
+    public static function getPeriods(): array
+    {
+        $periodsPerDay = (int) TimetableSetting::get('periods_per_day', 8);
+        $periods = [];
+        for ($i = 1; $i <= $periodsPerDay; $i++) {
+            $periods[$i] = "Period {$i}";
+        }
+
+        return $periods;
+    }
+
+    /**
+     * Get the number of school days from settings.
+     */
+    public static function getSchoolDayCount(): int
+    {
+        return count(static::getDays());
+    }
+
+    /**
+     * Get the number of periods per day from settings.
+     */
+    public static function getPeriodsPerDay(): int
+    {
+        return (int) TimetableSetting::get('periods_per_day', 8);
+    }
 
     protected $fillable = [
         'class_room_id',
@@ -103,7 +155,9 @@ class TimetableSlot extends Model
      */
     public function getDayNameAttribute(): string
     {
-        return self::$days[$this->day] ?? 'Unknown';
+        $days = static::getDays();
+
+        return $days[$this->day] ?? 'Unknown';
     }
 
     /**
@@ -111,7 +165,9 @@ class TimetableSlot extends Model
      */
     public function getPeriodNameAttribute(): string
     {
-        return self::$periods[$this->period] ?? 'Unknown';
+        $periods = static::getPeriods();
+
+        return $periods[$this->period] ?? 'Unknown';
     }
 
     /**

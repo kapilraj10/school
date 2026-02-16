@@ -71,6 +71,9 @@ class GeneticAlgorithmTimetableService
             // Load locked slots before generation
             $lockedSlots = $this->loadLockedSlots($classRoom, $academicTerm);
 
+            // Initialize GA config from timetable settings
+            \SchedulerConfig::init();
+
             $scheduler = new \GeneticAlgorithmScheduler(
                 $this->subjects,
                 $this->teachers,
@@ -274,7 +277,7 @@ class GeneticAlgorithmTimetableService
             throw new \Exception("Timetable not generated for section {$sectionId}");
         }
 
-        $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+        $days = TimetableSlot::getDays();
         $timestamp = now();
 
         $combinedPeriodCache = $this->loadCombinedPeriodsCache($academicTerm);
@@ -381,7 +384,7 @@ class GeneticAlgorithmTimetableService
             return $combinedPeriod->id;
         }
 
-        $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+        $days = TimetableSlot::getDays();
         $dayName = $days[$day] ?? 'Unknown';
         $periodNum = $period + 1;
 

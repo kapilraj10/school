@@ -11,15 +11,78 @@
 
 /**
  * Configuration class for algorithm parameters
+ *
+ * Schedule structure values (DAYS_PER_WEEK, PERIODS_PER_DAY, TOTAL_PERIODS)
+ * are initialized from TimetableSetting at runtime via init().
+ * The const values serve as fallback defaults.
  */
 class SchedulerConfig
 {
-    // Schedule structure constants
+    // Schedule structure — runtime-configurable via init()
     const DAYS_PER_WEEK = 6;
 
     const PERIODS_PER_DAY = 8;
 
     const TOTAL_PERIODS = 48;
+
+    /** @var int Actual days per week (set by init or defaults to const) */
+    private static int $daysPerWeek = self::DAYS_PER_WEEK;
+
+    /** @var int Actual periods per day (set by init or defaults to const) */
+    private static int $periodsPerDay = self::PERIODS_PER_DAY;
+
+    /** @var int Actual total periods (set by init or defaults to const) */
+    private static int $totalPeriods = self::TOTAL_PERIODS;
+
+    private static bool $initialized = false;
+
+    /**
+     * Initialize schedule structure from TimetableSetting.
+     * Call this before using the GA scheduler.
+     */
+    public static function init(): void
+    {
+        if (self::$initialized) {
+            return;
+        }
+
+        if (class_exists(\App\Models\TimetableSetting::class)) {
+            $schoolDays = \App\Models\TimetableSetting::get('school_days');
+            if (is_array($schoolDays) && ! empty($schoolDays)) {
+                self::$daysPerWeek = count($schoolDays);
+            }
+
+            $periods = \App\Models\TimetableSetting::get('periods_per_day');
+            if ($periods !== null) {
+                self::$periodsPerDay = (int) $periods;
+            }
+
+            self::$totalPeriods = self::$daysPerWeek * self::$periodsPerDay;
+        }
+
+        self::$initialized = true;
+    }
+
+    public static function daysPerWeek(): int
+    {
+        self::init();
+
+        return self::$daysPerWeek;
+    }
+
+    public static function periodsPerDay(): int
+    {
+        self::init();
+
+        return self::$periodsPerDay;
+    }
+
+    public static function totalPeriods(): int
+    {
+        self::init();
+
+        return self::$totalPeriods;
+    }
 
     const BREAK_PERIOD = 4;  // Period 4 is typically break time (0-indexed: period 5 in 1-indexed)
 
@@ -87,6 +150,22 @@ class SchedulerConfig
     const CO_CURRICULAR_PREFERRED_START_PERIOD = 3;
 
     const MAX_PERIODS_PER_SUBJECT_PER_DAY = 2;
+
+    private static int $maxPeriodsPerSubjectPerDay = self::MAX_PERIODS_PER_SUBJECT_PER_DAY;
+
+    public static function maxPeriodsPerSubjectPerDay(): int
+    {
+        self::init();
+
+        if (class_exists(\App\Models\TimetableSetting::class)) {
+            $val = \App\Models\TimetableSetting::get('max_same_subject_per_day');
+            if ($val !== null) {
+                return (int) $val;
+            }
+        }
+
+        return self::$maxPeriodsPerSubjectPerDay;
+    }
 
     // Subject types
     const TYPE_COMPULSORY = 'compulsory';
@@ -280,9 +359,9 @@ class Timetable
         $this->slots = [];
         foreach ($sections as $section) {
             $this->slots[$section->id] = [];
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                 $this->slots[$section->id][$day] = [];
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     $this->slots[$section->id][$day][$period] = new TimeSlot($day, $period, null, null, $section->id);
                 }
             }
@@ -794,7 +873,7 @@ class GeneticAlgorithmScheduler
         $maxIterations = 1000; // Prevent infinite loops
         $iterations = 0;
 
-        while ($totalPeriods != SchedulerConfig::TOTAL_PERIODS && $iterations < $maxIterations) {
+        while ($totalPeriods != SchedulerConfig::totalPeriods() && $iterations < $maxIterations) {
             $iterations++;
 
             // Build lists of subjects that can be increased or decreased
@@ -811,21 +890,21 @@ class GeneticAlgorithmScheduler
                 }
             }
 
-            if ($totalPeriods < SchedulerConfig::TOTAL_PERIODS && ! empty($canIncrease)) {
+            if ($totalPeriods < SchedulerConfig::totalPeriods() && ! empty($canIncrease)) {
                 $subjectId = $canIncrease[array_rand($canIncrease)];
                 $subjectPeriods[$subjectId]++;
                 $totalPeriods++;
-            } elseif ($totalPeriods > SchedulerConfig::TOTAL_PERIODS && ! empty($canDecrease)) {
+            } elseif ($totalPeriods > SchedulerConfig::totalPeriods() && ! empty($canDecrease)) {
                 $subjectId = $canDecrease[array_rand($canDecrease)];
                 $subjectPeriods[$subjectId]--;
                 $totalPeriods--;
             } else {
                 // Cannot adjust further - force adjustment to reach total
-                if ($totalPeriods < SchedulerConfig::TOTAL_PERIODS && ! empty($subjectPeriods)) {
+                if ($totalPeriods < SchedulerConfig::totalPeriods() && ! empty($subjectPeriods)) {
                     $subjectId = array_rand($subjectPeriods);
                     $subjectPeriods[$subjectId]++;
                     $totalPeriods++;
-                } elseif ($totalPeriods > SchedulerConfig::TOTAL_PERIODS && ! empty($subjectPeriods)) {
+                } elseif ($totalPeriods > SchedulerConfig::totalPeriods() && ! empty($subjectPeriods)) {
                     // Find a subject above minimum to reduce
                     $reduced = false;
                     foreach ($subjectPeriods as $sid => $cnt) {
@@ -885,8 +964,8 @@ class GeneticAlgorithmScheduler
     private function assignSubjectsToSlots($timetable, $section, $subjectPool)
     {
         $index = 0;
-        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+        for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+            for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                 $subjectId = $subjectPool[$index];
                 $teacherId = $this->assignTeacher($subjectId, $day, $period);
 
@@ -1058,13 +1137,13 @@ class GeneticAlgorithmScheduler
 
         while ($attempts < $maxAttempts) {
             // Select day and period
-            $day = rand(0, SchedulerConfig::DAYS_PER_WEEK - 1);
+            $day = rand(0, SchedulerConfig::daysPerWeek() - 1);
 
             if ($isCoCurrenticular && $randomizationFactor < 0.5) {
                 // Prefer periods 4-7 for co-curricular
-                $period = rand(SchedulerConfig::CO_CURRICULAR_PREFERRED_START_PERIOD, SchedulerConfig::PERIODS_PER_DAY - 1);
+                $period = rand(SchedulerConfig::CO_CURRICULAR_PREFERRED_START_PERIOD, SchedulerConfig::periodsPerDay() - 1);
             } else {
-                $period = rand(0, SchedulerConfig::PERIODS_PER_DAY - 1);
+                $period = rand(0, SchedulerConfig::periodsPerDay() - 1);
             }
 
             // Check if this slot is empty for all sections
@@ -1106,7 +1185,7 @@ class GeneticAlgorithmScheduler
         foreach ($sections as $section) {
             // Check if there's already another co-curricular on this day
             if ($subject->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
-                for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+                for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                     $existingSubjectId = $timetable->slots[$section->id][$day][$p]->subjectId;
                     if ($existingSubjectId && isset($this->subjects[$existingSubjectId])) {
                         if ($this->subjects[$existingSubjectId]->type === SchedulerConfig::TYPE_CO_CURRICULAR &&
@@ -1119,13 +1198,13 @@ class GeneticAlgorithmScheduler
 
             // Check subject daily limit
             $dailyCount = 0;
-            for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+            for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                 if ($timetable->slots[$section->id][$day][$p]->subjectId === $subjectId) {
                     $dailyCount++;
                 }
             }
 
-            if ($dailyCount >= SchedulerConfig::MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+            if ($dailyCount >= SchedulerConfig::maxPeriodsPerSubjectPerDay()) {
                 return false;
             }
         }
@@ -1152,11 +1231,11 @@ class GeneticAlgorithmScheduler
         $maxAttempts = 50;
 
         while ($attempts < $maxAttempts) {
-            $day = rand(0, SchedulerConfig::DAYS_PER_WEEK - 1);
+            $day = rand(0, SchedulerConfig::daysPerWeek() - 1);
 
             // Check if day already has a co-curricular
             $hasCoCurricular = false;
-            for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+            for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                 $existingSubjectId = $timetable->slots[$section->id][$day][$p]->subjectId;
                 if ($existingSubjectId && isset($this->subjects[$existingSubjectId])) {
                     if ($this->subjects[$existingSubjectId]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
@@ -1174,7 +1253,7 @@ class GeneticAlgorithmScheduler
 
             // Try to find consecutive empty periods starting from period 4
             $startPeriod = rand(SchedulerConfig::CO_CURRICULAR_PREFERRED_START_PERIOD,
-                SchedulerConfig::PERIODS_PER_DAY - $consecutiveCount);
+                SchedulerConfig::periodsPerDay() - $consecutiveCount);
 
             $allEmpty = true;
             for ($i = 0; $i < $consecutiveCount; $i++) {
@@ -1209,11 +1288,11 @@ class GeneticAlgorithmScheduler
         $maxAttempts = 100;
 
         while ($attempts < $maxAttempts) {
-            $day = rand(0, SchedulerConfig::DAYS_PER_WEEK - 1);
+            $day = rand(0, SchedulerConfig::daysPerWeek() - 1);
 
             // Check if this day already has a co-curricular
             $hasCoCurricular = false;
-            for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+            for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                 $existingSubjectId = $timetable->slots[$section->id][$day][$p]->subjectId;
                 if ($existingSubjectId && isset($this->subjects[$existingSubjectId])) {
                     if ($this->subjects[$existingSubjectId]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
@@ -1231,9 +1310,9 @@ class GeneticAlgorithmScheduler
 
             // Prefer periods 4-7 for co-curricular
             if ($randomizationFactor < 0.5) {
-                $period = rand(SchedulerConfig::CO_CURRICULAR_PREFERRED_START_PERIOD, SchedulerConfig::PERIODS_PER_DAY - 1);
+                $period = rand(SchedulerConfig::CO_CURRICULAR_PREFERRED_START_PERIOD, SchedulerConfig::periodsPerDay() - 1);
             } else {
-                $period = rand(0, SchedulerConfig::PERIODS_PER_DAY - 1);
+                $period = rand(0, SchedulerConfig::periodsPerDay() - 1);
             }
 
             if ($timetable->slots[$section->id][$day][$period]->subjectId === null) {
@@ -1263,8 +1342,8 @@ class GeneticAlgorithmScheduler
         $maxAttempts = 100;
 
         while ($attempts < $maxAttempts) {
-            $day = rand(0, SchedulerConfig::DAYS_PER_WEEK - 1);
-            $period = rand(0, SchedulerConfig::PERIODS_PER_DAY - 1);
+            $day = rand(0, SchedulerConfig::daysPerWeek() - 1);
+            $period = rand(0, SchedulerConfig::periodsPerDay() - 1);
 
             if ($timetable->slots[$section->id][$day][$period]->subjectId === null) {
                 if ($this->canPlaceSubjectInSlot($timetable, $section, $day, $period, $subjectId)) {
@@ -1313,19 +1392,19 @@ class GeneticAlgorithmScheduler
 
         // Check daily limit for this subject
         $dailyCount = 0;
-        for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+        for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
             if ($timetable->slots[$section->id][$day][$p]->subjectId === $subjectId) {
                 $dailyCount++;
             }
         }
 
-        if ($dailyCount >= SchedulerConfig::MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+        if ($dailyCount >= SchedulerConfig::maxPeriodsPerSubjectPerDay()) {
             return false;
         }
 
         // For co-curricular, check if there's already another co-curricular this day
         if ($subject->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
-            for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+            for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                 $existingSubjectId = $timetable->slots[$section->id][$day][$p]->subjectId;
                 if ($existingSubjectId && isset($this->subjects[$existingSubjectId])) {
                     if ($this->subjects[$existingSubjectId]->type === SchedulerConfig::TYPE_CO_CURRICULAR &&
@@ -1350,8 +1429,8 @@ class GeneticAlgorithmScheduler
     {
         $emptySlots = [];
 
-        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+        for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+            for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                 if ($timetable->slots[$section->id][$day][$period]->subjectId === null) {
                     $emptySlots[] = ['day' => $day, 'period' => $period];
                 }
@@ -1711,7 +1790,7 @@ class ConstraintChecker
         $count = 0;
 
         foreach ($this->sections as $section) {
-            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                 if ($timetable->slots[$section->id][$day][$period]->teacherId === $teacherId) {
                     $count++;
                 }
@@ -1733,8 +1812,8 @@ class ConstraintChecker
         $count = 0;
 
         foreach ($this->sections as $section) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     if ($timetable->slots[$section->id][$day][$period]->teacherId === $teacherId) {
                         $count++;
                     }
@@ -1826,7 +1905,7 @@ class ConstraintChecker
 
         // Subject daily limit check
         $subjectDailyCount = $this->countSubjectOnDay($timetable, $sectionId, $day, $subjectId);
-        if ($subjectDailyCount > SchedulerConfig::MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+        if ($subjectDailyCount > SchedulerConfig::maxPeriodsPerSubjectPerDay()) {
             $violations[] = [
                 'type' => 'subject_daily_excess',
                 'severity' => 'medium',
@@ -1849,7 +1928,7 @@ class ConstraintChecker
     private function countSubjectOnDay($timetable, $sectionId, $day, $subjectId)
     {
         $count = 0;
-        for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+        for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
             if ($timetable->slots[$sectionId][$day][$period]->subjectId === $subjectId) {
                 $count++;
             }
@@ -1870,7 +1949,7 @@ class ConstraintChecker
     {
         $coCurricularSubjects = [];
 
-        for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+        for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
             $subjectId = $timetable->slots[$sectionId][$day][$period]->subjectId;
             if ($subjectId &&
                 isset($this->subjects[$subjectId]) &&
@@ -1901,10 +1980,10 @@ class ConstraintChecker
         $violations = 0;
 
         foreach ($this->sections as $section) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                 $coCurricularSubjects = [];
 
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
 
                     if ($subjectId &&
@@ -1940,12 +2019,12 @@ class ConstraintChecker
         $violations = 0;
 
         foreach ($this->sections as $section) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                 $subjectCounts = $this->countSubjectsOnDay($timetable, $section, $day);
 
                 foreach ($subjectCounts as $subjectId => $count) {
-                    if ($count > SchedulerConfig::MAX_PERIODS_PER_SUBJECT_PER_DAY) {
-                        $violations += $count - SchedulerConfig::MAX_PERIODS_PER_SUBJECT_PER_DAY;
+                    if ($count > SchedulerConfig::maxPeriodsPerSubjectPerDay()) {
+                        $violations += $count - SchedulerConfig::maxPeriodsPerSubjectPerDay();
                     }
                 }
             }
@@ -1966,7 +2045,7 @@ class ConstraintChecker
     {
         $subjectCounts = [];
 
-        for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+        for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
             $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
             if ($subjectId) {
                 $subjectCounts[$subjectId] = ($subjectCounts[$subjectId] ?? 0) + 1;
@@ -1988,10 +2067,10 @@ class ConstraintChecker
         $violations = 0;
 
         foreach ($this->sections as $section) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                 $coCurricularPeriods = [];
 
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
 
                     if ($subjectId &&
@@ -2041,7 +2120,7 @@ class ConstraintChecker
         $physicalKeywords = ['sport', 'sports', 'taekwondo', 'dance', 'physical', 'pe'];
 
         foreach ($this->sections as $section) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                 $subjectId = $timetable->slots[$section->id][$day][$forbiddenPeriod]->subjectId;
 
                 if (! $subjectId || ! isset($this->subjects[$subjectId])) {
@@ -2074,8 +2153,8 @@ class ConstraintChecker
         $violations = 0;
 
         foreach ($this->sections as $section) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     $teacherId = $timetable->slots[$section->id][$day][$period]->teacherId;
                     if ($teacherId && ! $this->hasTeacherAvailability($teacherId, $day, $period)) {
                         $violations++;
@@ -2102,8 +2181,8 @@ class ConstraintChecker
             $subjectCounts = [];
 
             // Count total periods per subject for the week
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
                     if ($subjectId) {
                         $subjectCounts[$subjectId] = ($subjectCounts[$subjectId] ?? 0) + 1;
@@ -2152,8 +2231,8 @@ class ConstraintChecker
     {
         $violations = 0;
 
-        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+        for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+            for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                 $teacherAssignments = [];
 
                 foreach ($this->sections as $section) {
@@ -2203,7 +2282,7 @@ class ConstraintChecker
 
         foreach ($this->teachers as $teacher) {
             // Check daily limits
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                 $dailyCount = $this->getTeacherDailyPeriodCount($teacher->id, $day, $timetable);
 
                 if ($dailyCount > $teacher->maxPeriodsPerDay) {
@@ -2233,8 +2312,8 @@ class ConstraintChecker
         $violations = 0;
 
         foreach ($this->sections as $section) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     if ($timetable->slots[$section->id][$day][$period]->subjectId === null) {
                         $violations++;
                     }
@@ -2267,13 +2346,13 @@ class ConstraintChecker
 
             foreach ($combinedSubjects as $subjectId) {
                 // Check each day separately
-                for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+                for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                     $subjectSchedules = [];
 
                     // Collect schedules for this subject across all sections
                     foreach ($sections as $section) {
                         $periods = [];
-                        for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                        for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                             if ($timetable->slots[$section->id][$day][$period]->subjectId === $subjectId) {
                                 $periods[] = $period;
                             }
@@ -2355,9 +2434,9 @@ class ConstraintChecker
             // Build subject order per day, EXCLUDING co-curricular
             $dayOrders = [];
 
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                 $order = [];
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
                     if ($subjectId && isset($this->subjects[$subjectId]) &&
                         $this->subjects[$subjectId]->type !== SchedulerConfig::TYPE_CO_CURRICULAR) {
@@ -2373,7 +2452,7 @@ class ConstraintChecker
                 continue;
             }
 
-            for ($day = 1; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($day = 1; $day < SchedulerConfig::daysPerWeek(); $day++) {
                 $order = $dayOrders[$day];
                 if (empty($order)) {
                     continue;
@@ -2408,7 +2487,7 @@ class ConstraintChecker
         $violations = 0;
 
         foreach ($this->sections as $section) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                 $subjectCounts = $this->countSubjectsOnDay($timetable, $section, $day);
 
                 foreach ($subjectCounts as $subjectId => $count) {
@@ -2443,8 +2522,8 @@ class ConstraintChecker
         foreach ($this->sections as $section) {
             $corePositions = [];
 
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
                     if (! $subjectId || ! isset($this->subjects[$subjectId])) {
                         continue;
@@ -2494,8 +2573,8 @@ class ConstraintChecker
         $heavyKeywords = ['math', 'maths', 'mathematics', 'science', 'english'];
 
         foreach ($this->sections as $section) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY - 1; $period++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay() - 1; $period++) {
                     $current = $timetable->slots[$section->id][$day][$period]->subjectId;
                     $next = $timetable->slots[$section->id][$day][$period + 1]->subjectId;
 
@@ -2539,7 +2618,7 @@ class ConstraintChecker
         $violations = 0;
 
         foreach ($this->sections as $section) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                 for ($period = 0; $period < SchedulerConfig::CO_CURRICULAR_PREFERRED_START_PERIOD; $period++) {
                     $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
                     if ($subjectId && $this->subjects[$subjectId]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
@@ -2570,9 +2649,9 @@ class ConstraintChecker
                     continue;
                 }
 
-                for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+                for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                     $periods = [];
-                    for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                    for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                         if ($timetable->slots[$section->id][$day][$period]->subjectId === $subject->id) {
                             $periods[] = $period;
                         }
@@ -2765,10 +2844,10 @@ class GeneticOperations
         $offspring = new Timetable($this->sections);
 
         foreach ($this->sections as $section) {
-            $crossoverDay = rand(0, SchedulerConfig::DAYS_PER_WEEK - 1);
+            $crossoverDay = rand(0, SchedulerConfig::daysPerWeek() - 1);
 
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     if ($day < $crossoverDay) {
                         $offspring->slots[$section->id][$day][$period] =
                             clone $parent1->slots[$section->id][$day][$period];
@@ -2821,9 +2900,9 @@ class GeneticOperations
      */
     private function swapPeriodsInSameDay($timetable, $section)
     {
-        $day = rand(0, SchedulerConfig::DAYS_PER_WEEK - 1);
-        $period1 = rand(0, SchedulerConfig::PERIODS_PER_DAY - 1);
-        $period2 = rand(0, SchedulerConfig::PERIODS_PER_DAY - 1);
+        $day = rand(0, SchedulerConfig::daysPerWeek() - 1);
+        $period1 = rand(0, SchedulerConfig::periodsPerDay() - 1);
+        $period2 = rand(0, SchedulerConfig::periodsPerDay() - 1);
 
         $temp = $timetable->slots[$section->id][$day][$period1];
         $timetable->slots[$section->id][$day][$period1] =
@@ -2839,10 +2918,10 @@ class GeneticOperations
      */
     private function swapPeriodsAcrossDays($timetable, $section)
     {
-        $day1 = rand(0, SchedulerConfig::DAYS_PER_WEEK - 1);
-        $day2 = rand(0, SchedulerConfig::DAYS_PER_WEEK - 1);
-        $period1 = rand(0, SchedulerConfig::PERIODS_PER_DAY - 1);
-        $period2 = rand(0, SchedulerConfig::PERIODS_PER_DAY - 1);
+        $day1 = rand(0, SchedulerConfig::daysPerWeek() - 1);
+        $day2 = rand(0, SchedulerConfig::daysPerWeek() - 1);
+        $period1 = rand(0, SchedulerConfig::periodsPerDay() - 1);
+        $period2 = rand(0, SchedulerConfig::periodsPerDay() - 1);
 
         $temp = $timetable->slots[$section->id][$day1][$period1];
         $timetable->slots[$section->id][$day1][$period1] =
@@ -2858,8 +2937,8 @@ class GeneticOperations
      */
     private function reassignRandomSubject($timetable, $section)
     {
-        $day = rand(0, SchedulerConfig::DAYS_PER_WEEK - 1);
-        $period = rand(0, SchedulerConfig::PERIODS_PER_DAY - 1);
+        $day = rand(0, SchedulerConfig::daysPerWeek() - 1);
+        $period = rand(0, SchedulerConfig::periodsPerDay() - 1);
 
         $allSubjects = array_merge(
             $section->compulsorySubjects,
@@ -3012,23 +3091,23 @@ class TimetableRepair
     {
         $filledCount = 0;
 
-        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+        for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+            for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                 if ($timetable->slots[$section->id][$day][$period]->subjectId !== null) {
                     $filledCount++;
                 }
             }
         }
 
-        if ($filledCount < SchedulerConfig::TOTAL_PERIODS) {
+        if ($filledCount < SchedulerConfig::totalPeriods()) {
             $allSubjects = array_merge(
                 $section->compulsorySubjects,
                 $section->optionalSubjects,
                 $section->coCurricularSubjects
             );
 
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     if ($timetable->slots[$section->id][$day][$period]->subjectId === null) {
                         $subjectId = $allSubjects[array_rand($allSubjects)];
                         $teacherId = $this->assignTeacher($subjectId, $day, $period);
@@ -3056,8 +3135,8 @@ class TimetableRepair
         );
 
         $subjectCounts = [];
-        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+        for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+            for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                 $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
                 if ($subjectId) {
                     $subjectCounts[$subjectId] = ($subjectCounts[$subjectId] ?? 0) + 1;
@@ -3084,11 +3163,11 @@ class TimetableRepair
         $processedExcess = 0;
         foreach ($needLess as $excessSubjectId => $excessCount) {
             $removed = 0;
-            $maxAttemptsPerSubject = SchedulerConfig::TOTAL_PERIODS;
+            $maxAttemptsPerSubject = SchedulerConfig::totalPeriods();
             $attempts = 0;
 
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK && $removed < $excessCount && $attempts < $maxAttemptsPerSubject; $day++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY && $removed < $excessCount && $attempts < $maxAttemptsPerSubject; $period++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek() && $removed < $excessCount && $attempts < $maxAttemptsPerSubject; $day++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay() && $removed < $excessCount && $attempts < $maxAttemptsPerSubject; $period++) {
                     $attempts++;
                     if ($timetable->slots[$section->id][$day][$period]->subjectId === $excessSubjectId) {
                         // Find a subject that needs more periods
@@ -3117,11 +3196,11 @@ class TimetableRepair
         foreach ($needMore as $neededSubjectId => $neededCount) {
             if ($neededCount > 0) {
                 $added = 0;
-                $maxAttemptsPerSubject = SchedulerConfig::TOTAL_PERIODS;
+                $maxAttemptsPerSubject = SchedulerConfig::totalPeriods();
                 $attempts = 0;
 
-                for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK && $added < $neededCount && $attempts < $maxAttemptsPerSubject; $day++) {
-                    for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY && $added < $neededCount && $attempts < $maxAttemptsPerSubject; $period++) {
+                for ($day = 0; $day < SchedulerConfig::daysPerWeek() && $added < $neededCount && $attempts < $maxAttemptsPerSubject; $day++) {
+                    for ($period = 0; $period < SchedulerConfig::periodsPerDay() && $added < $neededCount && $attempts < $maxAttemptsPerSubject; $period++) {
                         $attempts++;
                         $currentSubjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
 
@@ -3155,11 +3234,11 @@ class TimetableRepair
      */
     private function fixCoCurricularConstraints($timetable, $section)
     {
-        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+        for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
             $coCurricularSubjects = [];
             $coCurricularPositions = [];
 
-            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                 $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
                 if ($subjectId && $this->subjects[$subjectId]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
                     if (! isset($coCurricularPositions[$subjectId])) {
@@ -3178,7 +3257,7 @@ class TimetableRepair
                 // Keep the first one, replace others with non-co-curricular subjects
                 $keepSubjectId = $coCurricularSubjects[0];
 
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
 
                     if ($subjectId && $this->subjects[$subjectId]->type === 'co_curricular' && $subjectId !== $keepSubjectId) {
@@ -3200,7 +3279,7 @@ class TimetableRepair
                         $firstPeriod = $positions[0];
                         $secondPeriod = $positions[1];
 
-                        if ($firstPeriod < SchedulerConfig::PERIODS_PER_DAY - 1) {
+                        if ($firstPeriod < SchedulerConfig::periodsPerDay() - 1) {
                             $targetPeriod = $firstPeriod + 1;
 
                             // Swap with whatever is in target period
@@ -3237,11 +3316,11 @@ class TimetableRepair
      */
     private function fixDailySubjectLimits($timetable, $section)
     {
-        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+        for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
             $subjectCounts = [];
             $subjectPositions = [];
 
-            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                 $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
                 if ($subjectId) {
                     $subjectCounts[$subjectId] = ($subjectCounts[$subjectId] ?? 0) + 1;
@@ -3298,8 +3377,8 @@ class TimetableRepair
      */
     private function fixTeacherConstraints($timetable)
     {
-        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+        for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+            for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                 $teacherAssignments = [];
 
                 // Collect all teacher assignments for this time slot
@@ -3331,12 +3410,12 @@ class TimetableRepair
         }
 
         foreach ($this->teachers as $teacher) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
                 $periodCount = 0;
                 $assignments = [];
 
                 foreach ($this->sections as $section) {
-                    for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                    for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                         if ($timetable->slots[$section->id][$day][$period]->teacherId === $teacher->id) {
                             $periodCount++;
                             $assignments[] = [
@@ -3417,8 +3496,8 @@ class TimetableRepair
     private function fixTeacherAvailability($timetable)
     {
         foreach ($this->sections as $section) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                     $teacherId = $timetable->slots[$section->id][$day][$period]->teacherId;
                     $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
 
@@ -3474,8 +3553,8 @@ class TimetableRepair
                 $schedules = [];
 
                 foreach ($sections as $section) {
-                    for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                        for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+                    for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+                        for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                             if ($timetable->slots[$section->id][$day][$period]->subjectId === $subjectId) {
                                 $schedules[$section->id][$day][] = $period;
                             }
@@ -3525,7 +3604,7 @@ class TimetableRepair
         $physicalKeywords = ['sport', 'sports', 'taekwondo', 'dance', 'physical', 'pe'];
         $forbiddenPeriod = SchedulerConfig::BREAK_PERIOD; // 4 (0-indexed) = period 5
 
-        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+        for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
             // Check if period 5 has a physical subject
             $sid = $timetable->slots[$section->id][$day][$forbiddenPeriod]->subjectId;
             if (! $sid || ! isset($this->subjects[$sid])) {
@@ -3547,7 +3626,7 @@ class TimetableRepair
 
             // Find a non-physical subject in another period to swap with
             $swapped = false;
-            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                 if ($period === $forbiddenPeriod) {
                     continue;
                 }
@@ -3606,8 +3685,8 @@ class TimetableRepair
         // Helper: count weekly allocations fresh
         $countWeekly = function () use ($timetable, $section) {
             $counts = [];
-            for ($d = 0; $d < SchedulerConfig::DAYS_PER_WEEK; $d++) {
-                for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+            for ($d = 0; $d < SchedulerConfig::daysPerWeek(); $d++) {
+                for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                     $sid = $timetable->slots[$section->id][$d][$p]->subjectId;
                     if ($sid) {
                         $counts[$sid] = ($counts[$sid] ?? 0) + 1;
@@ -3622,7 +3701,7 @@ class TimetableRepair
         $findUnderMinSubject = function ($day) use ($timetable, $section, $countWeekly) {
             $weeklyCounts = $countWeekly();
             $dailyCounts = [];
-            for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+            for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                 $sid = $timetable->slots[$section->id][$day][$p]->subjectId;
                 if ($sid) {
                     $dailyCounts[$sid] = ($dailyCounts[$sid] ?? 0) + 1;
@@ -3645,7 +3724,7 @@ class TimetableRepair
                 $dailyCount = $dailyCounts[$candidateId] ?? 0;
                 $deficit = $subject->minPeriodsPerWeek - $weeklyCount;
                 if ($deficit > 0 && $weeklyCount < $subject->maxPeriodsPerWeek
-                    && $dailyCount < SchedulerConfig::MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+                    && $dailyCount < SchedulerConfig::maxPeriodsPerSubjectPerDay()) {
                     if ($deficit > $bestDeficit) {
                         $bestDeficit = $deficit;
                         $best = $candidateId;
@@ -3672,8 +3751,8 @@ class TimetableRepair
                 continue;
             }
 
-            for ($d = SchedulerConfig::DAYS_PER_WEEK - 1; $d >= 0 && $excess > 0; $d--) {
-                for ($p = SchedulerConfig::PERIODS_PER_DAY - 1; $p >= 0 && $excess > 0; $p--) {
+            for ($d = SchedulerConfig::daysPerWeek() - 1; $d >= 0 && $excess > 0; $d--) {
+                for ($p = SchedulerConfig::periodsPerDay() - 1; $p >= 0 && $excess > 0; $p--) {
                     if ($timetable->slots[$section->id][$d][$p]->subjectId !== $subjectId) {
                         continue;
                     }
@@ -3713,11 +3792,11 @@ class TimetableRepair
             // Find slots of over-allocated subjects to replace
             $weeklyCounts = $countWeekly(); // Recount fresh
             $isCoCurricular = ($subject->type === SchedulerConfig::TYPE_CO_CURRICULAR);
-            for ($d = 0; $d < SchedulerConfig::DAYS_PER_WEEK && $deficit > 0; $d++) {
+            for ($d = 0; $d < SchedulerConfig::daysPerWeek() && $deficit > 0; $d++) {
                 // Check daily count of target subject on this day
                 $dailyTarget = 0;
                 $hasDifferentCoCurricular = false;
-                for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+                for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                     $slotSid = $timetable->slots[$section->id][$d][$p]->subjectId;
                     if ($slotSid === $subjectId) {
                         $dailyTarget++;
@@ -3729,7 +3808,7 @@ class TimetableRepair
                         $hasDifferentCoCurricular = true;
                     }
                 }
-                if ($dailyTarget >= SchedulerConfig::MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+                if ($dailyTarget >= SchedulerConfig::maxPeriodsPerSubjectPerDay()) {
                     continue;
                 }
                 // Don't place co-curricular on a day with another co-curricular
@@ -3737,7 +3816,7 @@ class TimetableRepair
                     continue;
                 }
 
-                for ($p = SchedulerConfig::PERIODS_PER_DAY - 1; $p >= 0 && $deficit > 0; $p--) {
+                for ($p = SchedulerConfig::periodsPerDay() - 1; $p >= 0 && $deficit > 0; $p--) {
                     $existingSid = $timetable->slots[$section->id][$d][$p]->subjectId;
                     if (! $existingSid || $existingSid === $subjectId) {
                         continue;
@@ -3767,9 +3846,9 @@ class TimetableRepair
         }
 
         // Pass 3: Fix subjects appearing >2 per day
-        for ($d = 0; $d < SchedulerConfig::DAYS_PER_WEEK; $d++) {
+        for ($d = 0; $d < SchedulerConfig::daysPerWeek(); $d++) {
             $dailyCounts = [];
-            for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+            for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                 $sid = $timetable->slots[$section->id][$d][$p]->subjectId;
                 if ($sid) {
                     $dailyCounts[$sid] = ($dailyCounts[$sid] ?? 0) + 1;
@@ -3786,7 +3865,7 @@ class TimetableRepair
                 }
 
                 $excess = $count - 2;
-                for ($p = SchedulerConfig::PERIODS_PER_DAY - 1; $p >= 0 && $excess > 0; $p--) {
+                for ($p = SchedulerConfig::periodsPerDay() - 1; $p >= 0 && $excess > 0; $p--) {
                     if ($timetable->slots[$section->id][$d][$p]->subjectId !== $subjectId) {
                         continue;
                     }
@@ -3821,9 +3900,9 @@ class TimetableRepair
     {
         $physicalKeywords = ['sport', 'sports', 'taekwondo', 'dance', 'physical', 'pe'];
 
-        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+        for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
             $subjectPositions = [];
-            for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY; $period++) {
+            for ($period = 0; $period < SchedulerConfig::periodsPerDay(); $period++) {
                 $sid = $timetable->slots[$section->id][$day][$period]->subjectId;
                 if ($sid) {
                     $subjectPositions[$sid][] = $period;
@@ -3847,14 +3926,14 @@ class TimetableRepair
                     $sourcePeriod = $positions[$i];
                     $swapped = false;
 
-                    for ($otherDay = 0; $otherDay < SchedulerConfig::DAYS_PER_WEEK && ! $swapped; $otherDay++) {
+                    for ($otherDay = 0; $otherDay < SchedulerConfig::daysPerWeek() && ! $swapped; $otherDay++) {
                         if ($otherDay === $day) {
                             continue;
                         }
 
                         // Count how many times this subject already appears on otherDay
                         $countOnOther = 0;
-                        for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+                        for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                             if ($timetable->slots[$section->id][$otherDay][$p]->subjectId === $subjectId) {
                                 $countOnOther++;
                             }
@@ -3864,7 +3943,7 @@ class TimetableRepair
                         }
 
                         // Try all periods on otherDay for a swap candidate
-                        for ($targetPeriod = 0; $targetPeriod < SchedulerConfig::PERIODS_PER_DAY && ! $swapped; $targetPeriod++) {
+                        for ($targetPeriod = 0; $targetPeriod < SchedulerConfig::periodsPerDay() && ! $swapped; $targetPeriod++) {
                             $targetSid = $timetable->slots[$section->id][$otherDay][$targetPeriod]->subjectId;
 
                             // Don't swap co-curricular
@@ -3889,7 +3968,7 @@ class TimetableRepair
                             // Check that the target subject won't create a new balance violation on $day
                             if ($targetSid) {
                                 $targetCountOnDay = 0;
-                                for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+                                for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                                     if ($timetable->slots[$section->id][$day][$p]->subjectId === $targetSid) {
                                         $targetCountOnDay++;
                                     }
@@ -3930,8 +4009,8 @@ class TimetableRepair
 
         // Run multiple passes to handle chains of 3+ heavy subjects
         for ($pass = 0; $pass < 2; $pass++) {
-            for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
-                for ($period = 0; $period < SchedulerConfig::PERIODS_PER_DAY - 1; $period++) {
+            for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
+                for ($period = 0; $period < SchedulerConfig::periodsPerDay() - 1; $period++) {
                     $curId = $timetable->slots[$section->id][$day][$period]->subjectId;
                     $nextId = $timetable->slots[$section->id][$day][$period + 1]->subjectId;
 
@@ -3951,7 +4030,7 @@ class TimetableRepair
 
                     // Check all periods in the day (after, then before)
                     $candidates = [];
-                    for ($s = $period + 2; $s < SchedulerConfig::PERIODS_PER_DAY; $s++) {
+                    for ($s = $period + 2; $s < SchedulerConfig::periodsPerDay(); $s++) {
                         $candidates[] = $s;
                     }
                     for ($s = 0; $s < $period; $s++) {
@@ -4002,7 +4081,7 @@ class TimetableRepair
                                 $wouldCreateNew = true;
                             }
                         }
-                        if (! $wouldCreateNew && $swap < SchedulerConfig::PERIODS_PER_DAY - 1) {
+                        if (! $wouldCreateNew && $swap < SchedulerConfig::periodsPerDay() - 1) {
                             $neighborId = $timetable->slots[$section->id][$day][$swap + 1]->subjectId;
                             if ($neighborId && isset($this->subjects[$neighborId]) &&
                                 $this->isHeavySubject($this->subjects[$neighborId]->name, $heavyKeywords) &&
@@ -4031,7 +4110,7 @@ class TimetableRepair
      */
     private function fixCoCurricularPlacement($timetable, $section)
     {
-        for ($day = 0; $day < SchedulerConfig::DAYS_PER_WEEK; $day++) {
+        for ($day = 0; $day < SchedulerConfig::daysPerWeek(); $day++) {
             for ($period = 0; $period < SchedulerConfig::CO_CURRICULAR_PREFERRED_START_PERIOD; $period++) {
                 $subjectId = $timetable->slots[$section->id][$day][$period]->subjectId;
                 if (! $subjectId || ! isset($this->subjects[$subjectId])) {
@@ -4043,7 +4122,7 @@ class TimetableRepair
 
                 // Find a later non-co-curricular slot to swap with
                 $swapped = false;
-                for ($swap = SchedulerConfig::CO_CURRICULAR_PREFERRED_START_PERIOD; $swap < SchedulerConfig::PERIODS_PER_DAY && ! $swapped; $swap++) {
+                for ($swap = SchedulerConfig::CO_CURRICULAR_PREFERRED_START_PERIOD; $swap < SchedulerConfig::periodsPerDay() && ! $swapped; $swap++) {
                     $swapId = $timetable->slots[$section->id][$day][$swap]->subjectId;
                     if ($swapId && isset($this->subjects[$swapId]) &&
                         $this->subjects[$swapId]->type === SchedulerConfig::TYPE_CO_CURRICULAR) {
@@ -4071,8 +4150,8 @@ class TimetableRepair
 
         // Count weekly allocations
         $weeklyCounts = [];
-        for ($d = 0; $d < SchedulerConfig::DAYS_PER_WEEK; $d++) {
-            for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+        for ($d = 0; $d < SchedulerConfig::daysPerWeek(); $d++) {
+            for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
                 $sid = $timetable->slots[$section->id][$d][$p]->subjectId;
                 if ($sid) {
                     $weeklyCounts[$sid] = ($weeklyCounts[$sid] ?? 0) + 1;
@@ -4082,7 +4161,7 @@ class TimetableRepair
 
         // Count daily allocations for this day
         $dailyCounts = [];
-        for ($p = 0; $p < SchedulerConfig::PERIODS_PER_DAY; $p++) {
+        for ($p = 0; $p < SchedulerConfig::periodsPerDay(); $p++) {
             $sid = $timetable->slots[$section->id][$day][$p]->subjectId;
             if ($sid) {
                 $dailyCounts[$sid] = ($dailyCounts[$sid] ?? 0) + 1;
@@ -4104,7 +4183,7 @@ class TimetableRepair
                 continue;
             }
             // Skip if would exceed daily limit
-            if ($dailyCount >= SchedulerConfig::MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+            if ($dailyCount >= SchedulerConfig::maxPeriodsPerSubjectPerDay()) {
                 continue;
             }
 

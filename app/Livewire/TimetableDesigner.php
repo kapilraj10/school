@@ -6,6 +6,7 @@ use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\Subject;
 use App\Models\Teacher;
+use App\Models\TimetableSetting;
 use App\Models\TimetableSlot;
 use App\Services\TimetableValidationService;
 use Carbon\Carbon;
@@ -55,6 +56,10 @@ class TimetableDesigner extends Component
 
     public $unsavedChanges = [];
 
+    public int $periodsPerDay = 8;
+
+    public array $schoolDayNames = [];
+
     protected $rules = [
         'slotSubjectId' => 'required|exists:subjects,id',
         'slotTeacherId' => 'required|exists:teachers,id',
@@ -63,6 +68,8 @@ class TimetableDesigner extends Component
 
     public function mount(): void
     {
+        $this->periodsPerDay = TimetableSlot::getPeriodsPerDay();
+        $this->schoolDayNames = TimetableSetting::get('school_days', ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']);
         $this->initializeClasses();
         $this->initializeAcademicTerms();
         $this->initializeTeachers();
@@ -208,7 +215,9 @@ class TimetableDesigner extends Component
 
         for ($i = 0; $i < 7; $i++) {
             $date = $sunday->copy()->addDays($i);
-            $this->weekDates[] = $this->formatWeekDate($date);
+            $weekDate = $this->formatWeekDate($date);
+            $weekDate['isSchoolDay'] = in_array($date->format('l'), $this->schoolDayNames);
+            $this->weekDates[] = $weekDate;
         }
     }
 

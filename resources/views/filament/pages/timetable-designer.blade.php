@@ -26,7 +26,7 @@
                                     <thead>
                                         <tr class="bg-gray-100 dark:bg-gray-700">
                                             <th class="border border-gray-300 dark:border-gray-600 p-2 text-sm font-semibold">Day / Period</th>
-                                            @for($period = 1; $period <= 8; $period++)
+                                            @for($period = 1; $period <= $periodsPerDay; $period++)
                                                 <th class="border border-gray-300 dark:border-gray-600 p-2 text-sm font-semibold">
                                                     <div>P{{ $period }}</div>
                                                     @if(isset($periodTimes[$period]) && $periodTimes[$period])
@@ -39,12 +39,12 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        @foreach([1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday', 5 => 'Friday', 6 => 'Saturday'] as $day => $dayName)
+                                        @foreach($days as $day => $dayName)
                                             <tr>
                                                 <td class="border border-gray-300 dark:border-gray-600 p-2 bg-gray-50 dark:bg-gray-700 font-medium text-sm">
                                                     {{ $dayName }}
                                                 </td>
-                                                @for($period = 1; $period <= 8; $period++)
+                                                @for($period = 1; $period <= $periodsPerDay; $period++)
                                                     <td class="border border-gray-300 dark:border-gray-600 p-1 relative">
                                                         @php
                                                             $slot = $timetableSlots[$day][$period] ?? null;
@@ -441,7 +441,7 @@
                                         }
                                     }
                                 }
-                                $totalSlots = 48; // 6 days × 8 periods
+                                $totalSlots = count($days) * $periodsPerDay;
                                 $fillPercentage = round(($filledSlots / $totalSlots) * 100);
                             @endphp
                             

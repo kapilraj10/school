@@ -58,11 +58,11 @@
                         <thead>
                             <tr class="bg-gray-100 dark:bg-gray-800">
                                 <th class="border border-gray-300 dark:border-gray-600 p-3 text-left">Day</th>
-                                @for($period = 1; $period <= 8; $period++)
+                                @foreach($scheduleData['periods'] as $period => $periodLabel)
                                     <th class="border border-gray-300 dark:border-gray-600 p-3 text-center">
                                         {{ $period }}
                                     </th>
-                                @endfor
+                                @endforeach
                             </tr>
                         </thead>
                         <tbody>
@@ -74,7 +74,7 @@
                                             ({{ $scheduleData['periods_per_day'][$dayNum] ?? 0 }} periods)
                                         </div>
                                     </td>
-                                    @for($period = 1; $period <= 8; $period++)
+                                    @foreach($scheduleData['periods'] as $period => $periodLabel)
                                         @php
                                             $slot = $scheduleData['slots'][$dayNum][$period] ?? null;
                                         @endphp
@@ -92,7 +92,7 @@
                                                 <div class="text-center text-gray-400 text-sm">Free</div>
                                             @endif
                                         </td>
-                                    @endfor
+                                    @endforeach
                                 </tr>
                             @endforeach
                         </tbody>

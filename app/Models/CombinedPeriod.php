@@ -52,6 +52,6 @@ class CombinedPeriod extends Model
 
     public function getDayNameAttribute(): string
     {
-        return TimetableSlot::$days[$this->day] ?? 'Unknown';
+        return TimetableSlot::getDays()[$this->day] ?? 'Unknown';
     }
 }

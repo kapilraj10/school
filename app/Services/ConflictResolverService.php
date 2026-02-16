@@ -55,6 +55,22 @@ class ConflictResolverService
     {
         $this->academicTermId = $academicTermId;
         $this->loadData();
+        $this->initializeFromSettings();
+    }
+
+    protected function initializeFromSettings(): void
+    {
+        $this->periodsPerDay = TimetableSlot::getPeriodsPerDay();
+        $days = TimetableSlot::getDays();
+        $this->daysPerWeek = count($days);
+
+        $this->dayMap = [];
+        $this->dayNameToIndex = [];
+        foreach ($days as $index => $dayName) {
+            $shortName = substr($dayName, 0, 3);
+            $this->dayMap[$index] = $shortName;
+            $this->dayNameToIndex[$shortName] = $index;
+        }
     }
 
     /**

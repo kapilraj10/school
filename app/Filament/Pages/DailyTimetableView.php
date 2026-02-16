@@ -35,7 +35,7 @@ class DailyTimetableView extends Page implements HasForms
 
     public $timetableData = null;
 
-    public $currentDay = 0; // 0 = Sunday
+    public $currentDay = 0; // Index into school days
 
     public function getMaxContentWidth(): MaxWidth
     {
@@ -46,9 +46,13 @@ class DailyTimetableView extends Page implements HasForms
     {
         $currentTerm = AcademicTerm::where('is_active', true)->first();
 
-        // Set current day based on today (0 = Sunday)
-        $today = (int) date('w');
-        $this->currentDay = $today === 6 ? 0 : $today;
+        // Set current day based on today
+        $days = TimetableSlot::getDays();
+        $todayName = date('l');
+        $this->currentDay = array_search($todayName, $days);
+        if ($this->currentDay === false) {
+            $this->currentDay = array_key_first($days);
+        }
 
         $termId = request('term_id');
         $selectedTermId = $termId ?: $currentTerm?->id;
@@ -152,6 +156,7 @@ class DailyTimetableView extends Page implements HasForms
                 })
                 ->values();
 
+            $periods = TimetableSlot::getPeriods();
             foreach ($teacherIds as $teacherId) {
                 $teacher = $teachers->get($teacherId);
                 $teacherLabel = $teacher?->employee_id ?: "Teacher #{$teacherId}";
@@ -163,7 +168,7 @@ class DailyTimetableView extends Page implements HasForms
                     'periods' => [],
                 ];
 
-                for ($period = 1; $period <= 8; $period++) {
+                foreach (array_keys($periods) as $period) {
                     $slot = $slots->where('teacher_id', $teacherId)
                         ->where('period', $period)
                         ->first();
@@ -179,6 +184,7 @@ class DailyTimetableView extends Page implements HasForms
                     strtoupper($class->section),
                 ]);
 
+            $periods = TimetableSlot::getPeriods();
             foreach ($classes as $class) {
                 $rows[$class->id] = [
                     'label' => $class->full_name,
@@ -187,7 +193,7 @@ class DailyTimetableView extends Page implements HasForms
                     'periods' => [],
                 ];
 
-                for ($period = 1; $period <= 8; $period++) {
+                foreach (array_keys($periods) as $period) {
                     $slot = $slots->where('class_room_id', $class->id)
                         ->where('period', $period)
                         ->first();
@@ -197,14 +203,15 @@ class DailyTimetableView extends Page implements HasForms
             }
         }
 
+        $days = TimetableSlot::getDays();
         $this->timetableData = [
             'rows' => $rows,
             'viewMode' => $viewMode,
             'rowHeaderLabel' => $viewMode === 'teacher' ? 'Teacher/Period' : 'Class/Period',
             'cellMetaLabel' => $viewMode === 'teacher' ? 'Class' : 'Teacher',
-            'day' => TimetableSlot::$days[$this->currentDay] ?? 'Unknown',
+            'day' => $days[$this->currentDay] ?? 'Unknown',
             'dayNum' => $this->currentDay,
-            'periods' => TimetableSlot::$periods,
+            'periods' => TimetableSlot::getPeriods(),
             'term' => AcademicTerm::find($data['academic_term_id']),
             'totalSlots' => $slots->count(),
             'filledSlots' => $slots->whereNotNull('subject_id')->count(),
@@ -213,19 +220,28 @@ class DailyTimetableView extends Page implements HasForms
 
     public function previousDay(): void
     {
-        $this->currentDay = ($this->currentDay - 1 + 6) % 6;
+        $days = TimetableSlot::getDays();
+        $dayKeys = array_keys($days);
+        $currentIndex = array_search($this->currentDay, $dayKeys);
+        $prevIndex = ($currentIndex - 1 + count($dayKeys)) % count($dayKeys);
+        $this->currentDay = $dayKeys[$prevIndex];
         $this->loadTimetable();
     }
 
     public function nextDay(): void
     {
-        $this->currentDay = ($this->currentDay + 1) % 6;
+        $days = TimetableSlot::getDays();
+        $dayKeys = array_keys($days);
+        $currentIndex = array_search($this->currentDay, $dayKeys);
+        $nextIndex = ($currentIndex + 1) % count($dayKeys);
+        $this->currentDay = $dayKeys[$nextIndex];
         $this->loadTimetable();
     }
 
     public function setDay(int $day): void
     {
-        if (! array_key_exists($day, TimetableSlot::$days)) {
+        $days = TimetableSlot::getDays();
+        if (! array_key_exists($day, $days)) {
             return;
         }
 

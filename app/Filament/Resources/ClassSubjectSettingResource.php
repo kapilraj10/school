@@ -138,14 +138,6 @@ class ClassSubjectSettingResource extends Resource
                                     ->native(false)
                                     ->helperText('Core or Co-Curricular subject'),
 
-                                Forms\Components\TextInput::make('priority')
-                                    ->label('Priority')
-                                    ->numeric()
-                                    ->default(5)
-                                    ->minValue(1)
-                                    ->maxValue(10)
-                                    ->helperText('1-10, higher = more important'),
-
                                 Forms\Components\Toggle::make('is_active')
                                     ->label('Active')
                                     ->default(true)
@@ -204,16 +196,6 @@ class ClassSubjectSettingResource extends Resource
                         default => 'gray',
                     })
                     ->formatStateUsing(fn (string $state): string => ucfirst($state)),
-
-                Tables\Columns\TextColumn::make('priority')
-                    ->label('Priority')
-                    ->alignCenter()
-                    ->badge()
-                    ->color(fn (int $state): string => match (true) {
-                        $state >= 8 => 'danger',
-                        $state >= 5 => 'warning',
-                        default => 'gray',
-                    }),
 
                 Tables\Columns\IconColumn::make('is_active')
                     ->label('Active')

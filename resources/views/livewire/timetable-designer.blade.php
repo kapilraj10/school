@@ -223,11 +223,11 @@
             @if ($selectedClassId && $selectedTermId)
                 <div class="min-w-[1100px] space-y-3">
                     <div class="grid items-stretch gap-2 sticky top-0 z-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur"
-                         style="grid-template-columns: 100px repeat(8, minmax(140px, 1fr));">
+                         style="grid-template-columns: 100px repeat({{ $periodsPerDay }}, minmax(140px, 1fr));">
                         <div class="h-full p-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 sticky left-0 z-30 flex items-center justify-center">
                             <span class="text-xs font-semibold uppercase text-gray-600 dark:text-gray-400">Day</span>
                         </div>
-                        @for ($period = 1; $period <= 8; $period++)
+                        @for ($period = 1; $period <= $periodsPerDay; $period++)
                             <div class="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-center">
                                 <div class="text-xs font-semibold uppercase text-blue-700 dark:text-blue-200">Period</div>
                                 <div class="text-xl font-bold text-blue-900 dark:text-blue-100">{{ $period }}</div>
@@ -239,16 +239,16 @@
                         @php
                             $dateKey = $dateInfo['date']->format('Y-m-d');
                             $isToday = $dateInfo['date']->isToday();
-                            $isWeekend = in_array($dateInfo['dayOfWeek'], [6]);
+                            $isSchoolDay = $dateInfo['isSchoolDay'] ?? true;
                         @endphp
 
-                        @if (!$isWeekend)
+                        @if ($isSchoolDay)
                             <div class="grid items-stretch gap-2"
-                                 style="grid-template-columns: 100px repeat(8, minmax(140px, 1fr));">
+                                 style="grid-template-columns: 100px repeat({{ $periodsPerDay }}, minmax(140px, 1fr));">
                                 <div class="p-3 rounded-lg border bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 sticky left-0 z-10 flex flex-col gap-1">
                                     <div class="flex items-center gap-2">
                                         @if ($isToday)
-                                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-semibold">•</span>
+                                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-semibold">&bull;</span>
                                         @endif
                                         <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">
                                             {{ $dateInfo['dayName'] }}
@@ -256,7 +256,7 @@
                                     </div>
                                 </div>
 
-                                @for ($period = 1; $period <= 8; $period++)
+                                @for ($period = 1; $period <= $periodsPerDay; $period++)
                                     @php
                                         $key = "{$dateKey}_{$period}";
                                         $slot = $timetableSlots[$key] ?? null;

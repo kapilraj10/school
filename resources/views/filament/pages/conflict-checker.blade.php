@@ -113,7 +113,7 @@
                                         {{ $conflict->data['teacher_name'] ?? 'Unknown Teacher' }}
                                     </div>
                                     <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                        {{ \App\Models\TimetableSlot::$days[$conflict->data['day'] ?? 0] ?? "Day {$conflict->data['day']}" }}, Period {{ $conflict->data['period'] ?? 'N/A' }}
+                                        {{ \App\Models\TimetableSlot::getDays()[$conflict->data['day'] ?? 0] ?? "Day {$conflict->data['day']}" }}, Period {{ $conflict->data['period'] ?? 'N/A' }}
                                     </div>
                                     <div class="text-sm mt-2 text-gray-700 dark:text-gray-300">
                                         Assigned to both: <span class="font-medium">{{ $conflict->data['class1'] ?? 'Unknown' }}</span> and
@@ -137,7 +137,7 @@
                                         {{ $conflict->data['classroom_name'] ?? 'Unknown' }}
                                     </div>
                                     <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                        {{ \App\Models\TimetableSlot::$days[$conflict->data['day'] ?? 0] ?? "Day" }}, Period {{ $conflict->data['period'] ?? 'N/A' }}
+                                        {{ \App\Models\TimetableSlot::getDays()[$conflict->data['day'] ?? 0] ?? "Day" }}, Period {{ $conflict->data['period'] ?? 'N/A' }}
                                     </div>
                                     <div class="text-sm mt-2 text-gray-700 dark:text-gray-300 flex items-center gap-2">
                                         <span class="font-medium">{{ $conflict->data['subject1'] ?? 'Unknown' }}</span>
@@ -302,7 +302,7 @@
                                 <div class="bg-white dark:bg-gray-800 p-4 rounded border border-orange-200 dark:border-orange-800">
                                     <div class="font-semibold text-orange-800 dark:text-orange-200">{{ $v->data['teacher_name'] ?? 'Unknown' }}</div>
                                     <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                        Scheduled during unavailable: {{ \App\Models\TimetableSlot::$days[$v->data['day'] ?? 0] ?? '' }} – Period {{ $v->data['period'] ?? 'N/A' }}
+                                        Scheduled during unavailable: {{ \App\Models\TimetableSlot::getDays()[$v->data['day'] ?? 0] ?? '' }} – Period {{ $v->data['period'] ?? 'N/A' }}
                                     </div>
                                 </div>
                             @endforeach

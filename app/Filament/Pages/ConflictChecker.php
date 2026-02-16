@@ -321,7 +321,7 @@ class ConflictChecker extends Page implements HasForms
                         'teacher_id' => $row->teacher_id,
                         'teacher_name' => $row->teacher_name,
                         'day' => $row->day,
-                        'day_name' => TimetableSlot::$days[$row->day] ?? "Day {$row->day}",
+                        'day_name' => TimetableSlot::getDays()[$row->day] ?? "Day {$row->day}",
                         'assigned_periods' => $row->daily_periods,
                         'max_periods' => $maxAllowed,
                         'excess' => $row->daily_periods - $maxAllowed,
@@ -432,7 +432,7 @@ class ConflictChecker extends Page implements HasForms
 
                 for ($i = 0; $i < count($periodNumbers) - 1; $i++) {
                     if ($periodNumbers[$i + 1] - $periodNumbers[$i] > 1) {
-                        $dayName = TimetableSlot::$days[$day] ?? "Day $day";
+                        $dayName = TimetableSlot::getDays()[$day] ?? "Day $day";
                         Conflict::create([
                             'academic_term_id' => $termId,
                             'type' => 'combined_period_violation',
@@ -501,7 +501,7 @@ class ConflictChecker extends Page implements HasForms
         foreach ($classes as $class) {
             $classSlots = $allSlots->where('class_room_id', $class->id);
 
-            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+            foreach (TimetableSlot::getDays() as $dayNum => $dayName) {
                 $daySlots = $classSlots->where('day', $dayNum)->whereNotNull('subject_id');
                 if ($daySlots->count() !== 8) {
                     Conflict::create([
@@ -541,7 +541,7 @@ class ConflictChecker extends Page implements HasForms
         foreach ($classes as $class) {
             $classSlots = $allSlots->where('class_room_id', $class->id);
 
-            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+            foreach (TimetableSlot::getDays() as $dayNum => $dayName) {
                 $dayCoCurricular = $classSlots
                     ->where('day', $dayNum)
                     ->whereIn('subject_id', $coCurricularSubjectIds->keys())
@@ -588,7 +588,7 @@ class ConflictChecker extends Page implements HasForms
         foreach ($classes as $class) {
             $classSlots = $allSlots->where('class_room_id', $class->id);
 
-            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+            foreach (TimetableSlot::getDays() as $dayNum => $dayName) {
                 $dayCoCurricular = $classSlots
                     ->where('day', $dayNum)
                     ->whereIn('subject_id', $coCurricularIds->keys())
@@ -657,7 +657,7 @@ class ConflictChecker extends Page implements HasForms
         foreach ($classes as $class) {
             $classSlots = $allSlots->where('class_room_id', $class->id);
 
-            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+            foreach (TimetableSlot::getDays() as $dayNum => $dayName) {
                 $daySlots = $classSlots->where('day', $dayNum)->whereNotNull('subject_id');
 
                 $subjectCounts = $daySlots->groupBy('subject_id');
@@ -715,7 +715,7 @@ class ConflictChecker extends Page implements HasForms
             if ($classGrades->count() > 1) {
                 $subjectName = $slots->first()->subject->name ?? 'Unknown';
                 $classNames = $slots->map(fn ($s) => $s->classRoom?->full_name)->filter()->unique()->implode(', ');
-                $dayName = TimetableSlot::$days[$slots->first()->day] ?? 'Unknown';
+                $dayName = TimetableSlot::getDays()[$slots->first()->day] ?? 'Unknown';
 
                 Conflict::create([
                     'academic_term_id' => $termId,
@@ -747,7 +747,7 @@ class ConflictChecker extends Page implements HasForms
                     'data' => [
                         'subject_name' => $subjectName,
                         'classes' => $slots->map(fn ($s) => $s->classRoom?->full_name)->filter()->unique()->implode(', '),
-                        'day_name' => $uniqueDays->map(fn ($d) => TimetableSlot::$days[$d] ?? $d)->implode(', '),
+                        'day_name' => $uniqueDays->map(fn ($d) => TimetableSlot::getDays()[$d] ?? $d)->implode(', '),
                         'issue' => "Combined subject '{$subjectName}' is scheduled on different days for different sections.",
                     ],
                 ]);
@@ -784,7 +784,7 @@ class ConflictChecker extends Page implements HasForms
             $first = $slots->first();
             $subjectName = $physicalSubjects[$first->subject_id] ?? 'Unknown';
             $className = $first->classRoom?->full_name ?? 'Unknown';
-            $dayName = TimetableSlot::$days[$first->day] ?? "Day {$first->day}";
+            $dayName = TimetableSlot::getDays()[$first->day] ?? "Day {$first->day}";
 
             Conflict::create([
                 'academic_term_id' => $termId,
@@ -819,7 +819,7 @@ class ConflictChecker extends Page implements HasForms
             $coCurricularIds = Subject::where('type', 'co_curricular')->pluck('id');
 
             $dayOrders = [];
-            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+            foreach (TimetableSlot::getDays() as $dayNum => $dayName) {
                 $daySlots = $classSlots
                     ->where('day', $dayNum)
                     ->whereNotIn('subject_id', $coCurricularIds)
@@ -857,7 +857,7 @@ class ConflictChecker extends Page implements HasForms
                         'entity_id' => $class->id,
                         'data' => [
                             'class_name' => $class->full_name,
-                            'day_name' => TimetableSlot::$days[$dayNum] ?? "Day {$dayNum}",
+                            'day_name' => TimetableSlot::getDays()[$dayNum] ?? "Day {$dayNum}",
                             'mismatches' => $mismatches,
                             'total' => $totalComparable,
                             'percentage' => round(($mismatches / $totalComparable) * 100),
@@ -937,7 +937,7 @@ class ConflictChecker extends Page implements HasForms
         foreach ($classes as $class) {
             $classSlots = $allSlots->where('class_room_id', $class->id);
 
-            foreach (TimetableSlot::$days as $dayNum => $dayName) {
+            foreach (TimetableSlot::getDays() as $dayNum => $dayName) {
                 $daySlots = $classSlots->where('day', $dayNum)->sortBy('period');
                 $previous = null;
                 $consecutiveCount = 0;
@@ -1000,7 +1000,7 @@ class ConflictChecker extends Page implements HasForms
                 'entity_id' => $first->class_room_id,
                 'data' => [
                     'class_name' => $first->classRoom?->full_name ?? 'Unknown',
-                    'day_name' => TimetableSlot::$days[$first->day] ?? "Day {$first->day}",
+                    'day_name' => TimetableSlot::getDays()[$first->day] ?? "Day {$first->day}",
                     'subject_name' => $coCurricularIds[$first->subject_id] ?? 'Unknown',
                     'period' => $slots->pluck('period')->sort()->implode(', '),
                     'issue' => 'Co-curricular subject scheduled in early periods (before period 4)',
@@ -1036,7 +1036,7 @@ class ConflictChecker extends Page implements HasForms
                 // Soft: flag if a non-co-curricular subject appears 2+ times in a day
                 if ($maxInOneDay >= 2) {
                     $worstDay = $dayDistribution->filter(fn ($c) => $c >= 2)->keys()->first();
-                    $dayName = TimetableSlot::$days[$worstDay] ?? "Day {$worstDay}";
+                    $dayName = TimetableSlot::getDays()[$worstDay] ?? "Day {$worstDay}";
 
                     Conflict::create([
                         'academic_term_id' => $termId,

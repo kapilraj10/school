@@ -3,6 +3,8 @@
 namespace App\Filament\Pages;
 
 use App\Models\ClassRoom;
+use App\Models\TimetableSetting;
+use App\Models\TimetableSlot;
 use App\Services\TeacherRequirementAnalyzer;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -150,5 +152,63 @@ class TeacherRequirements extends Page implements HasForms, HasTable
     public function getViewMode(): string
     {
         return $this->viewMode ?? 'by_class';
+    }
+
+    /**
+     * @return array<int, array{text: string, example?: string}>
+     */
+    public function getHardRequirements(): array
+    {
+        $periodsPerDay = TimetableSlot::getPeriodsPerDay();
+        $days = TimetableSlot::getDays();
+        $dayCount = count($days);
+        $totalPeriods = $periodsPerDay * $dayCount;
+        $dayList = implode(' to ', [reset($days), end($days)]);
+        $maxSameSubject = (int) TimetableSetting::get('max_same_subject_per_day', 2);
+
+        return [
+            ['text' => "There should be {$periodsPerDay} periods per day, {$totalPeriods} per week."],
+            ['text' => "In a week there are {$dayCount} active days ({$dayList})."],
+            ['text' => 'There are 3 types of subjects: compulsory, optional, and co-curricular.'],
+            ['text' => 'No two co-curricular subjects should be taught in a single day.'],
+            ['text' => "Not more than {$maxSameSubject} periods of 1 subject in a day."],
+            [
+                'text' => 'A co-curricular subject may be scheduled for at most two periods per day, and only if both periods are for the same subject and are consecutive.',
+                'example' => 'e.g. dance–dance is allowed; dance–sport and dance–math–dance are not allowed.',
+            ],
+            ['text' => 'Each subject must satisfy its minimum and maximum weekly period allocation.'],
+            ['text' => 'Subject allocations must be balanced across the week (no subject overloaded on a single day).'],
+            ['text' => 'A teacher cannot be assigned to more than one class or section in the same period.'],
+            ['text' => 'Teacher workload must not exceed maximum allowed periods per day. Max allocation is 7 periods per day.'],
+            ['text' => "All {$totalPeriods} periods should be taught in a week."],
+            ['text' => 'There should be no empty slots in the timetable.'],
+            [
+                'text' => 'Combined subjects must be scheduled for the same grade on the same day and in the same periods.',
+                'example' => '✔ Sport on Tuesday, periods 5–6 for Class 1 Sections A & B. ✘ Sport on Tuesday, periods 5–6 for Class 1 and Class 2.',
+            ],
+            [
+                'text' => 'No physical period (sports, taekwondo, dance) in the 5th period.',
+            ],
+        ];
+    }
+
+    /**
+     * @return array<int, array{text: string, example?: string}>
+     */
+    public function getSoftRequirements(): array
+    {
+        return [
+            [
+                'text' => 'Timetable should maintain positional consistency across days.',
+                'example' => 'e.g. If Sunday order is English, Math, Science, Nepali, Serofero, GK, Computer, English — other days should retain the same subject order, replacing only the co-curricular subject.',
+            ],
+            ['text' => 'Not more than 1 period of 1 subject in a day (preferred).'],
+            ['text' => 'Core subjects (English, Math, Science) should preferably be scheduled in the same period slots daily.'],
+            [
+                'text' => 'Avoid scheduling mentally heavy subjects consecutively.',
+                'example' => 'e.g. Math → Science → Math should be avoided.',
+            ],
+            ['text' => 'Co-curricular subjects should preferably be placed in middle or last periods.'],
+        ];
     }
 }

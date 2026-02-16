@@ -101,12 +101,12 @@ class CombinedPeriodResource extends Resource
                     Grid::make(3)->schema([
                         Select::make('day')
                             ->label('Day')
-                            ->options(TimetableSlot::$days)
+                            ->options(TimetableSlot::getDays())
                             ->required()
                             ->native(false),
                         Select::make('period')
                             ->label('Period')
-                            ->options(TimetableSlot::$periods)
+                            ->options(TimetableSlot::getPeriods())
                             ->required()
                             ->native(false)
                             ->helperText('Combined periods should not be in first period'),
@@ -140,7 +140,7 @@ class CombinedPeriodResource extends Resource
                     ->label('Teacher')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('day')
-                    ->formatStateUsing(fn ($state) => TimetableSlot::$days[$state] ?? 'N/A')
+                    ->formatStateUsing(fn ($state) => TimetableSlot::getDays()[$state] ?? 'N/A')
                     ->badge()
                     ->color('info'),
                 Tables\Columns\TextColumn::make('period')

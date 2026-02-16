@@ -91,10 +91,13 @@ class TeacherSchedule extends Page implements HasForms
             ->orderBy('period')
             ->get();
 
+        $days = TimetableSlot::getDays();
+        $periods = TimetableSlot::getPeriods();
+
         $organized = [];
-        for ($day = 0; $day <= 5; $day++) {
+        foreach (array_keys($days) as $day) {
             $organized[$day] = [];
-            for ($period = 1; $period <= 8; $period++) {
+            foreach (array_keys($periods) as $period) {
                 $slot = $slots->where('day', $day)->where('period', $period)->first();
                 $organized[$day][$period] = $slot;
             }
@@ -104,14 +107,14 @@ class TeacherSchedule extends Page implements HasForms
         $totalPeriods = $slots->count();
         $periodsPerDay = [];
 
-        foreach (range(0, 5) as $day) {
+        foreach (array_keys($days) as $day) {
             $periodsPerDay[$day] = $slots->where('day', $day)->count();
         }
 
         $this->scheduleData = [
             'slots' => $organized,
-            'days' => TimetableSlot::$days,
-            'periods' => TimetableSlot::$periods,
+            'days' => $days,
+            'periods' => $periods,
             'teacher' => $teacher,
             'term' => AcademicTerm::find($data['academic_term_id']),
             'total_periods' => $totalPeriods,

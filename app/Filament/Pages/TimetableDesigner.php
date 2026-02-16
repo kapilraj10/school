@@ -62,6 +62,10 @@ class TimetableDesigner extends Page implements HasForms
 
     public array $constraintStatus = [];
 
+    public array $days = [];
+
+    public int $periodsPerDay = 8;
+
     /**
      * Initialize the page
      */
@@ -85,6 +89,10 @@ class TimetableDesigner extends Page implements HasForms
 
         // Load period times from settings
         $this->loadPeriodTimes();
+
+        // Load dynamic day/period settings
+        $this->days = TimetableSlot::getDays();
+        $this->periodsPerDay = TimetableSlot::getPeriodsPerDay();
 
         // Load timetable if selections are made
         if ($this->selectedClassRoomId && $this->selectedTermId) {
@@ -132,8 +140,8 @@ class TimetableDesigner extends Page implements HasForms
 
         // Initialize empty grid structure
         $this->timetableSlots = [];
-        for ($day = 1; $day <= 6; $day++) {
-            for ($period = 1; $period <= 8; $period++) {
+        foreach (array_keys($this->days) as $day) {
+            for ($period = 1; $period <= $this->periodsPerDay; $period++) {
                 $this->timetableSlots[$day][$period] = null;
             }
         }
@@ -566,7 +574,8 @@ class TimetableDesigner extends Page implements HasForms
         $this->periodTimes = [];
 
         // Try to get period times from settings
-        for ($period = 1; $period <= 8; $period++) {
+        $periodsPerDay = TimetableSlot::getPeriodsPerDay();
+        for ($period = 1; $period <= $periodsPerDay; $period++) {
             $startTime = \App\Models\TimetableSetting::get("period_{$period}_start");
             $endTime = \App\Models\TimetableSetting::get("period_{$period}_end");
 

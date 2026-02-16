@@ -41,8 +41,8 @@
                 {{-- Quick Day Navigation --}}
                 <div class="mb-4">
                     <h4 class="text-sm font-semibold mb-2">Quick Day Navigation</h4>
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                        @foreach(\App\Models\TimetableSlot::$days as $dayNum => $dayName)
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3" style="grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));">
+                        @foreach(\App\Models\TimetableSlot::getDays() as $dayNum => $dayName)
                             <x-filament::button 
                                 wire:click="setDay({{ $dayNum }})"
                                 color="{{ $currentDay === $dayNum ? 'primary' : 'gray' }}"

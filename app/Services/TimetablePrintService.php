@@ -79,8 +79,8 @@ class TimetablePrintService
         $masterData = [
             'term' => $term,
             'classes' => $classes,
-            'days' => TimetableSlot::$days,
-            'periods' => TimetableSlot::$periods,
+            'days' => TimetableSlot::getDays(),
+            'periods' => TimetableSlot::getPeriods(),
             'schedules' => [],
         ];
 
@@ -121,14 +121,14 @@ class TimetablePrintService
         $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues(['']));
 
         $header = ['Day / Period'];
-        for ($period = 1; $period <= 8; $period++) {
-            $header[] = "Period {$period}";
+        foreach ($data['periods'] as $period => $label) {
+            $header[] = $label;
         }
         $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues($header));
 
         foreach ($data['days'] as $dayNum => $dayName) {
             $row = [$dayName];
-            for ($period = 1; $period <= 8; $period++) {
+            foreach (array_keys($data['periods']) as $period) {
                 $slot = $data['slots'][$dayNum][$period] ?? null;
                 if ($slot && $slot->subject) {
                     $cellData = $slot->subject->name;
@@ -168,14 +168,14 @@ class TimetablePrintService
         $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues(['']));
 
         $header = ['Day / Period'];
-        for ($period = 1; $period <= 8; $period++) {
-            $header[] = "Period {$period}";
+        foreach ($data['periods'] as $period => $label) {
+            $header[] = $label;
         }
         $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues($header));
 
         foreach ($data['days'] as $dayNum => $dayName) {
             $row = [$dayName];
-            for ($period = 1; $period <= 8; $period++) {
+            foreach (array_keys($data['periods']) as $period) {
                 $slot = $data['slots'][$dayNum][$period] ?? null;
                 if ($slot && $slot->subject) {
                     $cellData = $slot->classRoom->full_name."\n".$slot->subject->name;
@@ -209,8 +209,8 @@ class TimetablePrintService
             'class' => $class,
             'term' => $term,
             'slots' => $slots,
-            'days' => TimetableSlot::$days,
-            'periods' => TimetableSlot::$periods,
+            'days' => TimetableSlot::getDays(),
+            'periods' => TimetableSlot::getPeriods(),
             'totalSlots' => $totalSlots,
             'filledSlots' => $filledSlots,
         ];
@@ -232,9 +232,11 @@ class TimetablePrintService
             ->get();
 
         $organized = [];
-        for ($day = 0; $day <= 5; $day++) {
+        $days = TimetableSlot::getDays();
+        $periods = TimetableSlot::getPeriods();
+        foreach (array_keys($days) as $day) {
             $organized[$day] = [];
-            for ($period = 1; $period <= 8; $period++) {
+            foreach (array_keys($periods) as $period) {
                 $slot = $slotsQuery->where('day', $day)->where('period', $period)->first();
                 $organized[$day][$period] = $slot;
             }
@@ -247,8 +249,8 @@ class TimetablePrintService
             'teacher' => $teacher,
             'term' => $term,
             'slots' => $organized,
-            'days' => TimetableSlot::$days,
-            'periods' => TimetableSlot::$periods,
+            'days' => $days,
+            'periods' => $periods,
             'totalSlots' => $totalSlots,
             'filledSlots' => $filledSlots,
         ];
@@ -267,9 +269,11 @@ class TimetablePrintService
             ->get();
 
         $organized = [];
-        for ($day = 0; $day <= 5; $day++) {
+        $days = TimetableSlot::getDays();
+        $periods = TimetableSlot::getPeriods();
+        foreach (array_keys($days) as $day) {
             $organized[$day] = [];
-            for ($period = 1; $period <= 8; $period++) {
+            foreach (array_keys($periods) as $period) {
                 $slot = $slotsQuery->where('day', $day)->where('period', $period)->first();
                 $organized[$day][$period] = $slot;
             }
