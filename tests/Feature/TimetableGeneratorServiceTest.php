@@ -377,6 +377,114 @@ class TimetableGeneratorServiceTest extends TestCase
         $this->assertNotNull($combinedSlot, 'Combined period slot should be created');
     }
 
+    public function test_preserves_locked_slot_during_generation(): void
+    {
+        $teacher = $this->createTeacher();
+        $subject = $this->createSubject(['name' => 'Locked Subject']);
+
+        ClassSubjectSetting::create([
+            'class_room_id' => $this->class->id,
+            'subject_id' => $subject->id,
+            'teacher_id' => $teacher->id,
+            'periods_per_week' => 4,
+            'min_periods_per_week' => 3,
+            'max_periods_per_week' => 5,
+        ]);
+
+        TimetableSlot::create([
+            'class_room_id' => $this->class->id,
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $subject->id,
+            'teacher_id' => $teacher->id,
+            'day' => 0,
+            'period' => 1,
+            'is_locked' => true,
+            'type' => 'regular',
+        ]);
+
+        $result = $this->service->generate(
+            [$this->class->id],
+            $this->term->id,
+            ['clear_existing' => true]
+        );
+
+        $this->assertTrue($result['success']);
+        $this->assertDatabaseHas('timetable_slots', [
+            'class_room_id' => $this->class->id,
+            'academic_term_id' => $this->term->id,
+            'day' => 0,
+            'period' => 1,
+            'subject_id' => $subject->id,
+            'teacher_id' => $teacher->id,
+            'is_locked' => true,
+        ]);
+    }
+
+    public function test_does_not_override_locked_slot_with_combined_period(): void
+    {
+        $lockedTeacher = $this->createTeacher(['name' => 'Locked Teacher']);
+        $combinedTeacher = $this->createTeacher(['name' => 'Combined Teacher']);
+        $lockedSubject = $this->createSubject(['name' => 'Locked Subject']);
+        $combinedSubject = $this->createSubject(['name' => 'Combined Subject']);
+
+        ClassSubjectSetting::create([
+            'class_room_id' => $this->class->id,
+            'subject_id' => $lockedSubject->id,
+            'teacher_id' => $lockedTeacher->id,
+            'periods_per_week' => 4,
+            'min_periods_per_week' => 2,
+            'max_periods_per_week' => 5,
+        ]);
+
+        ClassSubjectSetting::create([
+            'class_room_id' => $this->class->id,
+            'subject_id' => $combinedSubject->id,
+            'teacher_id' => $combinedTeacher->id,
+            'single_combined' => 'combined',
+            'periods_per_week' => 2,
+            'min_periods_per_week' => 1,
+            'max_periods_per_week' => 3,
+        ]);
+
+        TimetableSlot::create([
+            'class_room_id' => $this->class->id,
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $lockedSubject->id,
+            'teacher_id' => $lockedTeacher->id,
+            'day' => 0,
+            'period' => 3,
+            'is_locked' => true,
+            'type' => 'regular',
+        ]);
+
+        CombinedPeriod::create([
+            'name' => 'Conflicting Combined Period',
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $combinedSubject->id,
+            'teacher_id' => $combinedTeacher->id,
+            'day' => 0,
+            'period' => 3,
+            'class_room_ids' => [$this->class->id],
+        ]);
+
+        $result = $this->service->generate(
+            [$this->class->id],
+            $this->term->id,
+            ['clear_existing' => true]
+        );
+
+        $this->assertTrue($result['success']);
+        $this->assertDatabaseHas('timetable_slots', [
+            'class_room_id' => $this->class->id,
+            'academic_term_id' => $this->term->id,
+            'day' => 0,
+            'period' => 3,
+            'subject_id' => $lockedSubject->id,
+            'teacher_id' => $lockedTeacher->id,
+            'is_locked' => true,
+        ]);
+    }
+
     public function test_enforces_eca_limit_one_per_day(): void
     {
         $teacher1 = $this->createTeacher(['name' => 'ECA Teacher 1']);

@@ -286,10 +286,10 @@
                                         x-bind:class="{
                                             'hover:border-blue-400 dark:hover:border-blue-600': !draggedSubject && editMode,
                                             'border-blue-500 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20': draggedSubject && editMode,
-                                            'cursor-move': editMode && {{ $slot ? 'true' : 'false' }},
+                                            'cursor-move': editMode && {{ $slot && ! ($slot->is_locked ?? false) ? 'true' : 'false' }},
                                             'cursor-not-allowed opacity-60': !editMode
                                         }"
-                                        x-bind:draggable="editMode && {{ $slot ? 'true' : 'false' }}"
+                                        x-bind:draggable="editMode && {{ $slot && ! ($slot->is_locked ?? false) ? 'true' : 'false' }}"
                                         @dragstart="startDragSlot('{{ $dateKey }}', {{ $period }})"
                                         @dragover.prevent="editMode && $event.preventDefault()"
                                         @drop.prevent="editMode && $wire.assignPeriod(draggedSubject, draggedTeacher, '{{ $dateKey }}', {{ $period }})">
@@ -300,14 +300,32 @@
                                                     <div class="flex items-start justify-between gap-2">
                                                         <h4 class="font-semibold text-sm text-gray-900 dark:text-gray-100 line-clamp-2">
                                                             {{ $slot->subject?->name }}
+                                                            @if($slot->is_locked ?? false)
+                                                                <span class="inline-block ml-1 px-1 py-0.5 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 rounded">LOCKED</span>
+                                                            @endif
                                                             @if(isset($slot->is_unsaved) && $slot->is_unsaved)
                                                                 <span class="inline-block ml-1 px-1 py-0.5 text-[10px] bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">UNSAVED</span>
                                                             @endif
                                                         </h4>
                                                         <div class="flex gap-1" x-show="editMode">
                                                             <button
+                                                                wire:click="toggleLockSlot('{{ $dateKey }}', {{ $period }})"
+                                                                class="{{ ($slot->is_locked ?? false) ? 'text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300' : 'text-gray-400 hover:text-amber-600 dark:hover:text-amber-400' }}"
+                                                                title="{{ ($slot->is_locked ?? false) ? 'Unlock slot' : 'Lock slot' }}">
+                                                                @if($slot->is_locked ?? false)
+                                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c1.657 0 3 1.343 3 3v2a3 3 0 11-6 0v-2c0-1.657 1.343-3 3-3zm0 0V8a4 4 0 10-8 0v3"/>
+                                                                    </svg>
+                                                                @else
+                                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V8a4 4 0 118 0v3m-9 0h10a2 2 0 012 2v6a2 2 0 01-2 2H7a2 2 0 01-2-2v-6a2 2 0 012-2z"/>
+                                                                    </svg>
+                                                                @endif
+                                                            </button>
+                                                            <button
                                                                 wire:click="removeSlot('{{ $dateKey }}', {{ $period }})"
-                                                                class="text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                                                                @disabled($slot->is_locked ?? false)
+                                                                class="text-red-500 hover:text-red-700 dark:hover:text-red-400 disabled:opacity-40 disabled:cursor-not-allowed"
                                                                 title="Remove subject">
                                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
@@ -315,7 +333,8 @@
                                                             </button>
                                                             <button
                                                                 wire:click="editSlot('{{ $dateKey }}', {{ $period }})"
-                                                                class="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+                                                                @disabled($slot->is_locked ?? false)
+                                                                class="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-40 disabled:cursor-not-allowed"
                                                                 title="Edit slot">
                                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
@@ -330,7 +349,7 @@
                                             <div class="flex items-center justify-between pt-2">
                                                 <button
                                                     wire:click="toggleStatus('{{ $dateKey }}', {{ $period }})"
-                                                    x-bind:disabled="!editMode"
+                                                    x-bind:disabled="!editMode || {{ ($slot->is_locked ?? false) ? 'true' : 'false' }}"
                                                     class="px-2 py-1 text-xs font-medium rounded {{ $slot->status === 'published' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' }}"
                                                     x-bind:class="{ 'opacity-50 cursor-not-allowed': !editMode }">
                                                     {{ strtoupper($slot->status ?? 'draft') }}

@@ -583,29 +583,58 @@ class TimetableGeneratorService
     private function placeCombinedPeriods(Collection $classes, AcademicTerm $term): void
     {
         $combinedPeriods = CombinedPeriod::where('academic_term_id', $term->id)->get();
+        $selectedClassIds = $classes->pluck('id')->toArray();
 
         foreach ($combinedPeriods as $combined) {
             $classIds = $combined->class_room_ids;
 
             foreach ($classIds as $classId) {
-                if (! in_array($classId, $classes->pluck('id')->toArray())) {
+                if (! in_array($classId, $selectedClassIds)) {
                     continue;
                 }
 
-                TimetableSlot::create([
-                    'class_room_id' => $classId,
-                    'subject_id' => $combined->subject_id,
-                    'teacher_id' => $combined->teacher_id,
-                    'day' => $combined->day,
-                    'period' => $combined->period,
-                    'is_combined' => true,
-                    'combined_period_id' => $combined->id,
-                    'academic_term_id' => $term->id,
-                ]);
+                $existingSlot = TimetableSlot::query()
+                    ->where('class_room_id', $classId)
+                    ->where('academic_term_id', $term->id)
+                    ->where('day', $combined->day)
+                    ->where('period', $combined->period)
+                    ->first();
+
+                if ($existingSlot?->is_locked) {
+                    if ((int) $existingSlot->subject_id !== (int) $combined->subject_id
+                        || (int) $existingSlot->teacher_id !== (int) $combined->teacher_id) {
+                        $this->warnings[] = "Skipped combined period on day {$combined->day}, period {$combined->period} for class {$classId} because the slot is locked with a different assignment.";
+                    }
+
+                    if ($existingSlot->teacher_id) {
+                        $this->markTeacherBusy($existingSlot->teacher_id, $combined->day, $combined->period);
+                        $this->markTeacherOccupiedGlobal($existingSlot->teacher_id, $combined->day, $combined->period, $classId);
+                    }
+
+                    continue;
+                }
+
+                $slot = TimetableSlot::updateOrCreate(
+                    [
+                        'class_room_id' => $classId,
+                        'academic_term_id' => $term->id,
+                        'day' => $combined->day,
+                        'period' => $combined->period,
+                    ],
+                    [
+                        'subject_id' => $combined->subject_id,
+                        'teacher_id' => $combined->teacher_id,
+                        'is_combined' => true,
+                        'combined_period_id' => $combined->id,
+                        'type' => 'combined',
+                        'is_locked' => false,
+                    ]
+                );
 
                 // Mark teacher as busy
-                if ($combined->teacher_id) {
-                    $this->markTeacherBusy($combined->teacher_id, $combined->day, $combined->period);
+                if ($slot->teacher_id) {
+                    $this->markTeacherBusy($slot->teacher_id, $combined->day, $combined->period);
+                    $this->markTeacherOccupiedGlobal($slot->teacher_id, $combined->day, $combined->period, $classId);
                 }
             }
         }

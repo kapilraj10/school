@@ -443,6 +443,12 @@ class TimetableDesigner extends Component
         $dateKey = Carbon::parse($date)->format('Y-m-d');
         $key = "{$dateKey}_{$period}";
 
+        if (isset($this->timetableSlots[$key]) && $this->timetableSlots[$key]->is_locked) {
+            session()->flash('error', 'Cannot edit a locked slot. Unlock it first.');
+
+            return;
+        }
+
         $this->editingSlot = $key;
         $this->slotDay = Carbon::parse($date)->dayOfWeek;
         $this->slotPeriod = $period;
@@ -479,6 +485,19 @@ class TimetableDesigner extends Component
 
         $dateKey = $this->extractDateFromSlotKey();
 
+        $existingSlot = TimetableSlot::query()
+            ->where('class_room_id', $this->selectedClassId)
+            ->where('academic_term_id', $this->selectedTermId)
+            ->where('day', $this->slotDay)
+            ->where('period', $this->slotPeriod)
+            ->first();
+
+        if ($existingSlot?->is_locked) {
+            session()->flash('error', 'Cannot update a locked slot. Unlock it first.');
+
+            return;
+        }
+
         TimetableSlot::updateOrCreate(
             [
                 'class_room_id' => $this->selectedClassId,
@@ -492,6 +511,7 @@ class TimetableDesigner extends Component
                 'date' => $dateKey,
                 'type' => 'regular',
                 'status' => $this->slotStatus,
+                'is_locked' => $existingSlot?->is_locked ?? false,
             ]
         );
 
@@ -624,11 +644,19 @@ class TimetableDesigner extends Component
             ->where('academic_term_id', $this->selectedTermId)
             ->where('day', $change['day'])
             ->where('period', $change['period'])
+            ->where('is_locked', false)
             ->delete();
     }
 
     protected function upsertSlotByChange(array $change): void
     {
+        $existingSlot = TimetableSlot::query()
+            ->where('class_room_id', $change['class_room_id'])
+            ->where('academic_term_id', $change['academic_term_id'])
+            ->where('day', $change['day'])
+            ->where('period', $change['period'])
+            ->first();
+
         TimetableSlot::updateOrCreate(
             [
                 'class_room_id' => $change['class_room_id'],
@@ -642,7 +670,7 @@ class TimetableDesigner extends Component
                 'date' => $change['date'],
                 'type' => $change['type'],
                 'status' => $change['status'],
-                'is_locked' => true,
+                'is_locked' => $change['is_locked'] ?? $existingSlot?->is_locked ?? false,
             ]
         );
     }
