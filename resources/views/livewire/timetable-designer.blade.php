@@ -119,6 +119,24 @@
                 @endif
             @endforeach
         </div>
+
+        <div class="p-2 border-t border-gray-200 dark:border-gray-700">
+            <div class="bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700 grid grid-cols-1 gap-2 text-xs">
+                <div class="font-semibold text-center mb-1">Color Legend</div>
+                <div class="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded px-2 py-1">
+                    <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+                    <span class="text-gray-700 dark:text-gray-300">Core Subject</span>
+                </div>
+                <div class="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded px-2 py-1">
+                    <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                    <span class="text-gray-700 dark:text-gray-300">Co-Curricular</span>
+                </div>
+                <div class="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-2 py-1">
+                    <span class="w-3 h-3 rounded-full bg-gray-400"></span>
+                    <span class="text-gray-700 dark:text-gray-300">Others</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Main Content Area - Weekly Calendar -->
@@ -202,23 +220,6 @@
                 <p class="text-sm text-green-900 dark:text-green-300">{{ session('message') }}</p>
             </div>
         @endif
-
-        <!-- Legend (Moved to bottom left) -->
-        <div class="fixed bottom-4 left-4 z-50 bg-white dark:bg-gray-800 p-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 grid grid-cols-1 gap-2 text-xs w-60">
-             <div class="font-semibold text-center mb-1">Color Legend</div>
-             <div class="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded px-2 py-1">
-                 <span class="w-3 h-3 rounded-full bg-blue-500"></span>
-                 <span class="text-gray-700 dark:text-gray-300">Core Subject</span>
-             </div>
-             <div class="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded px-2 py-1">
-                 <span class="w-3 h-3 rounded-full bg-green-500"></span>
-                 <span class="text-gray-700 dark:text-gray-300">Co-Curricular</span>
-             </div>
-             <div class="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-2 py-1">
-                 <span class="w-3 h-3 rounded-full bg-gray-400"></span>
-                 <span class="text-gray-700 dark:text-gray-300">Others</span>
-             </div>
-        </div>
 
         <div class="flex-1 overflow-auto p-4 transition-transform origin-top-left" :style="'zoom: ' + zoom">
             @if ($selectedClassId && $selectedTermId)
