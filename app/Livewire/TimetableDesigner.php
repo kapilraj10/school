@@ -11,6 +11,7 @@ use App\Models\TimetableSetting;
 use App\Models\TimetableSlot;
 use App\Services\TimetableValidationService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -143,7 +144,7 @@ class TimetableDesigner extends Component
 
     protected function getClassSubjectIds(): array
     {
-        return \App\Models\ClassSubjectSetting::query()
+        return ClassSubjectSetting::query()
             ->where('class_room_id', $this->selectedClassId)
             ->pluck('subject_id')
             ->unique()
@@ -249,7 +250,7 @@ class TimetableDesigner extends Component
 
     public function loadTimetableSlots(): void
     {
-        if (! $this->selectedClassId || ! $this->selectedTermId) {
+        if (! $this->hasSelectedClassAndTerm()) {
             $this->timetableSlots = [];
 
             return;
@@ -262,11 +263,29 @@ class TimetableDesigner extends Component
 
     protected function fetchTimetableSlots()
     {
-        return TimetableSlot::query()
-            ->where('class_room_id', $this->selectedClassId)
-            ->where('academic_term_id', $this->selectedTermId)
+        return $this->selectedSlotsQuery()
             ->with(['subject', 'teacher'])
             ->get();
+    }
+
+    protected function hasSelectedClassAndTerm(): bool
+    {
+        return (bool) ($this->selectedClassId && $this->selectedTermId);
+    }
+
+    protected function selectedSlotsQuery(): Builder
+    {
+        return TimetableSlot::query()
+            ->where('class_room_id', $this->selectedClassId)
+            ->where('academic_term_id', $this->selectedTermId);
+    }
+
+    protected function selectedSlotByDayAndPeriod(int $day, int $period): ?TimetableSlot
+    {
+        return $this->selectedSlotsQuery()
+            ->where('day', $day)
+            ->where('period', $period)
+            ->first();
     }
 
     protected function mapSlotsToWeek($slots): array
@@ -363,9 +382,7 @@ class TimetableDesigner extends Component
             return false;
         }
 
-        $currentCount = TimetableSlot::query()
-            ->where('class_room_id', $this->selectedClassId)
-            ->where('academic_term_id', $this->selectedTermId)
+        $currentCount = $this->selectedSlotsQuery()
             ->where('subject_id', $subjectId)
             ->count();
 
@@ -484,13 +501,10 @@ class TimetableDesigner extends Component
         }
 
         $dateKey = $this->extractDateFromSlotKey();
+        $slotDay = (int) $this->slotDay;
+        $slotPeriod = (int) $this->slotPeriod;
 
-        $existingSlot = TimetableSlot::query()
-            ->where('class_room_id', $this->selectedClassId)
-            ->where('academic_term_id', $this->selectedTermId)
-            ->where('day', $this->slotDay)
-            ->where('period', $this->slotPeriod)
-            ->first();
+        $existingSlot = $this->selectedSlotByDayAndPeriod($slotDay, $slotPeriod);
 
         if ($existingSlot?->is_locked) {
             session()->flash('error', 'Cannot update a locked slot. Unlock it first.');
@@ -502,8 +516,8 @@ class TimetableDesigner extends Component
             [
                 'class_room_id' => $this->selectedClassId,
                 'academic_term_id' => $this->selectedTermId,
-                'day' => $this->slotDay,
-                'period' => $this->slotPeriod,
+                'day' => $slotDay,
+                'period' => $slotPeriod,
             ],
             [
                 'subject_id' => $this->slotSubjectId,
@@ -542,9 +556,7 @@ class TimetableDesigner extends Component
 
         $dayOfWeek = Carbon::parse($date)->dayOfWeek;
 
-        TimetableSlot::query()
-            ->where('class_room_id', $this->selectedClassId)
-            ->where('academic_term_id', $this->selectedTermId)
+        $this->selectedSlotsQuery()
             ->where('day', $dayOfWeek)
             ->where('period', $period)
             ->delete();
@@ -626,22 +638,27 @@ class TimetableDesigner extends Component
         $savedCount = 0;
 
         foreach ($this->unsavedChanges as $change) {
-            if (isset($change['deleted']) && $change['deleted']) {
-                $this->deleteSlotByChange($change);
-            } else {
-                $this->upsertSlotByChange($change);
-            }
+            $this->persistUnsavedChange($change);
             $savedCount++;
         }
 
         return $savedCount;
     }
 
+    protected function persistUnsavedChange(array $change): void
+    {
+        if (isset($change['deleted']) && $change['deleted']) {
+            $this->deleteSlotByChange($change);
+
+            return;
+        }
+
+        $this->upsertSlotByChange($change);
+    }
+
     protected function deleteSlotByChange(array $change): void
     {
-        TimetableSlot::query()
-            ->where('class_room_id', $this->selectedClassId)
-            ->where('academic_term_id', $this->selectedTermId)
+        $this->selectedSlotsQuery()
             ->where('day', $change['day'])
             ->where('period', $change['period'])
             ->where('is_locked', false)
@@ -735,9 +752,7 @@ class TimetableDesigner extends Component
 
     protected function getSubjectDbCount(int $subjectId): int
     {
-        return TimetableSlot::query()
-            ->where('class_room_id', $this->selectedClassId)
-            ->where('academic_term_id', $this->selectedTermId)
+        return $this->selectedSlotsQuery()
             ->where('subject_id', $subjectId)
             ->count();
     }
@@ -779,7 +794,7 @@ class TimetableDesigner extends Component
             return [];
         }
 
-        return \App\Models\ClassSubjectSetting::query()
+        return ClassSubjectSetting::query()
             ->where('class_room_id', $this->selectedClassId)
             ->where('is_active', true)
             ->get()
