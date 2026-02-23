@@ -84,20 +84,29 @@ class CreateClassRoom extends CreateRecord
                 }
             }
 
-            Subject::create([
+            $newSubject = Subject::create([
                 'name' => $sourceSubject->name,
                 'code' => $code,
                 'class_room_id' => $this->record->id,
                 'type' => $sourceSubject->type,
-                'weekly_periods' => $sourceSubject->weekly_periods,
-                'min_periods_per_week' => $sourceSubject->min_periods_per_week,
-                'max_periods_per_week' => $sourceSubject->max_periods_per_week,
                 'level' => $sourceSubject->level,
                 'status' => $sourceSubject->status,
-                'single_combined' => $sourceSubject->single_combined,
+            ]);
+
+            $sourceSetting = ClassSubjectSetting::where('class_room_id', $sourceClassRoom->id)
+                ->where('subject_id', $sourceSubject->id)
+                ->first();
+
+            ClassSubjectSetting::create([
+                'class_room_id' => $this->record->id,
+                'subject_id' => $newSubject->id,
+                'weekly_periods' => $sourceSetting?->weekly_periods ?? 4,
+                'min_periods_per_week' => $sourceSetting?->min_periods_per_week ?? 1,
+                'max_periods_per_week' => $sourceSetting?->max_periods_per_week ?? 6,
+                'single_combined' => $sourceSetting?->single_combined ?? 'single',
+                'is_active' => true,
+                'priority' => $sourceSetting?->priority ?? 5,
             ]);
         }
-
-        ClassSubjectSetting::syncSubjectsForClass($this->record);
     }
 }

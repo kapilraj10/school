@@ -233,7 +233,7 @@ class TeacherRequirementAnalyzer
             'periods_recommended' => range(1, min($periodsPerDay + 2, $this->periodsPerDay)),
             'teacher' => $teacher?->name ?? 'Not Assigned',
             'teacher_id' => $teacher?->id,
-            'single_combined' => $subject->single_combined,
+            'single_combined' => $settings->first()?->single_combined ?? 'single',
             'rule_text' => $this->generateSubjectRuleText($subject->name, $minDaysNeeded, $periodsPerDay, $teacher?->name, count($classNames)),
         ];
     }

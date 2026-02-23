@@ -20,7 +20,7 @@ class ClassRoomFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => 'Class '.fake()->numberBetween(1, 10),
+            'name' => 'Class '.fake()->unique()->numberBetween(100, 99999),
             'section' => fake()->randomElement(['A', 'B', 'C', 'D']),
             'weekly_periods' => 48,
             'total_subjects' => 8,

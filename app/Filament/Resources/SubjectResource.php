@@ -70,38 +70,8 @@ class SubjectResource extends Resource
                             ])
                             ->default('core')
                             ->required()
-                            ->native(false),
-                        Select::make('single_combined')
-                            ->label('Period Type')
-                            ->options([
-                                'single' => 'Single (One Class)',
-                                'combined' => 'Combined (Multiple Classes)',
-                            ])
-                            ->required()
                             ->native(false)
-                            ->helperText('Whether periods are for single class or combined'),
-                        TextInput::make('weekly_periods')
-                            ->label('Weekly Periods (Target)')
-                            ->numeric()
-                            ->required()
-                            ->default(4)
-                            ->minValue(1)
-                            ->maxValue(10)
-                            ->helperText('Target number of periods per week'),
-                        TextInput::make('min_periods_per_week')
-                            ->label('Minimum Periods')
-                            ->numeric()
-                            ->nullable()
-                            ->minValue(1)
-                            ->maxValue(10)
-                            ->helperText('Minimum periods that must be assigned'),
-                        TextInput::make('max_periods_per_week')
-                            ->label('Maximum Periods')
-                            ->numeric()
-                            ->nullable()
-                            ->minValue(1)
-                            ->maxValue(10)
-                            ->helperText('Maximum periods allowed per week'),
+                            ->helperText('Period settings are configured per class in Class Subject Settings'),
                         Select::make('status')
                             ->options([
                                 'active' => 'Active',
@@ -140,24 +110,6 @@ class SubjectResource extends Resource
                         'co_curricular' => 'Co-Curricular',
                         default => $state,
                     }),
-                Tables\Columns\TextColumn::make('single_combined')
-                    ->label('Period Type')
-                    ->badge()
-                    ->color(fn (?string $state): string => match ($state) {
-                        'single' => 'success',
-                        'combined' => 'warning',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (?string $state): string => $state ? ucfirst($state) : 'N/A'),
-                Tables\Columns\TextColumn::make('weekly_periods')
-                    ->label('Periods/Week')
-                    ->alignCenter(),
-                Tables\Columns\TextColumn::make('min_periods_per_week')
-                    ->label('Min')
-                    ->alignCenter(),
-                Tables\Columns\TextColumn::make('max_periods_per_week')
-                    ->label('Max')
-                    ->alignCenter(),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
@@ -186,12 +138,6 @@ class SubjectResource extends Resource
                         'core' => 'Core',
                         'elective' => 'Elective',
                         'co_curricular' => 'Co-Curricular',
-                    ]),
-                Tables\Filters\SelectFilter::make('single_combined')
-                    ->label('Period Type')
-                    ->options([
-                        'single' => 'Single',
-                        'combined' => 'Combined',
                     ]),
                 Tables\Filters\SelectFilter::make('status')
                     ->options([
@@ -238,11 +184,7 @@ class SubjectResource extends Resource
                                 'code' => $newCode,
                                 'class_room_id' => $classId,
                                 'type' => $record->type,
-                                'weekly_periods' => $record->weekly_periods,
-                                'min_periods_per_week' => $record->min_periods_per_week,
-                                'max_periods_per_week' => $record->max_periods_per_week,
                                 'level' => $record->level,
-                                'single_combined' => $record->single_combined,
                                 'status' => $record->status,
                             ]);
                         }

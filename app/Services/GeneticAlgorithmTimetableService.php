@@ -186,8 +186,8 @@ class GeneticAlgorithmTimetableService
                 (string) $subject->id,
                 $subject->name,
                 $this->mapSubjectType($subject->type),
-                $setting->min_periods_per_week ?? $subject->min_periods_per_week ?? 2,
-                $setting->max_periods_per_week ?? $subject->max_periods_per_week ?? 6,
+                $setting->min_periods_per_week ?? 2,
+                $setting->max_periods_per_week ?? 6,
                 $setting->single_combined === 'combined'
             );
 
@@ -357,14 +357,22 @@ class GeneticAlgorithmTimetableService
         AcademicTerm $academicTerm,
         array $combinedPeriodCache
     ): ?int {
-        // Check if subject is combined (cache subjects to avoid repeated queries)
-        static $subjectCache = [];
-        if (! isset($subjectCache[$subjectId])) {
-            $subjectCache[$subjectId] = Subject::find($subjectId);
+        // Check if subject is combined via ClassSubjectSetting
+        static $settingCache = [];
+        $cacheKey = "{$classRoomId}_{$subjectId}";
+        if (! isset($settingCache[$cacheKey])) {
+            $settingCache[$cacheKey] = ClassSubjectSetting::where('class_room_id', $classRoomId)
+                ->where('subject_id', $subjectId)
+                ->first();
         }
 
-        $subject = $subjectCache[$subjectId];
-        if (! $subject || $subject->single_combined !== 'combined') {
+        $classSetting = $settingCache[$cacheKey];
+        if (! $classSetting || ($classSetting->single_combined ?? 'single') !== 'combined') {
+            return null;
+        }
+
+        $subject = $classSetting->subject;
+        if (! $subject) {
             return null;
         }
 

@@ -4,6 +4,7 @@ namespace Tests\Feature\Filament\Resources\ClassRooms;
 
 use App\Filament\Resources\ClassRooms\Pages\CreateClassRoom;
 use App\Models\ClassRoom;
+use App\Models\ClassSubjectSetting;
 use App\Models\Subject;
 use App\Models\User;
 use Livewire\Livewire;
@@ -35,9 +36,6 @@ class ClassRoomResourceCloneSubjectsTest extends TestCase
             'name' => 'Mathematics',
             'code' => 'MATH-10A',
             'class_room_id' => $sourceClass->id,
-            'weekly_periods' => 6,
-            'min_periods_per_week' => 4,
-            'max_periods_per_week' => 7,
             'status' => 'active',
         ]);
 
@@ -45,10 +43,25 @@ class ClassRoomResourceCloneSubjectsTest extends TestCase
             'name' => 'Science',
             'code' => 'SCI-10A',
             'class_room_id' => $sourceClass->id,
+            'status' => 'active',
+        ]);
+
+        ClassSubjectSetting::create([
+            'class_room_id' => $sourceClass->id,
+            'subject_id' => $math->id,
+            'weekly_periods' => 6,
+            'min_periods_per_week' => 4,
+            'max_periods_per_week' => 7,
+            'is_active' => true,
+        ]);
+
+        ClassSubjectSetting::create([
+            'class_room_id' => $sourceClass->id,
+            'subject_id' => $science->id,
             'weekly_periods' => 5,
             'min_periods_per_week' => 3,
             'max_periods_per_week' => 6,
-            'status' => 'active',
+            'is_active' => true,
         ]);
 
         Livewire::test(CreateClassRoom::class)

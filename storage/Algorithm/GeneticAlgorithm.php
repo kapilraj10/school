@@ -34,6 +34,9 @@ class SchedulerConfig
     /** @var int Actual total periods (set by init or defaults to const) */
     private static int $totalPeriods = self::TOTAL_PERIODS;
 
+    /** @var array Short day names mapped by index (e.g., [0 => 'Mon', 1 => 'Tue', ...]) */
+    private static array $dayShortNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
     private static bool $initialized = false;
 
     /**
@@ -50,6 +53,17 @@ class SchedulerConfig
             $schoolDays = \App\Models\TimetableSetting::get('school_days');
             if (is_array($schoolDays) && ! empty($schoolDays)) {
                 self::$daysPerWeek = count($schoolDays);
+
+                // Build short day name map from configured school days
+                $fullToShort = [
+                    'Sunday' => 'Sun', 'Monday' => 'Mon', 'Tuesday' => 'Tue',
+                    'Wednesday' => 'Wed', 'Thursday' => 'Thu', 'Friday' => 'Fri',
+                    'Saturday' => 'Sat',
+                ];
+                self::$dayShortNames = [];
+                foreach ($schoolDays as $dayName) {
+                    self::$dayShortNames[] = $fullToShort[$dayName] ?? substr($dayName, 0, 3);
+                }
             }
 
             $periods = \App\Models\TimetableSetting::get('periods_per_day');
@@ -61,6 +75,18 @@ class SchedulerConfig
         }
 
         self::$initialized = true;
+    }
+
+    /**
+     * Get the short day names array mapped by day index
+     *
+     * @return array Short day names (e.g., ['Mon', 'Tue', ...])
+     */
+    public static function dayShortNames(): array
+    {
+        self::init();
+
+        return self::$dayShortNames;
     }
 
     public static function daysPerWeek(): int
@@ -660,11 +686,26 @@ class GeneticAlgorithmScheduler
                     $consecutiveSlot = $this->findConsecutiveCoCurricularSlots($timetable, $section, $subjectId, $periodsNeeded, $randomizationFactor);
 
                     if ($consecutiveSlot) {
-                        for ($i = 0; $i < $periodsNeeded; $i++) {
+                        $actualConsecutive = min($periodsNeeded, 2);
+                        for ($i = 0; $i < $actualConsecutive; $i++) {
                             $period = $consecutiveSlot['period'] + $i;
+                            if ($period >= SchedulerConfig::periodsPerDay()) {
+                                break;
+                            }
                             $teacherId = $this->findSafeTeacher($timetable, $section, $consecutiveSlot['day'], $period, $subjectId);
                             $timetable->slots[$section->id][$consecutiveSlot['day']][$period]->subjectId = $subjectId;
                             $timetable->slots[$section->id][$consecutiveSlot['day']][$period]->teacherId = $teacherId;
+                        }
+
+                        // Place any remaining periods individually
+                        $remainingPeriods = $periodsNeeded - $actualConsecutive;
+                        for ($i = 0; $i < $remainingPeriods; $i++) {
+                            $slot = $this->findCoCurricularSlot($timetable, $section, $subjectId, $randomizationFactor);
+                            if ($slot) {
+                                $teacherId = $this->findSafeTeacher($timetable, $section, $slot['day'], $slot['period'], $subjectId);
+                                $timetable->slots[$section->id][$slot['day']][$slot['period']]->subjectId = $subjectId;
+                                $timetable->slots[$section->id][$slot['day']][$slot['period']]->teacherId = $teacherId;
+                            }
                         }
 
                         continue;
@@ -1702,8 +1743,8 @@ class ConstraintChecker
             return true;
         }
 
-        // Map day index to day short name
-        $dayMap = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+        // Map day index to day short name using configured school days
+        $dayMap = SchedulerConfig::dayShortNames();
         $dayShort = $dayMap[$day] ?? null;
 
         if (! $dayShort || ! isset($teacher->availabilityMatrix[$dayShort])) {

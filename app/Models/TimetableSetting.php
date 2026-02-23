@@ -79,6 +79,11 @@ class TimetableSetting extends Model
             'respect_teacher_availability' => true,
             'balance_daily_load' => true,
             'avoid_consecutive_subjects' => true,
+            'max_teacher_periods_per_day' => 6,
+            'heavy_subjects' => ['Maths', 'Science', 'English', 'Nepali', 'Social'],
+            'core_subjects' => ['English', 'Maths', 'Science', 'Nepali'],
+            'preferred_eca_periods' => [4, 5, 6, 7, 8],
+            'max_eca_periods_per_day' => 2,
 
             // Class range settings
             'class_ranges' => [

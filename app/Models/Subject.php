@@ -17,18 +17,8 @@ class Subject extends Model
         'code',
         'class_room_id',
         'type',
-        'weekly_periods',
-        'min_periods_per_week',
-        'max_periods_per_week',
         'level',
         'status',
-        'single_combined',
-    ];
-
-    protected $casts = [
-        'weekly_periods' => 'integer',
-        'min_periods_per_week' => 'integer',
-        'max_periods_per_week' => 'integer',
     ];
 
     public function classRoom(): BelongsTo
@@ -47,6 +37,14 @@ class Subject extends Model
     public function combinedPeriods(): HasMany
     {
         return $this->hasMany(CombinedPeriod::class);
+    }
+
+    /**
+     * Get the class subject settings for this subject
+     */
+    public function classSubjectSettings(): HasMany
+    {
+        return $this->hasMany(ClassSubjectSetting::class);
     }
 
     /**

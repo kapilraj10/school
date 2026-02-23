@@ -24,12 +24,8 @@ class SubjectFactory extends Factory
             'code' => strtoupper(fake()->lexify('???')),
             'class_room_id' => \App\Models\ClassRoom::factory(),
             'type' => 'core',
-            'weekly_periods' => fake()->numberBetween(4, 6),
-            'min_periods_per_week' => 4,
-            'max_periods_per_week' => 6,
             'level' => 'intermediate',
             'status' => 'active',
-            'single_combined' => 'single',
         ];
     }
 
@@ -52,9 +48,6 @@ class SubjectFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'type' => 'co_curricular',
             'name' => fake()->randomElement(['Dance', 'Music', 'Art', 'Sports', 'Drama']),
-            'weekly_periods' => 2,
-            'min_periods_per_week' => 1,
-            'max_periods_per_week' => 2,
         ]);
     }
 
@@ -65,18 +58,6 @@ class SubjectFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'status' => 'inactive',
-        ]);
-    }
-
-    /**
-     * Set specific weekly periods.
-     */
-    public function weeklyPeriods(int $periods): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'weekly_periods' => $periods,
-            'min_periods_per_week' => $periods,
-            'max_periods_per_week' => $periods,
         ]);
     }
 }

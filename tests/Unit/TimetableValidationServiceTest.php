@@ -196,7 +196,6 @@ class TimetableValidationServiceTest extends TestCase
         $subject = Subject::factory()->core()->create([
             'name' => 'English',
             'code' => 'ENG',
-            'weekly_periods' => 5,
         ]);
 
         ClassSubjectSetting::create([
@@ -229,7 +228,6 @@ class TimetableValidationServiceTest extends TestCase
         $subject = Subject::factory()->core()->create([
             'name' => 'Math',
             'code' => 'MTH',
-            'weekly_periods' => 5,
         ]);
 
         ClassSubjectSetting::create([
@@ -358,8 +356,8 @@ class TimetableValidationServiceTest extends TestCase
 
     public function test_validates_fully_allocated_timetable_without_errors(): void
     {
-        $math = Subject::factory()->core()->create(['name' => 'Math', 'weekly_periods' => 6]);
-        $english = Subject::factory()->core()->create(['name' => 'English', 'weekly_periods' => 6]);
+        $math = Subject::factory()->core()->create(['name' => 'Math']);
+        $english = Subject::factory()->core()->create(['name' => 'English']);
         $teacher1 = Teacher::factory()->create();
         $teacher2 = Teacher::factory()->create();
 
@@ -448,7 +446,7 @@ class TimetableValidationServiceTest extends TestCase
 
     public function test_warns_about_daily_subject_repetition(): void
     {
-        $subject = Subject::factory()->core()->create(['name' => 'Computer', 'weekly_periods' => 4]);
+        $subject = Subject::factory()->core()->create(['name' => 'Computer']);
 
         ClassSubjectSetting::create([
             'class_room_id' => $this->classRoom->id,

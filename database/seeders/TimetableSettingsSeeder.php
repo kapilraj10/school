@@ -62,6 +62,11 @@ class TimetableSettingsSeeder extends Seeder
             ['key' => 'respect_teacher_availability', 'value' => '1', 'type' => 'boolean', 'group' => 'algorithm', 'description' => 'Check teacher availability when assigning'],
             ['key' => 'balance_daily_load', 'value' => '1', 'type' => 'boolean', 'group' => 'algorithm', 'description' => 'Distribute subjects evenly across days'],
             ['key' => 'avoid_consecutive_subjects', 'value' => '1', 'type' => 'boolean', 'group' => 'algorithm', 'description' => 'Avoid scheduling same subject back-to-back'],
+            ['key' => 'max_teacher_periods_per_day', 'value' => '6', 'type' => 'integer', 'group' => 'algorithm', 'description' => 'Maximum periods a teacher can teach per day'],
+            ['key' => 'heavy_subjects', 'value' => '["Maths","Science","English","Nepali","Social"]', 'type' => 'json', 'group' => 'algorithm', 'description' => 'Mentally demanding subjects to avoid scheduling consecutively'],
+            ['key' => 'core_subjects', 'value' => '["English","Maths","Science","Nepali"]', 'type' => 'json', 'group' => 'algorithm', 'description' => 'Core subjects placed in early periods for positional consistency'],
+            ['key' => 'preferred_eca_periods', 'value' => '[4,5,6,7,8]', 'type' => 'json', 'group' => 'algorithm', 'description' => 'Preferred period positions for ECA subjects'],
+            ['key' => 'max_eca_periods_per_day', 'value' => '2', 'type' => 'integer', 'group' => 'algorithm', 'description' => 'Maximum ECA periods per day per type'],
         ];
 
         foreach ($settings as $setting) {

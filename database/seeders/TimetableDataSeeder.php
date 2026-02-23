@@ -55,10 +55,10 @@ class TimetableDataSeeder extends Seeder
                         'subject_id' => $subject->id,
                     ],
                     [
-                        'min_periods_per_week' => $subject->min_periods_per_week ?? 1,
-                        'max_periods_per_week' => $subject->max_periods_per_week ?? 6,
-                        'weekly_periods' => $subject->weekly_periods ?? 4,
-                        'single_combined' => $subject->single_combined ?? 'single',
+                        'min_periods_per_week' => 1,
+                        'max_periods_per_week' => 6,
+                        'weekly_periods' => 4,
+                        'single_combined' => 'single',
                         'is_active' => true,
                         'priority' => $priority,
                     ]

@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\ClassRoom;
+use App\Models\ClassSubjectSetting;
 use App\Models\Subject;
 use Illuminate\Database\Seeder;
 
@@ -96,20 +97,28 @@ class SubjectSeeder extends Seeder
 
                 foreach ($classRooms as $classRoom) {
                     foreach ($subjects as $subjectData) {
-                        Subject::create([
+                        $subject = Subject::create([
                             'name' => $subjectData['name'],
                             'code' => "{$subjectData['code_prefix']}-{$classNumber}{$classRoom->section}",
                             'class_room_id' => $classRoom->id,
                             'type' => $subjectData['type'],
-                            'weekly_periods' => $subjectData['weekly_periods'],
-                            'min_periods_per_week' => $subjectData['min_periods_per_week'],
-                            'max_periods_per_week' => $subjectData['max_periods_per_week'],
                             'level' => $subjectData['level'],
-                            'single_combined' => $subjectData['single_combined'],
                             'status' => 'active',
                             'created_at' => $timestamp,
                             'updated_at' => $timestamp,
                         ]);
+
+                        ClassSubjectSetting::create([
+                            'class_room_id' => $classRoom->id,
+                            'subject_id' => $subject->id,
+                            'weekly_periods' => $subjectData['weekly_periods'],
+                            'min_periods_per_week' => $subjectData['min_periods_per_week'],
+                            'max_periods_per_week' => $subjectData['max_periods_per_week'],
+                            'single_combined' => $subjectData['single_combined'],
+                            'is_active' => true,
+                            'priority' => 5,
+                        ]);
+
                         $createdCount++;
                     }
                 }

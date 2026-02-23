@@ -16,7 +16,7 @@
         }
     </script>
 </head>
-<body class="bg-linear-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 min-h-screen">
+<body class="bg-linear-to-br from-gray-50 to-blue-50 dark:from-gray-950 dark:to-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
     <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
         <div class="text-center mb-12 mt-8">
             <img src="/timetable_logo.png" alt="Timetable Logo" class="mx-auto mb-4 w-24 h-24 object-contain" />

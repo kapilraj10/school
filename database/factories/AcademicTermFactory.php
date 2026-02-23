@@ -19,7 +19,7 @@ class AcademicTermFactory extends Factory
      */
     public function definition(): array
     {
-        $year = fake()->year();
+        $year = fake()->unique()->numberBetween(2000, 9999);
         $term = fake()->numberBetween(1, 3);
 
         return [

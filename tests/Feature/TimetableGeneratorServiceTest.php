@@ -101,10 +101,6 @@ class TimetableGeneratorServiceTest extends TestCase
             'name' => 'Test Subject',
             'code' => 'SUB'.uniqid(),
             'class_range' => '1 - 4',
-            'single_combined' => 'single',
-            'weekly_periods' => 4,
-            'min_periods_per_week' => 3,
-            'max_periods_per_week' => 5,
             'type' => 'core',
             'status' => 'active',
         ], $attributes));
@@ -152,10 +148,7 @@ class TimetableGeneratorServiceTest extends TestCase
     public function test_respects_minimum_periods_per_week(): void
     {
         $teacher = $this->createTeacher();
-        $subject = $this->createSubject([
-            'min_periods_per_week' => 4,
-            'max_periods_per_week' => 6,
-        ]);
+        $subject = $this->createSubject();
 
         ClassSubjectSetting::create([
             'class_room_id' => $this->class->id,
@@ -185,10 +178,7 @@ class TimetableGeneratorServiceTest extends TestCase
     public function test_respects_maximum_periods_per_week(): void
     {
         $teacher = $this->createTeacher();
-        $subject = $this->createSubject([
-            'min_periods_per_week' => 2,
-            'max_periods_per_week' => 4,
-        ]);
+        $subject = $this->createSubject();
 
         ClassSubjectSetting::create([
             'class_room_id' => $this->class->id,
@@ -228,6 +218,8 @@ class TimetableGeneratorServiceTest extends TestCase
             'subject_id' => $subject1->id,
             'teacher_id' => $teacher->id,
             'periods_per_week' => 4,
+            'min_periods_per_week' => 3,
+            'max_periods_per_week' => 5,
         ]);
 
         ClassSubjectSetting::create([
@@ -235,6 +227,8 @@ class TimetableGeneratorServiceTest extends TestCase
             'subject_id' => $subject2->id,
             'teacher_id' => $teacher->id,
             'periods_per_week' => 4,
+            'min_periods_per_week' => 3,
+            'max_periods_per_week' => 5,
         ]);
 
         $result = $this->service->generate(
@@ -273,6 +267,8 @@ class TimetableGeneratorServiceTest extends TestCase
             'class_room_id' => $this->class->id,
             'subject_id' => $subject->id,
             'periods_per_week' => 3,
+            'min_periods_per_week' => 2,
+            'max_periods_per_week' => 4,
         ]);
 
         $result = $this->service->generate(
@@ -338,7 +334,16 @@ class TimetableGeneratorServiceTest extends TestCase
         $teacher = $this->createTeacher();
         $subject = $this->createSubject([
             'name' => 'Martial Arts',
+        ]);
+
+        // Create class subject setting for combined subject
+        ClassSubjectSetting::create([
+            'class_room_id' => $this->class->id,
+            'subject_id' => $subject->id,
             'single_combined' => 'combined',
+            'weekly_periods' => 4,
+            'min_periods_per_week' => 3,
+            'max_periods_per_week' => 5,
         ]);
 
         // Create combined period

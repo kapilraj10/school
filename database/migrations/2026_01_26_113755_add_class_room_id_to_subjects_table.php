@@ -67,11 +67,7 @@ return new class extends Migration
                     'code' => $this->generateUniqueCode($subject->code, $classRoom),
                     'class_room_id' => $classRoom->id,
                     'type' => $subject->type,
-                    'weekly_periods' => $subject->weekly_periods,
-                    'min_periods_per_week' => $subject->min_periods_per_week,
-                    'max_periods_per_week' => $subject->max_periods_per_week,
                     'level' => $subject->level,
-                    'single_combined' => $subject->single_combined,
                     'status' => $subject->status,
                 ]);
             }

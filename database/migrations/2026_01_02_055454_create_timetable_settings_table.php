@@ -30,7 +30,7 @@ return new class extends Migration
             $table->integer('min_periods_per_week')->default(1);
             $table->integer('max_periods_per_week')->default(6);
             $table->integer('weekly_periods')->default(4);
-            $table->string('single_combined')->default('single'); // single, combined
+            $table->enum('single_combined', ['single', 'combined'])->default('single');
             $table->boolean('is_active')->default(true);
             $table->integer('priority')->default(5); // 1-10, higher = more important
             $table->timestamps();

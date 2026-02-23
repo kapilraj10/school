@@ -278,6 +278,7 @@
                                 @php
                                     $colors = $this->getSubjectTypeColor($subject->type ?? 'core');
                                     $placementCount = $this->getSubjectPlacementCount($subject->id);
+                                    $weeklyPeriods = $this->getSubjectWeeklyPeriods($subject->id);
                                     $constraintStatus = $constraintStatus[$subject->id] ?? null;
                                 @endphp
                                 <div 
@@ -306,10 +307,10 @@
                                             </div>
                                             
                                             {{-- Weekly requirements --}}
-                                            @if($subject->weekly_periods)
+                                            @if($weeklyPeriods)
                                                 <div class="flex items-center gap-2 mt-2">
                                                     <div class="text-xs {{ $colors['text'] }}">
-                                                        📅 {{ $subject->weekly_periods }}/week
+                                                        📅 {{ $weeklyPeriods }}/week
                                                     </div>
                                                 </div>
                                             @endif
@@ -319,22 +320,22 @@
                                                 <div class="text-xs font-medium">
                                                     @if($constraintStatus && $constraintStatus['satisfied'])
                                                         <span class="text-green-600 dark:text-green-400">
-                                                            ✓ {{ $placementCount }}/{{ $subject->weekly_periods }} placed
+                                                            ✓ {{ $placementCount }}/{{ $weeklyPeriods }} placed
                                                         </span>
                                                     @elseif($placementCount > 0)
                                                         <span class="text-orange-600 dark:text-orange-400">
-                                                            ⚡ {{ $placementCount }}/{{ $subject->weekly_periods }} placed
+                                                            ⚡ {{ $placementCount }}/{{ $weeklyPeriods }} placed
                                                         </span>
                                                     @else
                                                         <span class="text-gray-500 dark:text-gray-400">
-                                                            0/{{ $subject->weekly_periods }} placed
+                                                            0/{{ $weeklyPeriods }} placed
                                                         </span>
                                                     @endif
                                                 </div>
                                             </div>
                                             
                                             {{-- Progress bar --}}
-                                            @if($constraintStatus && $subject->weekly_periods > 0)
+                                            @if($constraintStatus && $weeklyPeriods > 0)
                                                 <div class="mt-2">
                                                     <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
                                                         <div class="h-1.5 rounded-full transition-all duration-300

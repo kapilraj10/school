@@ -586,7 +586,6 @@ class GeneticAlgorithmTimetableServiceTest extends TestCase
     {
         $subject = Subject::factory()->core()->create([
             'status' => 'active',
-            'single_combined' => $combined ? 'combined' : 'single',
         ]);
 
         $teacher = Teacher::factory()->create([

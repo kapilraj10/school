@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
+use App\Models\ClassSubjectSetting;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimetableSetting;
@@ -336,8 +337,13 @@ class TimetableDesigner extends Component
             return;
         }
 
-        if ($this->isMaxPeriodsExceeded($subject, $subjectId)) {
-            $this->showError('Max Periods Exceeded', "Cannot assign {$subject->name}. Maximum periods per week ({$subject->max_periods_per_week}) already reached.");
+        $setting = ClassSubjectSetting::where('subject_id', $subjectId)
+            ->where('class_room_id', $this->selectedClassId)
+            ->first();
+
+        if ($this->isMaxPeriodsExceeded($setting, $subjectId)) {
+            $maxPeriods = $setting->max_periods_per_week ?? 0;
+            $this->showError('Max Periods Exceeded', "Cannot assign {$subject->name}. Maximum periods per week ({$maxPeriods}) already reached.");
 
             return;
         }
@@ -351,9 +357,9 @@ class TimetableDesigner extends Component
         $this->showValidationModal = true;
     }
 
-    protected function isMaxPeriodsExceeded(Subject $subject, int $subjectId): bool
+    protected function isMaxPeriodsExceeded(?ClassSubjectSetting $setting, int $subjectId): bool
     {
-        if (! $subject->max_periods_per_week) {
+        if (! $setting || ! $setting->max_periods_per_week) {
             return false;
         }
 
@@ -363,7 +369,7 @@ class TimetableDesigner extends Component
             ->where('subject_id', $subjectId)
             ->count();
 
-        return $currentCount >= $subject->max_periods_per_week;
+        return $currentCount >= $setting->max_periods_per_week;
     }
 
     protected function processAssignment(int $subjectId, int $teacherId, $date, int $period, Subject $subject): void
@@ -730,6 +736,31 @@ class TimetableDesigner extends Component
     {
         return view('livewire.timetable-designer', [
             'subjectWorkload' => $this->getSubjectWorkload(),
+            'classSubjectSettings' => $this->getClassSubjectSettingsMap(),
         ]);
+    }
+
+    /**
+     * Get class subject settings keyed by subject_id for the selected class
+     *
+     * @return array<int, array{weekly_periods: int, min_periods_per_week: int, max_periods_per_week: int}>
+     */
+    protected function getClassSubjectSettingsMap(): array
+    {
+        if (! $this->selectedClassId) {
+            return [];
+        }
+
+        return \App\Models\ClassSubjectSetting::query()
+            ->where('class_room_id', $this->selectedClassId)
+            ->where('is_active', true)
+            ->get()
+            ->keyBy('subject_id')
+            ->map(fn ($setting) => [
+                'weekly_periods' => $setting->weekly_periods ?? 0,
+                'min_periods_per_week' => $setting->min_periods_per_week ?? 0,
+                'max_periods_per_week' => $setting->max_periods_per_week ?? 0,
+            ])
+            ->toArray();
     }
 }

@@ -48,17 +48,27 @@ class TimetableGeneratorService
     // Track teacher workload per day
     private array $teacherDailyWorkload = [];
 
-    // Max periods per teacher per day (hard constraint)
-    private int $maxTeacherPeriodsPerDay = 6;
+    // Max periods per teacher per day (hard constraint) - loaded from DB
+    private int $maxTeacherPeriodsPerDay;
 
-    // Mentally heavy subjects (avoid consecutive)
-    private array $heavySubjects = ['Maths', 'Science', 'English', 'Nepali', 'Social'];
+    // Mentally heavy subjects (avoid consecutive) - loaded from DB
+    private array $heavySubjects;
 
-    // Core subjects for positional consistency
-    private array $coreSubjects = ['English', 'Maths', 'Science', 'Nepali'];
+    // Core subjects for positional consistency - loaded from DB
+    private array $coreSubjects;
 
-    // Preferred periods for ECA (middle and last)
-    private array $preferredEcaPeriods = [4, 5, 6, 7, 8];
+    // Preferred periods for ECA (middle and last) - loaded from DB
+    private array $preferredEcaPeriods;
+
+    // Max ECA periods per day per type - loaded from DB
+    private int $maxEcaPeriodsPerDay;
+
+    // Algorithm behavior flags - loaded from DB
+    private bool $respectTeacherAvailability;
+
+    private bool $balanceDailyLoad;
+
+    private bool $avoidConsecutiveSubjects;
 
     public function __construct()
     {
@@ -80,9 +90,25 @@ class TimetableGeneratorService
             $this->dayIndexToName[$index] = $day;
         }
 
-        // Load other settings
+        // Load period and subject constraints
         $this->periodsPerDay = (int) TimetableSetting::get('periods_per_day', 8);
         $this->maxSameSubjectPerDay = (int) TimetableSetting::get('max_same_subject_per_day', 2);
+
+        // Load teacher constraints
+        $this->maxTeacherPeriodsPerDay = (int) TimetableSetting::get('max_teacher_periods_per_day', 6);
+
+        // Load subject classification settings
+        $this->heavySubjects = (array) TimetableSetting::get('heavy_subjects', ['Maths', 'Science', 'English', 'Nepali', 'Social']);
+        $this->coreSubjects = (array) TimetableSetting::get('core_subjects', ['English', 'Maths', 'Science', 'Nepali']);
+
+        // Load ECA settings
+        $this->preferredEcaPeriods = (array) TimetableSetting::get('preferred_eca_periods', [4, 5, 6, 7, 8]);
+        $this->maxEcaPeriodsPerDay = (int) TimetableSetting::get('max_eca_periods_per_day', 2);
+
+        // Load algorithm behavior flags
+        $this->respectTeacherAvailability = (bool) TimetableSetting::get('respect_teacher_availability', true);
+        $this->balanceDailyLoad = (bool) TimetableSetting::get('balance_daily_load', true);
+        $this->avoidConsecutiveSubjects = (bool) TimetableSetting::get('avoid_consecutive_subjects', true);
     }
 
     /**
@@ -127,10 +153,10 @@ class TimetableGeneratorService
                 return (object) [
                     'subject' => $subject,
                     'subject_id' => $subject->id,
-                    'min_periods_per_week' => $subject->min_periods_per_week ?? 1,
-                    'max_periods_per_week' => $subject->max_periods_per_week ?? 6,
-                    'weekly_periods' => $subject->weekly_periods ?? 4,
-                    'single_combined' => $subject->single_combined ?? 'single',
+                    'min_periods_per_week' => 1,
+                    'max_periods_per_week' => 6,
+                    'weekly_periods' => 4,
+                    'single_combined' => 'single',
                     'priority' => 5,
                 ];
             });
@@ -156,6 +182,11 @@ class TimetableGeneratorService
      */
     private function isTeacherAvailable(Teacher $teacher, string $day, int $period): bool
     {
+        // Skip availability check if setting is disabled
+        if (! $this->respectTeacherAvailability) {
+            return true;
+        }
+
         $shortDay = $this->dayShortMap[$day] ?? '';
 
         $availabilityMatrix = $teacher->availability_matrix ?? [];
@@ -374,7 +405,7 @@ class TimetableGeneratorService
                     return false; // Different ECA not allowed
                 }
                 $ecaCount = $this->countSpecificEcaOnDay($timetable, $dayIndex, $subject->id);
-                if ($ecaCount >= 2) {
+                if ($ecaCount >= $this->maxEcaPeriodsPerDay) {
                     return false;
                 }
                 if (! $this->isConsecutiveEcaPlacement($timetable, $dayIndex, $period, $subject->id, $periodsPerDay)) {
@@ -450,6 +481,11 @@ class TimetableGeneratorService
      */
     private function hasConsecutiveHeavySubject(array $timetable, int $dayIndex, int $period, Subject $subject): bool
     {
+        // Skip check if consecutive avoidance is disabled
+        if (! $this->avoidConsecutiveSubjects) {
+            return false;
+        }
+
         if (! $this->isHeavySubject($subject)) {
             return false;
         }
@@ -639,8 +675,8 @@ class TimetableGeneratorService
             $item = [
                 'setting' => $setting,
                 'subject' => $subject,
-                'min' => $setting->min_periods_per_week ?? $subject->min_periods_per_week ?? 1,
-                'max' => $setting->max_periods_per_week ?? $subject->max_periods_per_week ?? 6,
+                'min' => $setting->min_periods_per_week ?? 1,
+                'max' => $setting->max_periods_per_week ?? 6,
             ];
 
             if (in_array($type, ['eca', 'co_curricular', 'extra_curricular'])) {
@@ -657,13 +693,22 @@ class TimetableGeneratorService
         usort($compulsory, fn ($a, $b) => $b['min'] - $a['min']);
 
         // Create positional template for consistency across days
-        $template = $this->createDailyTemplate($compulsory, $periodsPerDay);
+        $template = $this->balanceDailyLoad
+            ? $this->createDailyTemplate($compulsory, $periodsPerDay)
+            : [];
 
         // === PHASE 1: Assign compulsory subjects with positional consistency ===
-        $this->assignSubjectsPhaseWithTemplate(
-            $timetable, $assignedPeriods, $compulsory, $classRange, $class->id,
-            $periodsPerDay, $daysCount, $ecaSubjectIds, 'min', $template
-        );
+        if (! empty($template)) {
+            $this->assignSubjectsPhaseWithTemplate(
+                $timetable, $assignedPeriods, $compulsory, $classRange, $class->id,
+                $periodsPerDay, $daysCount, $ecaSubjectIds, 'min', $template
+            );
+        } else {
+            $this->assignSubjectsPhase(
+                $timetable, $assignedPeriods, $compulsory, $classRange, $class->id,
+                $periodsPerDay, $daysCount, $ecaSubjectIds, 'min'
+            );
+        }
 
         // === PHASE 2: Assign ECA subjects with special rules ===
         $this->assignEcaSubjects(

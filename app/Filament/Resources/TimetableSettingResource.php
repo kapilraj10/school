@@ -201,6 +201,22 @@ class TimetableSettingResource extends Resource
                             );
                         }
 
+                        // Seed new algorithm settings
+                        $algorithmDefaults = [
+                            ['key' => 'max_teacher_periods_per_day', 'value' => '6', 'type' => 'integer', 'group' => 'algorithm', 'description' => 'Maximum periods a teacher can teach per day'],
+                            ['key' => 'heavy_subjects', 'value' => '["Maths","Science","English","Nepali","Social"]', 'type' => 'json', 'group' => 'algorithm', 'description' => 'Mentally demanding subjects to avoid scheduling consecutively'],
+                            ['key' => 'core_subjects', 'value' => '["English","Maths","Science","Nepali"]', 'type' => 'json', 'group' => 'algorithm', 'description' => 'Core subjects placed in early periods for positional consistency'],
+                            ['key' => 'preferred_eca_periods', 'value' => '[4,5,6,7,8]', 'type' => 'json', 'group' => 'algorithm', 'description' => 'Preferred period positions for ECA subjects'],
+                            ['key' => 'max_eca_periods_per_day', 'value' => '2', 'type' => 'integer', 'group' => 'algorithm', 'description' => 'Maximum ECA periods per day per type'],
+                        ];
+
+                        foreach ($algorithmDefaults as $setting) {
+                            TimetableSetting::firstOrCreate(
+                                ['key' => $setting['key']],
+                                $setting
+                            );
+                        }
+
                         \Filament\Notifications\Notification::make()
                             ->title('Defaults Seeded')
                             ->body('Default settings have been created.')

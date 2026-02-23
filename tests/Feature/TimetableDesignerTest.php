@@ -63,19 +63,19 @@ class TimetableDesignerTest extends TestCase
         $this->mathSubject = Subject::factory()->core()->create([
             'name' => 'Math',
             'code' => 'MTH',
-            'weekly_periods' => 5,
+            'class_room_id' => $this->classRoom->id,
         ]);
 
         $this->englishSubject = Subject::factory()->core()->create([
             'name' => 'English',
             'code' => 'ENG',
-            'weekly_periods' => 5,
+            'class_room_id' => $this->classRoom->id,
         ]);
 
         $this->danceSubject = Subject::factory()->coCurricular()->create([
             'name' => 'Dance',
             'code' => 'DNC',
-            'weekly_periods' => 2,
+            'class_room_id' => $this->classRoom->id,
         ]);
 
         // Create teachers
@@ -105,6 +105,15 @@ class TimetableDesignerTest extends TestCase
             'min_periods_per_week' => 5,
             'max_periods_per_week' => 6,
             'weekly_periods' => 5,
+            'is_active' => true,
+        ]);
+
+        ClassSubjectSetting::create([
+            'class_room_id' => $this->classRoom->id,
+            'subject_id' => $this->danceSubject->id,
+            'min_periods_per_week' => 1,
+            'max_periods_per_week' => 3,
+            'weekly_periods' => 2,
             'is_active' => true,
         ]);
     }

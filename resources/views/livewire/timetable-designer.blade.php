@@ -63,8 +63,9 @@
                 @php
                     $primaryTeacher = $subject->teachers->first();
                     $workload = isset($subjectWorkload[$subject->id]) ? $subjectWorkload[$subject->id] : 0;
-                    $maxPeriods = $subject->max_periods_per_week ?? 0;
-                    $minPeriods = $subject->min_periods_per_week ?? 0;
+                    $setting = isset($classSubjectSettings[$subject->id]) ? $classSubjectSettings[$subject->id] : null;
+                    $maxPeriods = $setting['max_periods_per_week'] ?? 0;
+                    $minPeriods = $setting['min_periods_per_week'] ?? 0;
                     $subjectType = strtolower(str_replace('-', '_', $subject->type ?? ''));
                     
                     if ($subjectType === 'core') {

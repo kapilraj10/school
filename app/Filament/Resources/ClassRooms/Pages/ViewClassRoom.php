@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\ClassRooms\Pages;
 
 use App\Filament\Resources\ClassRooms\ClassRoomResource;
+use App\Models\ClassSubjectSetting;
 use App\Models\Subject;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -139,8 +140,14 @@ class ViewClassRoom extends ViewRecord
                                     return 'No subjects configured yet. You can add subjects from the Subjects page.';
                                 }
 
-                                return $subjects->map(function ($subject) {
-                                    return "• {$subject->name} ({$subject->code}) - {$subject->weekly_periods} periods/week";
+                                $settings = ClassSubjectSetting::where('class_room_id', $record->id)
+                                    ->whereIn('subject_id', $subjects->pluck('id'))
+                                    ->pluck('weekly_periods', 'subject_id');
+
+                                return $subjects->map(function ($subject) use ($settings) {
+                                    $weeklyPeriods = $settings[$subject->id] ?? 0;
+
+                                    return "• {$subject->name} ({$subject->code}) - {$weeklyPeriods} periods/week";
                                 })->join("\n");
                             })
                             ->html()

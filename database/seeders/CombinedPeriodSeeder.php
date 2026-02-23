@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
+use App\Models\ClassSubjectSetting;
 use App\Models\CombinedPeriod;
 use App\Models\Subject;
 use App\Models\Teacher;
@@ -21,10 +22,13 @@ class CombinedPeriodSeeder extends Seeder
             return;
         }
 
-        // Get all subjects marked as 'combined'
-        $combinedSubjects = Subject::where('single_combined', 'combined')
-            ->where('status', 'active')
+        // Get all subjects with 'combined' class subject settings
+        $combinedSettings = ClassSubjectSetting::where('single_combined', 'combined')
+            ->with('subject')
             ->get();
+
+        // Get unique combined subjects
+        $combinedSubjects = $combinedSettings->pluck('subject')->filter()->unique('id');
 
         if ($combinedSubjects->isEmpty()) {
             $this->command->info('No combined subjects found. Skipping combined period seeding.');

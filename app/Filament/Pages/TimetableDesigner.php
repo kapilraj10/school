@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
+use App\Models\ClassSubjectSetting;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimetableSlot;
@@ -61,6 +62,9 @@ class TimetableDesigner extends Page implements HasForms
     public array $periodTimes = [];
 
     public array $constraintStatus = [];
+
+    /** @var array<int, array{weekly_periods: int, min_periods_per_week: int, max_periods_per_week: int}> */
+    public array $classSubjectSettingsMap = [];
 
     public array $days = [];
 
@@ -167,6 +171,9 @@ class TimetableDesigner extends Page implements HasForms
         }
 
         $this->isLoading = false;
+
+        // Load class subject settings for the selected class
+        $this->loadClassSubjectSettings();
 
         // Calculate subject placements
         $this->calculateSubjectPlacements();
@@ -620,6 +627,38 @@ class TimetableDesigner extends Page implements HasForms
     }
 
     /**
+     * Load class subject settings for the selected class room
+     */
+    protected function loadClassSubjectSettings(): void
+    {
+        $this->classSubjectSettingsMap = [];
+
+        if (! $this->selectedClassRoomId) {
+            return;
+        }
+
+        $settings = ClassSubjectSetting::where('class_room_id', $this->selectedClassRoomId)
+            ->where('is_active', true)
+            ->get();
+
+        foreach ($settings as $setting) {
+            $this->classSubjectSettingsMap[$setting->subject_id] = [
+                'weekly_periods' => $setting->weekly_periods ?? 0,
+                'min_periods_per_week' => $setting->min_periods_per_week ?? 0,
+                'max_periods_per_week' => $setting->max_periods_per_week ?? 0,
+            ];
+        }
+    }
+
+    /**
+     * Get weekly periods for a subject from class subject settings
+     */
+    public function getSubjectWeeklyPeriods(int $subjectId): int
+    {
+        return $this->classSubjectSettingsMap[$subjectId]['weekly_periods'] ?? 0;
+    }
+
+    /**
      * Calculate constraint status for each subject
      */
     protected function calculateConstraintStatus(): void
@@ -628,7 +667,7 @@ class TimetableDesigner extends Page implements HasForms
 
         foreach ($this->subjects as $subject) {
             $placed = $this->getSubjectPlacementCount($subject->id);
-            $required = $subject->weekly_periods ?? 0;
+            $required = $this->getSubjectWeeklyPeriods($subject->id);
 
             $this->constraintStatus[$subject->id] = [
                 'placed' => $placed,
