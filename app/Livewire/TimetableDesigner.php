@@ -62,6 +62,8 @@ class TimetableDesigner extends Component
 
     public array $schoolDayNames = [];
 
+    public array $ecaPeriods = [];
+
     protected $rules = [
         'slotSubjectId' => 'required|exists:subjects,id',
         'slotTeacherId' => 'required|exists:teachers,id',
@@ -72,6 +74,7 @@ class TimetableDesigner extends Component
     {
         $this->periodsPerDay = TimetableSlot::getPeriodsPerDay();
         $this->schoolDayNames = TimetableSetting::get('school_days', ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']);
+        $this->ecaPeriods = TimetableSetting::get('preferred_eca_periods', []);
         $this->initializeClasses();
         $this->initializeAcademicTerms();
         $this->initializeTeachers();
@@ -360,6 +363,13 @@ class TimetableDesigner extends Component
             ->where('class_room_id', $this->selectedClassId)
             ->first();
 
+        if ($this->isEcaPeriodRestricted($subject, (int) $period)) {
+            $allowed = implode(', ', $this->ecaPeriods);
+            $this->showError('ECA Period Restriction', "Co-curricular/ECA subjects can only be placed in periods: {$allowed}.");
+
+            return;
+        }
+
         if ($this->isMaxPeriodsExceeded($setting, $subjectId)) {
             $maxPeriods = $setting->max_periods_per_week ?? 0;
             $this->showError('Max Periods Exceeded', "Cannot assign {$subject->name}. Maximum periods per week ({$maxPeriods}) already reached.");
@@ -374,6 +384,28 @@ class TimetableDesigner extends Component
     {
         $this->validationErrors = [['type' => $type, 'message' => $message]];
         $this->showValidationModal = true;
+    }
+
+    protected function isEcaPeriodRestricted(Subject $subject, int $period): bool
+    {
+        $subjectTypeRaw = $subject->type ?? '';
+        $subjectType = strtolower(trim($subjectTypeRaw));
+
+        $coCurricularTypes = [
+            'co_curricular',
+            'co-curricular',
+            'co curricular',
+        ];
+
+        if (! in_array($subjectType, $coCurricularTypes, true)) {
+            return false;
+        }
+
+        if (empty($this->ecaPeriods)) {
+            return false;
+        }
+
+        return ! in_array($period, $this->ecaPeriods);
     }
 
     protected function isMaxPeriodsExceeded(?ClassSubjectSetting $setting, int $subjectId): bool
@@ -433,7 +465,8 @@ class TimetableDesigner extends Component
             $subjectId,
             $teacherId,
             $dayOfWeek,
-            $period
+            $period,
+            $this->unsavedChanges
         );
     }
 
@@ -451,6 +484,7 @@ class TimetableDesigner extends Component
             'type' => 'regular',
             'status' => 'draft',
             'subject_name' => $subject->name,
+            'subject_type' => $subject->type,
             'teacher_name' => Teacher::find($teacherId)?->name,
         ];
     }

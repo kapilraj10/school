@@ -5,6 +5,7 @@
          draggedSlot: null,
          editMode: @entangle('editMode'),
          zoom: 1,
+         subjectSearch: '',
          init() {
             this.$watch('zoom', val => {
                 if(val < 0.5) this.zoom = 0.5;
@@ -50,8 +51,16 @@
                 <input
                     type="text"
                     placeholder="Search Subjects"
+                    x-model="subjectSearch"
                     class="w-full px-4 py-2 pl-10 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
+                <button
+                    x-show="subjectSearch !== ''"
+                    @click="subjectSearch = ''"
+                    class="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    title="Clear search">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
                 <svg class="w-4 h-4 absolute left-3 top-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                 </svg>
@@ -91,6 +100,7 @@
 
                 @if($primaryTeacher && ($remaining === null || $remaining > 0))
                     <div class="p-3 rounded-lg border transition-colors {{ $bgColor }}"
+                         x-show="subjectSearch === '' || @js(strtolower(($subject->code ?? $subject->name) . ' ' . $subject->name . ' ' . ($primaryTeacher->employee_id ?? '') . ' ' . $primaryTeacher->name)).includes(subjectSearch.toLowerCase())"
                          x-bind:class="{ 'cursor-move hover:border-blue-400 dark:hover:border-blue-600': editMode, 'cursor-not-allowed opacity-60': !editMode }"
                          x-bind:draggable="editMode"
                          @dragstart="startDrag({{ $subject->id }}, {{ $primaryTeacher->id }})"
@@ -188,6 +198,17 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
                     </svg>
                     <span x-text="editMode ? 'Edit Mode: ON' : 'Edit Mode: OFF'"></span>
+                </button>
+
+                <!-- Refresh Button -->
+                <button
+                    onclick="window.location.reload()"
+                    class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                    title="Refresh page"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
                 </button>
 
                 <!-- Save Button -->
@@ -314,9 +335,6 @@
                                                             @if($slot->is_locked ?? false)
                                                                 <span class="inline-block ml-1 px-1 py-0.5 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 rounded">LOCKED</span>
                                                             @endif
-                                                            @if(isset($slot->is_unsaved) && $slot->is_unsaved)
-                                                                <span class="inline-block ml-1 px-1 py-0.5 text-[10px] bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded">UNSAVED</span>
-                                                            @endif
                                                         </h4>
                                                         <div class="flex gap-1" x-show="editMode">
                                                             <button
@@ -358,12 +376,22 @@
                                                 </div>
 
                                             <div class="flex items-center justify-between pt-2">
+                                                @php
+                                                    $isUnsaved = isset($slot->is_unsaved) && $slot->is_unsaved;
+                                                    $isPublished = !$isUnsaved && ($slot->status ?? 'draft') === 'published';
+                                                    $markerLabel = $isUnsaved ? 'UNSAVED' : ($isPublished ? 'PUBLISHED' : 'SAVED');
+                                                    $markerClass = $isUnsaved
+                                                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                                        : ($isPublished
+                                                            ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                                                            : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400');
+                                                @endphp
                                                 <button
                                                     wire:click="toggleStatus('{{ $dateKey }}', {{ $period }})"
                                                     x-bind:disabled="!editMode || {{ ($slot->is_locked ?? false) ? 'true' : 'false' }}"
-                                                    class="px-2 py-1 text-xs font-medium rounded {{ $slot->status === 'published' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' }}"
+                                                    class="px-2 py-1 text-xs font-medium rounded {{ $markerClass }}"
                                                     x-bind:class="{ 'opacity-50 cursor-not-allowed': !editMode }">
-                                                    {{ strtoupper($slot->status ?? 'draft') }}
+                                                    {{ $markerLabel }}
                                                 </button>
                                             </div>
                                         </div>

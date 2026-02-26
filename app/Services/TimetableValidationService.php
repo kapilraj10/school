@@ -2,36 +2,78 @@
 
 namespace App\Services;
 
+use App\Models\ClassRoom;
 use App\Models\ClassSubjectSetting;
+use App\Models\CombinedPeriod;
 use App\Models\Subject;
 use App\Models\Teacher;
+use App\Models\TimetableSetting;
 use App\Models\TimetableSlot;
 
 class TimetableValidationService
 {
-    private const MAX_TEACHER_PERIODS_PER_DAY = 7;
+    /** Maximum periods a teacher may teach across all classes in a single day (DB: max_teacher_periods_per_day) */
+    private int $maxTeacherPeriodsPerDay;
 
-    private const MAX_SUBJECT_PERIODS_PER_DAY = 2;
+    /** Maximum periods a single subject may appear in one day (DB: max_same_subject_per_day) */
+    private int $maxSubjectPeriodsPerDay;
 
-    private const CORE_SUBJECTS = ['English', 'Maths', 'Science', 'Nepali', 'Math'];
+    /** Number of periods per school day (DB: periods_per_day) */
+    private int $periodsPerDay;
 
-    private const HEAVY_SUBJECTS = ['Maths', 'Math', 'Science', 'English', 'Nepali', 'Social'];
+    /** Core subjects list (DB: core_subjects) */
+    private array $coreSubjects;
 
-    private const PREFERRED_COCURRICULAR_PERIODS = [4, 5, 6, 7, 8]; // Middle and last periods
+    /** Mentally heavy subjects list (DB: heavy_subjects) */
+    private array $heavySubjects;
+
+    /** Physical activity subject keywords that cannot be placed in period 5 (DB: physical_subjects) */
+    private array $physicalSubjects;
+
+    /** Preferred period slots for co-curricular activities (DB: preferred_eca_periods) */
+    private array $preferredCoCurricularPeriods;
 
     private array $errors = [];
 
     private array $warnings = [];
 
-    private array $dayNames = [
-        0 => 'Sunday',
-        1 => 'Monday',
-        2 => 'Tuesday',
-        3 => 'Wednesday',
-        4 => 'Thursday',
-        5 => 'Friday',
-        6 => 'Saturday',
-    ];
+    /** Active school-day map: [dayOfWeek => dayName], populated from TimetableSetting */
+    private array $dayNames = [];
+
+    public function __construct()
+    {
+        // Load all dynamic settings from the database (with sensible defaults)
+        $this->maxTeacherPeriodsPerDay = (int) TimetableSetting::get('max_teacher_periods_per_day', 7);
+        $this->maxSubjectPeriodsPerDay = (int) TimetableSetting::get('max_same_subject_per_day', 2);
+        $this->periodsPerDay = (int) TimetableSetting::get('periods_per_day', 8);
+        $this->coreSubjects = TimetableSetting::get('core_subjects', ['English', 'Maths', 'Science', 'Nepali', 'Math']);
+        $this->heavySubjects = TimetableSetting::get('heavy_subjects', ['Maths', 'Math', 'Science', 'English', 'Nepali', 'Social']);
+        $this->physicalSubjects = TimetableSetting::get('physical_subjects', ['sport', 'taekwondo', 'dance', 'physical education', 'yoga']);
+        $this->preferredCoCurricularPeriods = TimetableSetting::get('preferred_eca_periods', [4, 5, 6, 7, 8]);
+
+        $allDayMap = [
+            'Sunday' => 0,
+            'Monday' => 1,
+            'Tuesday' => 2,
+            'Wednesday' => 3,
+            'Thursday' => 4,
+            'Friday' => 5,
+            'Saturday' => 6,
+        ];
+
+        $schoolDayNames = TimetableSetting::get(
+            'school_days',
+            ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+        );
+
+        $this->dayNames = [];
+        foreach ($schoolDayNames as $dayName) {
+            $dayNum = $allDayMap[$dayName] ?? null;
+            if ($dayNum !== null) {
+                $this->dayNames[$dayNum] = $dayName;
+            }
+        }
+    }
 
     /**
      * Validate a single slot assignment before saving
@@ -42,6 +84,7 @@ class TimetableValidationService
      * @param  int|null  $teacherId  The teacher ID to assign
      * @param  int  $day  Day of week (1-6)
      * @param  int  $period  Period number (1-8)
+     * @param  array  $pendingSlots  Unsaved changes from the designer (keyed by "date_period")
      * @return array ['errors' => [], 'warnings' => []]
      */
     public function validateSlotAssignment(
@@ -50,13 +93,15 @@ class TimetableValidationService
         int $subjectId,
         ?int $teacherId,
         int $day,
-        int $period
+        int $period,
+        array $pendingSlots = []
     ): array {
         $this->errors = [];
         $this->warnings = [];
 
-        // Load existing slots for this class
+        // Load saved slots from DB then overlay any unsaved (pending) changes
         $existingSlots = $this->loadExistingSlotsAsArray($classRoomId, $termId);
+        $existingSlots = $this->mergePendingSlots($existingSlots, $pendingSlots, $classRoomId, $day, $period);
 
         // Load subject and teacher details
         $subject = Subject::find($subjectId);
@@ -133,6 +178,63 @@ class TimetableValidationService
     }
 
     /**
+     * Merge pending (unsaved) designer changes into a slots array.
+     * Additions overwrite, deletions remove. The slot being validated (day+period)
+     * is deliberately excluded so it does not count as "already existing" when we
+     * check limits for the very slot we are about to assign.
+     *
+     * @param  array  $existingSlots  Slots loaded from DB [day][period]
+     * @param  array  $pendingSlots  Unsaved changes keyed by "date_period"
+     * @param  int  $classRoomId  Only include pending slots for this class
+     * @param  int  $currentDay  Day being validated (exclude from existing)
+     * @param  int  $currentPeriod  Period being validated (exclude from existing)
+     */
+    private function mergePendingSlots(
+        array $existingSlots,
+        array $pendingSlots,
+        int $classRoomId,
+        int $currentDay,
+        int $currentPeriod
+    ): array {
+        // Remove the slot being validated from existing so we don't double-count
+        unset($existingSlots[$currentDay][$currentPeriod]);
+
+        foreach ($pendingSlots as $change) {
+            // Skip changes for other classes
+            if (isset($change['class_room_id']) && (int) $change['class_room_id'] !== $classRoomId) {
+                continue;
+            }
+
+            $changeDay = (int) ($change['day'] ?? -1);
+            $changePeriod = (int) ($change['period'] ?? -1);
+
+            // Skip the slot currently being evaluated
+            if ($changeDay === $currentDay && $changePeriod === $currentPeriod) {
+                continue;
+            }
+
+            if (isset($change['deleted']) && $change['deleted']) {
+                // Remove deleted slots so they don't block the new assignment
+                unset($existingSlots[$changeDay][$changePeriod]);
+            } elseif (isset($change['subject_id'])) {
+                // Look up subject_type if not stored in the pending entry
+                $subjectType = $change['subject_type']
+                    ?? Subject::find($change['subject_id'])?->type;
+
+                $existingSlots[$changeDay][$changePeriod] = [
+                    'subject_id' => (int) $change['subject_id'],
+                    'subject_name' => $change['subject_name'] ?? 'Unknown',
+                    'subject_type' => $subjectType,
+                    'teacher_id' => $change['teacher_id'] ?? null,
+                    'teacher_name' => $change['teacher_name'] ?? 'Unknown',
+                ];
+            }
+        }
+
+        return $existingSlots;
+    }
+
+    /**
      * Load existing timetable slots as array structure
      *
      * @param  int  $classRoomId  The class room ID
@@ -196,7 +298,7 @@ class TimetableValidationService
             }
         }
 
-        if ($subjectCountToday >= self::MAX_SUBJECT_PERIODS_PER_DAY) {
+        if ($subjectCountToday >= $this->maxSubjectPeriodsPerDay) {
             $this->errors[] = [
                 'type' => 'subject_daily_limit',
                 'day' => $day,
@@ -207,7 +309,7 @@ class TimetableValidationService
                     $subject->name,
                     $subjectCountToday,
                     $dayName,
-                    self::MAX_SUBJECT_PERIODS_PER_DAY
+                    $this->maxSubjectPeriodsPerDay
                 ),
             ];
         }
@@ -217,15 +319,30 @@ class TimetableValidationService
             $this->validateCoCurricularSlot($existingSlots, $subject, $day, $period, $dayName);
         }
 
-        // 3. Check teacher constraints
+        // 3. Check physical subject restriction: no physical activity in period 5
+        if ($period === 5 && $this->isPhysicalSubject($subject->name)) {
+            $this->errors[] = [
+                'type' => 'physical_fifth_period',
+                'day' => $day,
+                'day_name' => $dayName,
+                'period' => $period,
+                'message' => sprintf(
+                    '%s (physical activity) cannot be scheduled in period 5 on %s.',
+                    $subject->name,
+                    $dayName
+                ),
+            ];
+        }
+
+        // 4. Check teacher constraints
         if ($teacher) {
             $this->validateTeacherSlot($teacher, $day, $period, $dayName, $termId, $classRoomId);
         }
 
-        // 4. Check weekly requirements (warning if needed)
+        // 5. Check weekly requirements (warning if needed)
         $this->checkWeeklySingleSlot($existingSlots, $subject, $classRoomId);
 
-        // 5. Soft validation - check if subject already appears today
+        // 6. Soft validation - check if subject already appears today
         if ($subjectCountToday > 0) {
             $this->warnings[] = [
                 'type' => 'daily_repetition',
@@ -258,59 +375,45 @@ class TimetableValidationService
         int $period,
         string $dayName
     ): void {
-        // Check if there's already a different co-curricular subject today
-        $coCurricularSubjects = Subject::where('type', 'co_curricular')
+        $coCurricularSubjectIds = Subject::where('type', 'co_curricular')
             ->where('status', 'active')
             ->pluck('id')
             ->toArray();
 
-        $existingCoCurricular = [];
+        $totalCoCurricularToday = [];
         $thisSubjectPeriods = [];
 
         foreach ($existingSlots[$day] ?? [] as $p => $slot) {
-            if (in_array($slot['subject_id'], $coCurricularSubjects)) {
-                if ($slot['subject_id'] !== $subject->id) {
-                    $existingCoCurricular[] = $slot['subject_name'];
-                } else {
+            if (in_array($slot['subject_id'], $coCurricularSubjectIds)) {
+                $totalCoCurricularToday[] = $p;
+
+                if ($slot['subject_id'] === $subject->id) {
                     $thisSubjectPeriods[] = $p;
                 }
             }
         }
 
-        // Rule 1: Only one co-curricular subject per day
-        if (! empty($existingCoCurricular)) {
-            $this->errors[] = [
-                'type' => 'multiple_cocurricular',
-                'day' => $day,
-                'day_name' => $dayName,
-                'period' => $period,
-                'message' => sprintf(
-                    'Cannot assign %s - another co-curricular subject (%s) is already scheduled on %s. Only 1 co-curricular per day allowed.',
-                    $subject->name,
-                    implode(', ', $existingCoCurricular),
-                    $dayName
-                ),
-            ];
-        }
-
-        // Rule 2: Max 2 periods per co-curricular per day
-        if (count($thisSubjectPeriods) >= 2) {
+        // Rule 1: Max 2 co-curricular periods per day (any subject combination)
+        if (count($totalCoCurricularToday) >= 2) {
             $this->errors[] = [
                 'type' => 'cocurricular_period_limit',
                 'day' => $day,
                 'day_name' => $dayName,
                 'period' => $period,
                 'message' => sprintf(
-                    '%s already has 2 periods on %s (maximum allowed). Cannot add another.',
+                    'Cannot assign %s on %s — already 2 co-curricular periods scheduled (maximum per day).',
                     $subject->name,
                     $dayName
                 ),
             ];
+
+            return;
         }
 
-        // Rule 3: If adding a second period, must be consecutive
+        // Rule 2: If the same subject already has a period today, the new period must be consecutive
         if (count($thisSubjectPeriods) === 1) {
             $existingPeriod = $thisSubjectPeriods[0];
+
             if (abs($period - $existingPeriod) !== 1) {
                 $this->errors[] = [
                     'type' => 'cocurricular_not_consecutive',
@@ -318,7 +421,7 @@ class TimetableValidationService
                     'day_name' => $dayName,
                     'period' => $period,
                     'message' => sprintf(
-                        '%s period %d must be consecutive to existing period %d on %s.',
+                        '%s period %d must be consecutive to its existing period %d on %s.',
                         $subject->name,
                         $period,
                         $existingPeriod,
@@ -329,7 +432,7 @@ class TimetableValidationService
         }
 
         // Soft warning: co-curricular should be in middle/later periods
-        if (! in_array($period, self::PREFERRED_COCURRICULAR_PERIODS)) {
+        if (! in_array($period, $this->preferredCoCurricularPeriods)) {
             $this->warnings[] = [
                 'type' => 'cocurricular_early_placement',
                 'day' => $day,
@@ -404,14 +507,13 @@ class TimetableValidationService
             ];
         }
 
-        // Check daily workload (max 6 periods per day)
+        // Check daily workload across ALL classes (max 7 periods per day)
         $periodsToday = TimetableSlot::where('teacher_id', $teacher->id)
             ->where('academic_term_id', $termId)
             ->where('day', $day)
-            ->where('class_room_id', $classRoomId)
             ->count();
 
-        if ($periodsToday >= self::MAX_TEACHER_PERIODS_PER_DAY) {
+        if ($periodsToday >= $this->maxTeacherPeriodsPerDay) {
             $this->errors[] = [
                 'type' => 'teacher_workload',
                 'day' => $day,
@@ -422,7 +524,7 @@ class TimetableValidationService
                     $teacher->name,
                     $periodsToday,
                     $dayName,
-                    self::MAX_TEACHER_PERIODS_PER_DAY
+                    $this->maxTeacherPeriodsPerDay
                 ),
             ];
         }
@@ -508,6 +610,15 @@ class TimetableValidationService
 
         // 5. Check teacher constraints
         $this->checkTeacherConstraints($slots, $termId, $classRoomId);
+
+        // 6. Check subject allocations are balanced across the week
+        $this->checkSubjectWeeklyBalance($slots);
+
+        // 7. Check combined subjects only span sections of the same grade
+        $this->checkCombinedSubjectRules($classRoomId, $termId);
+
+        // 8. Check no physical activity subject in period 5
+        $this->checkPhysicalSubjectFifthPeriod($slots);
     }
 
     /**
@@ -532,20 +643,18 @@ class TimetableValidationService
     }
 
     /**
-     * HARD: Check timetable structure - warn about empty slots
+     * HARD: Check timetable structure — all configured weekly periods must be filled.
+     * The total is derived from the number of active days and the configured periods per day. Any empty slot is a hard violation.
      */
     private function checkTimetableStructure(array $slots): void
     {
-        $totalSlots = 0;
-        $filledSlots = 0;
+        $activeDays = count($this->dayNames);
+        $expectedTotal = $activeDays * $this->periodsPerDay;
         $emptySlots = [];
 
         foreach ($this->dayNames as $day => $dayName) {
-            for ($period = 1; $period <= 8; $period++) {
-                $totalSlots++;
-                if (isset($slots[$day][$period]) && $slots[$day][$period]) {
-                    $filledSlots++;
-                } else {
+            for ($period = 1; $period <= $this->periodsPerDay; $period++) {
+                if (! isset($slots[$day][$period]) || ! $slots[$day][$period]) {
                     $emptySlots[] = [
                         'day' => $day,
                         'period' => $period,
@@ -556,11 +665,17 @@ class TimetableValidationService
         }
 
         if (count($emptySlots) > 0) {
-            $this->warnings[] = [
+            $this->errors[] = [
                 'type' => 'empty_slots',
-                'message' => sprintf('%d slots are empty. Complete timetable allocation recommended.', count($emptySlots)),
+                'message' => sprintf(
+                    '%d of %d weekly slots are empty. All %d periods must be filled (%d per day × %d days).',
+                    count($emptySlots),
+                    $expectedTotal,
+                    $expectedTotal,
+                    $this->periodsPerDay,
+                    $activeDays
+                ),
                 'details' => $emptySlots,
-                'severity' => 'info',
             ];
         }
     }
@@ -598,7 +713,7 @@ class TimetableValidationService
             }
 
             foreach ($subjectCounts as $subjectId => $data) {
-                if ($data['count'] > self::MAX_SUBJECT_PERIODS_PER_DAY) {
+                if ($data['count'] > $this->maxSubjectPeriodsPerDay) {
                     $this->errors[] = [
                         'type' => 'subject_daily_limit',
                         'day' => $day,
@@ -609,7 +724,7 @@ class TimetableValidationService
                             $data['name'],
                             $data['count'],
                             $dayName,
-                            self::MAX_SUBJECT_PERIODS_PER_DAY
+                            $this->maxSubjectPeriodsPerDay
                         ),
                         'periods' => $data['periods'],
                     ];
@@ -709,7 +824,6 @@ class TimetableValidationService
             }
 
             $coCurricularOnDay = [];
-            $uniqueCoCurricularSubjects = [];
 
             // Collect all co-curricular periods for this day
             foreach ($slots[$day] as $period => $slot) {
@@ -723,65 +837,50 @@ class TimetableValidationService
                         'subject_id' => $slot['subject_id'],
                         'subject_name' => $slot['subject_name'] ?? $coCurricularSubjects[$slot['subject_id']],
                     ];
-                    $uniqueCoCurricularSubjects[$slot['subject_id']] = $slot['subject_name'] ?? $coCurricularSubjects[$slot['subject_id']];
                 }
             }
 
-            // Rule 1: Only ONE co-curricular subject per day
-            if (count($uniqueCoCurricularSubjects) > 1) {
+            // Rule 1: Max 2 co-curricular periods total per day (any subject combination)
+            if (count($coCurricularOnDay) > 2) {
                 $this->errors[] = [
-                    'type' => 'multiple_cocurricular',
+                    'type' => 'cocurricular_period_limit',
                     'day' => $day,
                     'day_name' => $dayName,
                     'message' => sprintf(
-                        'Multiple co-curricular subjects on %s: %s (Only 1 allowed per day)',
+                        '%d co-curricular periods on %s (Max: 2 per day). Subjects: %s',
+                        count($coCurricularOnDay),
                         $dayName,
-                        implode(', ', $uniqueCoCurricularSubjects)
+                        implode(', ', array_unique(array_column($coCurricularOnDay, 'subject_name')))
                     ),
                     'periods' => array_column($coCurricularOnDay, 'period'),
                 ];
             }
 
-            // Rule 2 & 3: Max 2 periods and must be consecutive
-            foreach ($uniqueCoCurricularSubjects as $subjectId => $subjectName) {
-                $periodsForThisSubject = array_filter($coCurricularOnDay, fn ($item) => $item['subject_id'] === $subjectId);
-                $periodNumbers = array_column($periodsForThisSubject, 'period');
+            // Rule 2: If the same subject appears twice, its two periods must be consecutive
+            $bySubject = [];
+            foreach ($coCurricularOnDay as $item) {
+                $bySubject[$item['subject_id']][] = $item['period'];
+            }
+
+            foreach ($bySubject as $subjectId => $periodNumbers) {
                 sort($periodNumbers);
 
-                if (count($periodNumbers) > 2) {
+                if (count($periodNumbers) === 2 && $periodNumbers[1] - $periodNumbers[0] !== 1) {
+                    $subjectName = $coCurricularSubjects[$subjectId] ?? 'Unknown';
                     $this->errors[] = [
-                        'type' => 'cocurricular_period_limit',
+                        'type' => 'cocurricular_not_consecutive',
                         'day' => $day,
                         'day_name' => $dayName,
                         'subject_id' => $subjectId,
                         'message' => sprintf(
-                            '%s appears %d times on %s (Max: 2 periods)',
+                            '%s appears twice on %s but periods %d and %d are not consecutive.',
                             $subjectName,
-                            count($periodNumbers),
-                            $dayName
+                            $dayName,
+                            $periodNumbers[0],
+                            $periodNumbers[1]
                         ),
                         'periods' => $periodNumbers,
                     ];
-                }
-
-                // Check if consecutive (only relevant if 2 periods)
-                if (count($periodNumbers) === 2) {
-                    if ($periodNumbers[1] - $periodNumbers[0] !== 1) {
-                        $this->errors[] = [
-                            'type' => 'cocurricular_not_consecutive',
-                            'day' => $day,
-                            'day_name' => $dayName,
-                            'subject_id' => $subjectId,
-                            'message' => sprintf(
-                                '%s periods on %s are not consecutive (Periods %d and %d)',
-                                $subjectName,
-                                $dayName,
-                                $periodNumbers[0],
-                                $periodNumbers[1]
-                            ),
-                            'periods' => $periodNumbers,
-                        ];
-                    }
                 }
             }
         }
@@ -866,18 +965,24 @@ class TimetableValidationService
             }
 
             foreach ($teacherDailyCounts as $teacherId => $data) {
-                if ($data['count'] > self::MAX_TEACHER_PERIODS_PER_DAY) {
+                // Query the global total across ALL classes for this teacher + day
+                $globalCount = TimetableSlot::where('teacher_id', $teacherId)
+                    ->where('academic_term_id', $termId)
+                    ->where('day', $day)
+                    ->count();
+
+                if ($globalCount > $this->maxTeacherPeriodsPerDay) {
                     $this->errors[] = [
                         'type' => 'teacher_workload',
                         'day' => $day,
                         'day_name' => $dayName,
                         'teacher_id' => $teacherId,
                         'message' => sprintf(
-                            'Teacher %s has %d periods on %s (Max: %d)',
+                            'Teacher %s has %d periods on %s across all classes (Max: %d per day)',
                             $data['name'],
-                            $data['count'],
+                            $globalCount,
                             $dayName,
-                            self::MAX_TEACHER_PERIODS_PER_DAY
+                            $this->maxTeacherPeriodsPerDay
                         ),
                         'periods' => $data['periods'],
                     ];
@@ -1023,7 +1128,7 @@ class TimetableValidationService
                 $subjectName = $slot['subject_name'];
 
                 // Check if it's a core subject (case-insensitive partial match)
-                foreach (self::CORE_SUBJECTS as $coreSubject) {
+                foreach ($this->coreSubjects as $coreSubject) {
                     if (stripos($subjectName, $coreSubject) !== false) {
                         if (! isset($coreSubjectPositions[$coreSubject])) {
                             $coreSubjectPositions[$coreSubject] = [];
@@ -1132,7 +1237,7 @@ class TimetableValidationService
 
                 if (in_array($slot['subject_id'], $coCurricularSubjects)) {
                     // Check if in early periods (1-3)
-                    if (! in_array($period, self::PREFERRED_COCURRICULAR_PERIODS)) {
+                    if (! in_array($period, $this->preferredCoCurricularPeriods)) {
                         $this->warnings[] = [
                             'type' => 'cocurricular_early_placement',
                             'day' => $day,
@@ -1157,12 +1262,151 @@ class TimetableValidationService
      */
     private function isHeavySubject(string $subjectName): bool
     {
-        foreach (self::HEAVY_SUBJECTS as $heavy) {
+        foreach ($this->heavySubjects as $heavy) {
             if (stripos($subjectName, $heavy) !== false) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * Helper: Check if a subject is a physical activity (must not appear in period 5)
+     */
+    private function isPhysicalSubject(string $subjectName): bool
+    {
+        foreach ($this->physicalSubjects as $physical) {
+            if (stripos($subjectName, $physical) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * HARD: Subject allocations must be balanced across the week.
+     * If a subject appears on fewer available days than possible and is concentrated on
+     * one day (2 periods) while other days could absorb one period each, flag it.
+     */
+    private function checkSubjectWeeklyBalance(array $slots): void
+    {
+        $subjectDayCounts = [];
+
+        foreach ($slots as $day => $periods) {
+            foreach ($periods as $period => $slot) {
+                if (! $slot || ! isset($slot['subject_id'])) {
+                    continue;
+                }
+
+                $subjectId = $slot['subject_id'];
+                if (! isset($subjectDayCounts[$subjectId])) {
+                    $subjectDayCounts[$subjectId] = [
+                        'name' => $slot['subject_name'] ?? 'Unknown',
+                        'by_day' => [],
+                        'total' => 0,
+                    ];
+                }
+
+                $subjectDayCounts[$subjectId]['by_day'][$day] =
+                    ($subjectDayCounts[$subjectId]['by_day'][$day] ?? 0) + 1;
+                $subjectDayCounts[$subjectId]['total']++;
+            }
+        }
+
+        $activeDayCount = count($this->dayNames);
+
+        foreach ($subjectDayCounts as $subjectId => $data) {
+            $dayCounts = array_values($data['by_day']);
+
+            if (count($dayCounts) < 2 || $data['total'] < 2) {
+                continue;
+            }
+
+            $maxOnOneDay = max($dayCounts);
+            $daysUsed = count($dayCounts);
+            $availableDays = $activeDayCount - $daysUsed;
+
+            // A subject is considered overloaded when it appears 2× on a single day
+            // yet free days remain where it could be spread instead
+            if ($maxOnOneDay >= 2 && $availableDays > 0) {
+                $this->errors[] = [
+                    'type' => 'subject_overloaded_day',
+                    'subject_id' => $subjectId,
+                    'message' => sprintf(
+                        '%s is overloaded: %d periods on a single day with %d day(s) still available. Spread allocations evenly across the week.',
+                        $data['name'],
+                        $maxOnOneDay,
+                        $availableDays
+                    ),
+                ];
+            }
+        }
+    }
+
+    /**
+     * HARD: Combined subjects may only span sections of the same grade — not cross-grade.
+     * E.g. Sport for Class 1 Section A & B is allowed; Sport for Class 1 & Class 2 is not.
+     */
+    private function checkCombinedSubjectRules(int $classRoomId, int $termId): void
+    {
+        $combinedPeriods = CombinedPeriod::where('academic_term_id', $termId)
+            ->with('subject')
+            ->get();
+
+        if ($combinedPeriods->isEmpty()) {
+            return;
+        }
+
+        foreach ($combinedPeriods as $combined) {
+            $classRoomIds = $combined->class_room_ids ?? [];
+
+            if (count($classRoomIds) < 2) {
+                continue;
+            }
+
+            // All rooms must belong to the same grade, which in this system is represented by ClassRoom::name
+            $grades = ClassRoom::whereIn('id', $classRoomIds)->pluck('name')->unique();
+
+            if ($grades->count() > 1) {
+                $this->errors[] = [
+                    'type' => 'combined_cross_grade',
+                    'message' => sprintf(
+                        'Combined subject "%s" spans multiple grades (%s). Combined subjects must be within the same grade only (e.g. Class 1 Section A and B — not Class 1 and Class 2).',
+                        $combined->subject?->name ?? 'Unknown',
+                        $grades->implode(', ')
+                    ),
+                ];
+            }
+        }
+    }
+
+    /**
+     * HARD: Physical activity subjects (sports, taekwondo, dance) must not appear in period 5.
+     */
+    private function checkPhysicalSubjectFifthPeriod(array $slots): void
+    {
+        foreach ($this->dayNames as $day => $dayName) {
+            $slot = $slots[$day][5] ?? null;
+
+            if (! $slot || ! isset($slot['subject_name'])) {
+                continue;
+            }
+
+            if ($this->isPhysicalSubject($slot['subject_name'])) {
+                $this->errors[] = [
+                    'type' => 'physical_fifth_period',
+                    'day' => $day,
+                    'day_name' => $dayName,
+                    'period' => 5,
+                    'message' => sprintf(
+                        '%s (physical activity) cannot be scheduled in period 5 on %s.',
+                        $slot['subject_name'],
+                        $dayName
+                    ),
+                ];
+            }
+        }
     }
 }
