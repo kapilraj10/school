@@ -650,6 +650,24 @@ class TimetableDesigner extends Component
         $this->editMode = ! $this->editMode;
     }
 
+    public function clearAllSlots(): void
+    {
+        if (! $this->selectedClassId || ! $this->selectedTermId) {
+            return;
+        }
+
+        // Delete all unlocked saved slots for this class and term
+        $this->selectedSlotsQuery()
+            ->where('is_locked', false)
+            ->delete();
+
+        // Clear all unsaved changes too
+        $this->unsavedChanges = [];
+
+        $this->loadTimetableSlots();
+        session()->flash('message', 'All slots cleared successfully.');
+    }
+
     public function saveAllSlots(): void
     {
         if (! $this->selectedClassId || ! $this->selectedTermId) {
