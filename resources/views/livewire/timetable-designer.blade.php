@@ -4,7 +4,7 @@
          draggedTeacher: null,
          draggedSlot: null,
          editMode: @entangle('editMode'),
-         zoom: Math.min(1, Math.max(0.6, (window.innerHeight - 150) / 800)),
+         zoom: 1,
          init() {
             this.$watch('zoom', val => {
                 if(val < 0.5) this.zoom = 0.5;
@@ -97,11 +97,11 @@
                          @dragend="endDrag()">
                         <div class="flex items-start justify-between gap-2">
                             <div class="flex-1 min-w-0">
-                                <h3 class="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-                                    {{ $subject->name }}
+                                <h3 class="font-semibold text-sm {{ $subjectType === 'core' ? 'text-blue-700 dark:text-blue-300' : ($subjectType === 'co_curricular' ? 'text-green-700 dark:text-green-300' : 'text-gray-900 dark:text-gray-100') }} truncate" title="{{ $subject->name }}">
+                                    {{ $subject->code ?? $subject->name }}
                                 </h3>
-                                <p class="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate">
-                                    {{ $primaryTeacher->name }}
+                                <p class="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5 truncate" title="{{ $primaryTeacher->name }}">
+                                    {{ $primaryTeacher->employee_id ?? $primaryTeacher->name }}
                                 </p>
                             </div>
                             <div class="shrink-0 flex flex-col items-end gap-1">
@@ -309,8 +309,8 @@
                                             <div class="h-full flex flex-col justify-between">
                                                 <div class="space-y-1">
                                                     <div class="flex items-start justify-between gap-2">
-                                                        <h4 class="font-semibold text-sm text-gray-900 dark:text-gray-100 line-clamp-2">
-                                                            {{ $slot->subject?->name }}
+                                                        <h4 class="font-semibold text-sm {{ $slot->subject?->type === 'core' ? 'text-blue-700 dark:text-blue-300' : ($slot->subject?->type === 'co_curricular' ? 'text-green-700 dark:text-green-300' : 'text-gray-900 dark:text-gray-100') }} line-clamp-2">
+                                                            {{ $slot->subject?->code ?? 'N/A' }}
                                                             @if($slot->is_locked ?? false)
                                                                 <span class="inline-block ml-1 px-1 py-0.5 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 rounded">LOCKED</span>
                                                             @endif
@@ -354,7 +354,7 @@
                                                         </div>
                                                     </div>
 
-                                                    <p class="text-xs text-gray-600 dark:text-gray-400">{{ $slot->teacher?->name }}</p>
+                                                    <p class="text-xs text-gray-500 dark:text-gray-400 font-mono">{{ $slot->teacher?->employee_id ?? 'No Teacher' }}</p>
                                                 </div>
 
                                             <div class="flex items-center justify-between pt-2">
