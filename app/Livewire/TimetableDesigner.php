@@ -639,6 +639,10 @@ class TimetableDesigner extends Component
         $this->showValidationModal = false;
         $this->validationErrors = [];
         $this->validationWarnings = [];
+
+        // Re-merge unsaved changes so mock slots (not persisted, no DB id) are
+        // restored into $timetableSlots after Livewire re-hydrates the property.
+        $this->mergeTimetableSlots();
     }
 
     public function toggleEditMode(): void
