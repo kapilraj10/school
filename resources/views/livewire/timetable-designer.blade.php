@@ -42,7 +42,7 @@
      }">
 
     <!-- Left Sidebar - Subject/Teacher List -->
-     <div class="fixed left-0 top-14 bottom-0 w-64 bg-white dark:bg-gray-800 shadow-md border-r border-gray-200 dark:border-gray-700 z-40 flex flex-col transition-transform duration-300 transform"
+     <div class="fixed left-0 top-14 bottom-0 w-64 bg-white dark:bg-gray-950 shadow-md border-r border-gray-200 dark:border-gray-700 z-40 flex flex-col transition-transform duration-300 transform"
           @dragover.prevent
           @drop="handleSidebarDrop()">
         <div class="p-4 border-b border-gray-200 dark:border-gray-700">
@@ -66,39 +66,54 @@
                     $setting = isset($classSubjectSettings[$subject->id]) ? $classSubjectSettings[$subject->id] : null;
                     $maxPeriods = $setting['max_periods_per_week'] ?? 0;
                     $minPeriods = $setting['min_periods_per_week'] ?? 0;
+                    $remaining = $maxPeriods > 0 ? ($maxPeriods - $workload) : null;
                     $subjectType = strtolower(str_replace('-', '_', $subject->type ?? ''));
-                    
+
                     if ($subjectType === 'core') {
-                        $bgColor = 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700';
+                        $bgColor = 'bg-blue-50 dark:bg-blue-950 border-blue-300 dark:border-blue-600';
                     } elseif ($subjectType === 'co_curricular') {
-                        $bgColor = 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700';
+                        $bgColor = 'bg-green-50 dark:bg-green-950 border-green-300 dark:border-green-600';
                     } else {
-                        $bgColor = 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
+                        $bgColor = 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700';
+                    }
+
+                    // Badge color based on remaining slots
+                    if ($remaining === null) {
+                        $badgeColor = 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200';
+                    } elseif ($remaining <= 1) {
+                        $badgeColor = 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300';
+                    } elseif ($remaining <= 2) {
+                        $badgeColor = 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300';
+                    } else {
+                        $badgeColor = 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300';
                     }
                 @endphp
 
-                @if($primaryTeacher && ($maxPeriods === 0 || $workload < $maxPeriods))
+                @if($primaryTeacher && ($remaining === null || $remaining > 0))
                     <div class="p-3 rounded-lg border transition-colors {{ $bgColor }}"
                          x-bind:class="{ 'cursor-move hover:border-blue-400 dark:hover:border-blue-600': editMode, 'cursor-not-allowed opacity-60': !editMode }"
                          x-bind:draggable="editMode"
                          @dragstart="startDrag({{ $subject->id }}, {{ $primaryTeacher->id }})"
                          @dragend="endDrag()">
-                        <div class="flex items-start justify-between mb-2">
-                            <div class="flex-1">
-                                <h3 class="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="flex-1 min-w-0">
+                                <h3 class="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
                                     {{ $subject->name }}
                                 </h3>
-                                <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                <p class="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate">
                                     {{ $primaryTeacher->name }}
                                 </p>
                             </div>
-                            <div class="flex flex-col items-end gap-1">
-                                <span class="text-[10px] px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{{ $workload }}</span>
+                            <div class="shrink-0 flex flex-col items-end gap-1">
+                                <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full {{ $badgeColor }}">
+                                    @if($remaining !== null)
+                                        {{ $remaining }}/{{ $maxPeriods }}
+                                    @else
+                                        {{ $workload }}
+                                    @endif
+                                </span>
                                 @if($minPeriods > 0)
-                                    <span class="text-[10px] px-2 py-1 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">Min: {{ $minPeriods }}</span>
-                                @endif
-                                @if($maxPeriods > 0)
-                                    <span class="text-[10px] px-2 py-1 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Max: {{ $maxPeriods }}</span>
+                                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">Min: {{ $minPeriods }}</span>
                                 @endif
                             </div>
                         </div>
@@ -121,29 +136,25 @@
         </div>
 
         <div class="p-2 border-t border-gray-200 dark:border-gray-700">
-            <div class="bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700 grid grid-cols-1 gap-2 text-xs">
+            <div class="bg-white dark:bg-gray-950 p-2 rounded-lg border border-gray-200 dark:border-gray-700 grid grid-cols-1 gap-2 text-xs">
                 <div class="font-semibold text-center mb-1">Color Legend</div>
-                <div class="flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded px-2 py-1">
+                <div class="flex items-center gap-2 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-600 rounded px-2 py-1">
                     <span class="w-3 h-3 rounded-full bg-blue-500"></span>
                     <span class="text-gray-700 dark:text-gray-300">Core Subject</span>
                 </div>
-                <div class="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded px-2 py-1">
+                <div class="flex items-center gap-2 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-600 rounded px-2 py-1">
                     <span class="w-3 h-3 rounded-full bg-green-500"></span>
                     <span class="text-gray-700 dark:text-gray-300">Co-Curricular</span>
-                </div>
-                <div class="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded px-2 py-1">
-                    <span class="w-3 h-3 rounded-full bg-gray-400"></span>
-                    <span class="text-gray-700 dark:text-gray-300">Others</span>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Main Content Area - Weekly Calendar -->
-    <div class="ml-64 flex-1 bg-white dark:bg-gray-800 rounded-none shadow-none border-none overflow-hidden flex flex-col h-full">
+    <div class="ml-64 flex-1 bg-white dark:bg-gray-950 rounded-none shadow-none border-none overflow-hidden flex flex-col h-full">
 
         <!-- Top Controls -->
-        <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4 h-14 bg-white dark:bg-gray-800 sticky top-0 z-30">
+        <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4 h-14 bg-white dark:bg-gray-950 sticky top-0 z-30">
             <div class="flex items-center gap-4">
                 <select
                     wire:model.live="selectedTermId"
@@ -224,7 +235,7 @@
         <div class="flex-1 overflow-auto p-4 transition-transform origin-top-left" :style="'zoom: ' + zoom">
             @if ($selectedClassId && $selectedTermId)
                 <div class="min-w-[1100px] space-y-3">
-                    <div class="grid items-stretch gap-2 sticky top-0 z-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur"
+                    <div class="grid items-stretch gap-2 sticky top-0 z-20 bg-white/90 dark:bg-gray-950/90 backdrop-blur"
                          style="grid-template-columns: 100px repeat({{ $periodsPerDay }}, minmax(140px, 1fr));">
                         <div class="h-full p-3 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 sticky left-0 z-30 flex items-center justify-center">
                             <span class="text-xs font-semibold uppercase text-gray-600 dark:text-gray-400">Day</span>
@@ -270,19 +281,19 @@
                                             
                                             if ($subjectType === 'core') {
                                                 // Core subjects - Blue
-                                                $colorClasses = 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700';
+                                                $colorClasses = 'bg-blue-50 dark:bg-blue-950 border-blue-300 dark:border-blue-600';
                                             } elseif ($subjectType === 'co_curricular') {
                                                 // Co-curricular subjects - Green
-                                                $colorClasses = 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700';
+                                                $colorClasses = 'bg-green-50 dark:bg-green-950 border-green-300 dark:border-green-600';
                                             } else {
                                                 // Others - Gray
-                                                $colorClasses = 'bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-600';
+                                                $colorClasses = 'bg-gray-50 dark:bg-gray-900 border-gray-300 dark:border-gray-600';
                                             }
                                         }
                                     @endphp
 
                                     <div
-                                        class="min-h-[100px] p-3 rounded-lg border-2 transition-all {{ $slot ? $colorClasses : 'border-dashed bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' }} {{ $slot && isset($slot->is_unsaved) && $slot->is_unsaved ? 'ring-2 ring-yellow-400 dark:ring-yellow-500' : '' }}"
+                                        class="min-h-[100px] p-3 rounded-lg border-2 transition-all {{ $slot ? $colorClasses : 'border-dashed bg-white dark:bg-gray-950 border-gray-200 dark:border-gray-700' }} {{ $slot && isset($slot->is_unsaved) && $slot->is_unsaved ? 'ring-2 ring-yellow-400 dark:ring-yellow-500' : '' }}"
                                         x-bind:class="{
                                             'hover:border-blue-400 dark:hover:border-blue-600': !draggedSubject && editMode,
                                             'border-blue-500 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20': draggedSubject && editMode,
