@@ -7,7 +7,7 @@
     <style>
         @page {
             size: A4 landscape;
-            margin: 15mm;
+            margin: 8mm;
         }
 
         * {
@@ -18,61 +18,61 @@
 
         body {
             font-family: 'Arial', sans-serif;
-            font-size: 11px;
-            line-height: 1.4;
+            font-size: 9px;
+            line-height: 1.3;
             color: #000;
         }
 
         .header {
             text-align: center;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
+            margin-bottom: 6px;
+            padding-bottom: 5px;
             border-bottom: 2px solid #333;
         }
 
         .school-name {
-            font-size: 18px;
+            font-size: 14px;
             font-weight: bold;
-            margin-bottom: 5px;
+            margin-bottom: 2px;
             text-transform: uppercase;
         }
 
         .document-title {
-            font-size: 16px;
+            font-size: 12px;
             font-weight: bold;
-            margin: 5px 0;
+            margin: 2px 0;
         }
 
         .subtitle {
-            font-size: 12px;
+            font-size: 10px;
             color: #555;
         }
 
         .meta-info {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 15px;
-            font-size: 10px;
+            margin-bottom: 5px;
+            font-size: 8px;
             color: #666;
         }
 
         .teacher-info {
             background-color: #f0f0f0;
-            padding: 10px;
-            margin-bottom: 15px;
-            border-radius: 4px;
-            border-left: 4px solid #3b82f6;
+            padding: 4px 8px;
+            margin-bottom: 6px;
+            border-radius: 3px;
+            border-left: 3px solid #3b82f6;
         }
 
         .teacher-info-item {
             display: inline-block;
-            margin-right: 20px;
-            font-size: 10px;
+            margin-right: 15px;
+            font-size: 8px;
         }
 
         .teacher-info-label {
             font-weight: bold;
-            margin-right: 5px;
+            margin-right: 3px;
         }
 
         .timetable-container {
@@ -83,13 +83,14 @@
         .timetable {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 15px;
+            margin-bottom: 6px;
+            table-layout: fixed;
         }
 
         .timetable th,
         .timetable td {
             border: 1px solid #333;
-            padding: 8px 5px;
+            padding: 3px 2px;
             text-align: center;
             vertical-align: middle;
         }
@@ -98,41 +99,40 @@
             background-color: #333;
             color: white;
             font-weight: bold;
-            font-size: 11px;
+            font-size: 8px;
             text-transform: uppercase;
         }
 
         .timetable tbody th {
             background-color: #f0f0f0;
             font-weight: bold;
-            width: 80px;
+            width: 55px;
+            font-size: 8px;
         }
 
         .timetable td {
-            min-width: 90px;
-            max-width: 120px;
-            height: 60px;
+            font-size: 8px;
         }
 
         .slot-content {
             display: flex;
             flex-direction: column;
-            gap: 3px;
+            gap: 1px;
         }
 
         .subject-name {
             font-weight: bold;
-            font-size: 11px;
+            font-size: 8px;
             color: #000;
         }
 
         .class-name {
-            font-size: 9px;
+            font-size: 7px;
             color: #555;
         }
 
         .subject-code {
-            font-size: 8px;
+            font-size: 7px;
             color: #777;
         }
 
@@ -140,64 +140,64 @@
             display: inline-block;
             background-color: #8b5cf6;
             color: white;
-            padding: 1px 4px;
+            padding: 0px 2px;
             border-radius: 2px;
-            font-size: 7px;
-            margin-left: 3px;
+            font-size: 6px;
+            margin-left: 2px;
         }
 
         .free-period {
             color: #999;
             font-style: italic;
-            font-size: 10px;
+            font-size: 8px;
         }
 
         .summary-section {
-            margin-top: 15px;
-            padding: 10px;
+            margin-top: 5px;
+            padding: 5px 8px;
             background-color: #f9f9f9;
             border: 1px solid #ddd;
-            border-radius: 4px;
+            border-radius: 3px;
         }
 
         .summary-title {
             font-weight: bold;
-            margin-bottom: 8px;
-            font-size: 11px;
+            margin-bottom: 4px;
+            font-size: 9px;
         }
 
         .summary-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            font-size: 9px;
+            gap: 6px;
+            font-size: 8px;
         }
 
         .summary-item {
             background-color: white;
-            padding: 8px;
-            border-radius: 3px;
+            padding: 4px 6px;
+            border-radius: 2px;
             border: 1px solid #e0e0e0;
         }
 
         .summary-item-label {
             color: #666;
-            margin-bottom: 3px;
+            margin-bottom: 1px;
         }
 
         .summary-item-value {
             font-weight: bold;
-            font-size: 14px;
+            font-size: 11px;
             color: #333;
         }
 
         .footer {
-            margin-top: 20px;
-            padding-top: 10px;
+            margin-top: 6px;
+            padding-top: 5px;
             border-top: 1px solid #ccc;
             display: flex;
             justify-content: space-between;
-            font-size: 9px;
+            font-size: 8px;
             color: #666;
         }
 

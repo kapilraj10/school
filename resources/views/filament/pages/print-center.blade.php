@@ -1,45 +1,96 @@
-{{-- File: resources/views/filament/pages/print-center.blade.php --}}
+{{-- resources/views/filament/pages/print-center.blade.php --}}
 <x-filament-panels::page>
-    <div class="space-y-6">
-        <form wire:submit.prevent="submit">
-            {{ $this->form }}
-        </form>
+    <div class="space-y-6"
+         x-data="{
+             printType: $wire.entangle('data.print_type'),
+             get isPdfOnly() {
+                 return this.printType === 'all_classes' || this.printType === 'master';
+             }
+         }">
 
+        {{-- Form --}}
         <x-filament::section>
-            <x-slot name="heading">
-                Print Options
-            </x-slot>
+            <x-slot name="heading">Print Settings</x-slot>
+
+            <form wire:submit.prevent>
+                {{ $this->form }}
+            </form>
+        </x-filament::section>
+
+        {{-- Action Buttons --}}
+        <x-filament::section>
+            <x-slot name="heading">Generate Output</x-slot>
 
             <div class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <x-filament::button wire:click="generateOutput" color="success" size="lg">
-                        <x-heroicon-o-printer class="w-5 h-5 mr-2" />
-                        Generate PDF
+                <div class="flex flex-wrap items-center gap-3">
+
+                    {{-- PDF - always available --}}
+                    <x-filament::button
+                        wire:click="downloadPdf"
+                        wire:loading.attr="disabled"
+                        wire:target="downloadPdf"
+                        color="success"
+                        size="lg"
+                        icon="heroicon-o-document-arrow-down"
+                    >
+                        <span wire:loading.remove wire:target="downloadPdf">Generate PDF</span>
+                        <span wire:loading wire:target="downloadPdf">Generating…</span>
                     </x-filament::button>
 
-                    <x-filament::button color="primary" size="lg">
-                        <x-heroicon-o-document-arrow-down class="w-5 h-5 mr-2" />
-                        Export Excel
-                    </x-filament::button>
+                    {{-- Excel - class / teacher only --}}
+                    <div x-show="!isPdfOnly">
+                        <x-filament::button
+                            wire:click="downloadExcel"
+                            wire:loading.attr="disabled"
+                            wire:target="downloadExcel"
+                            color="primary"
+                            size="lg"
+                            icon="heroicon-o-table-cells"
+                        >
+                            <span wire:loading.remove wire:target="downloadExcel">Export Excel</span>
+                            <span wire:loading wire:target="downloadExcel">Exporting…</span>
+                        </x-filament::button>
+                    </div>
 
-                    <x-filament::button color="gray" size="lg">
-                        <x-heroicon-o-eye class="w-5 h-5 mr-2" />
-                        Preview
-                    </x-filament::button>
+                    {{-- Print Preview - class / teacher only --}}
+                    <div x-show="!isPdfOnly">
+                        <x-filament::button
+                            wire:click="previewOutput"
+                            wire:loading.attr="disabled"
+                            wire:target="previewOutput"
+                            color="gray"
+                            size="lg"
+                            icon="heroicon-o-eye"
+                        >
+                            <span wire:loading.remove wire:target="previewOutput">Print Preview</span>
+                            <span wire:loading wire:target="previewOutput">Opening…</span>
+                        </x-filament::button>
+                    </div>
                 </div>
 
-                <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                    <h4 class="font-semibold text-blue-800 dark:text-blue-200 mb-2">
-                        Print Tips:
-                    </h4>
-                    <ul class="list-disc list-inside text-sm text-blue-700 dark:text-blue-300 space-y-1">
-                        <li>Use landscape orientation for better readability</li>
-                        <li>Recommended paper size: A4</li>
-                        <li>PDF format is recommended for distribution</li>
-                        <li>Excel format is best for further editing</li>
-                    </ul>
-                </div>
+                {{-- Note for bulk / master --}}
+                <p
+                    x-show="isPdfOnly"
+                    class="text-sm text-amber-600 dark:text-amber-400 flex items-center gap-1"
+                >
+                    <x-heroicon-o-information-circle class="w-4 h-4 shrink-0" />
+                    Bulk and Master timetable output only supports PDF format.
+                </p>
             </div>
         </x-filament::section>
+
+        {{-- Tips --}}
+        <x-filament::section>
+            <x-slot name="heading">Print Tips</x-slot>
+
+            <ul class="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                <li>Use <strong>landscape orientation</strong> for better readability.</li>
+                <li>Recommended paper size: <strong>A4</strong>.</li>
+                <li>PDF is recommended for sharing and distribution.</li>
+                <li>Excel is best for further editing of the timetable data.</li>
+                <li>Print Preview opens the timetable in a browser tab — use the browser's print dialog to print.</li>
+            </ul>
+        </x-filament::section>
+
     </div>
 </x-filament-panels::page>

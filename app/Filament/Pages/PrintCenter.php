@@ -6,7 +6,6 @@ use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\Teacher;
 use App\Services\TimetablePrintService;
-use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -83,24 +82,30 @@ class PrintCenter extends Page implements HasForms
                     ->native(false)
                     ->searchable(),
 
-                Select::make('format')
-                    ->label('Output Format')
-                    ->options([
-                        'pdf' => 'PDF Document',
-                        'print' => 'Print Preview',
-                        'excel' => 'Excel Spreadsheet',
-                    ])
-                    ->default('pdf')
-                    ->required()
-                    ->native(false),
             ])
             ->columns(2)
             ->statePath('data');
     }
 
-    public function generateOutput()
+    public function downloadPdf(): mixed
+    {
+        return $this->generateOutput('pdf');
+    }
+
+    public function downloadExcel(): mixed
+    {
+        return $this->generateOutput('excel');
+    }
+
+    public function previewOutput(): mixed
+    {
+        return $this->generateOutput('print');
+    }
+
+    public function generateOutput(string $format = 'pdf'): mixed
     {
         $data = $this->form->getState();
+        $data['format'] = $format;
 
         // Validate required fields based on print type
         if ($data['print_type'] === 'class' && empty($data['class_room_id'])) {
@@ -110,7 +115,7 @@ class PrintCenter extends Page implements HasForms
                 ->body('Please select a class to print.')
                 ->send();
 
-            return;
+            return null;
         }
 
         if ($data['print_type'] === 'teacher' && empty($data['teacher_id'])) {
@@ -120,7 +125,7 @@ class PrintCenter extends Page implements HasForms
                 ->body('Please select a teacher to print.')
                 ->send();
 
-            return;
+            return null;
         }
 
         try {
@@ -151,7 +156,7 @@ class PrintCenter extends Page implements HasForms
                 ->body($e->getMessage())
                 ->send();
 
-            return;
+            return null;
         }
     }
 
@@ -243,43 +248,6 @@ class PrintCenter extends Page implements HasForms
             ->warning()
             ->body('Only PDF format is supported for master timetable.')
             ->send();
-    }
-
-    protected function getFormActions(): array
-    {
-        return [
-            Action::make('preview')
-                ->label('Preview')
-                ->icon('heroicon-m-eye')
-                ->color('gray')
-                ->action(function () {
-                    $data = $this->form->getState();
-
-                    if ($data['print_type'] === 'class' && ! empty($data['class_room_id'])) {
-                        return redirect()->route('print.class-preview', [
-                            'class_id' => $data['class_room_id'],
-                            'term_id' => $data['academic_term_id'],
-                        ]);
-                    } elseif ($data['print_type'] === 'teacher' && ! empty($data['teacher_id'])) {
-                        return redirect()->route('print.teacher-preview', [
-                            'teacher_id' => $data['teacher_id'],
-                            'term_id' => $data['academic_term_id'],
-                        ]);
-                    } else {
-                        Notification::make()
-                            ->title('Selection Required')
-                            ->warning()
-                            ->body('Please complete all required selections.')
-                            ->send();
-                    }
-                }),
-
-            Action::make('generate')
-                ->label('Generate & Download')
-                ->icon('heroicon-m-arrow-down-tray')
-                ->color('primary')
-                ->action('generateOutput'),
-        ];
     }
 
     protected function exportClassToExcel(int $classId, int $termId, ClassRoom $class, AcademicTerm $term)
