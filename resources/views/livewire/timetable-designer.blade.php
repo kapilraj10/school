@@ -6,6 +6,7 @@
          editMode: @entangle('editMode'),
          zoom: 1,
          subjectSearch: '',
+         highlightedSubjectId: null,
          init() {
             this.$watch('zoom', val => {
                 if(val < 0.5) this.zoom = 0.5;
@@ -13,6 +14,10 @@
             });
             window.addEventListener('resize', () => {
                 this.fitToScreen();
+            });
+            // Reset highlight when class changes
+            this.$watch(() => $wire.selectedClassId, () => {
+                this.highlightedSubjectId = null;
             });
          },
          fitToScreen() {
@@ -185,6 +190,20 @@
                         <option value="{{ $class->id }}">{{ $class->full_name }}</option>
                     @endforeach
                 </select>
+
+                {{-- Subject highlight selector --}}
+                @if ($subjects->isNotEmpty())
+                    <select
+                        x-model="highlightedSubjectId"
+                        class="px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        title="Highlight subject in timetable"
+                    >
+                        <option value="">Highlight Subject</option>
+                        @foreach ($subjects as $subject)
+                            <option value="{{ $subject->id }}">{{ $subject->name }}</option>
+                        @endforeach
+                    </select>
+                @endif
             </div>
 
             <div class="flex items-center gap-2">
@@ -315,6 +334,7 @@
                                     @php
                                         $key = "{$dateKey}_{$period}";
                                         $slot = $timetableSlots[$key] ?? null;
+                                        $slotSubjectId = $slot?->subject_id ?? '';
                                         
                                         // Determine color classes based on subject type and period type
                                         $colorClasses = '';
@@ -340,7 +360,9 @@
                                             'hover:border-blue-400 dark:hover:border-blue-600': !draggedSubject && editMode,
                                             'border-blue-500 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20': draggedSubject && editMode,
                                             'cursor-move': editMode && {{ $slot && ! ($slot->is_locked ?? false) ? 'true' : 'false' }},
-                                            'cursor-not-allowed opacity-60': !editMode
+                                            'cursor-not-allowed opacity-60': !editMode,
+                                            'ring-4 ring-purple-500 dark:ring-purple-400 brightness-110': highlightedSubjectId && highlightedSubjectId == '{{ $slotSubjectId }}',
+                                            'opacity-20': highlightedSubjectId && highlightedSubjectId != '{{ $slotSubjectId }}'
                                         }"
                                         x-bind:draggable="editMode && {{ $slot && ! ($slot->is_locked ?? false) ? 'true' : 'false' }}"
                                         @dragstart="startDragSlot('{{ $dateKey }}', {{ $period }})"
