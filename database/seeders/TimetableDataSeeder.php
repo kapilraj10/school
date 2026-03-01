@@ -20,6 +20,10 @@ class TimetableDataSeeder extends Seeder
 
     private function seedClassSubjectSettings(): void
     {
+        // ClassSubjectSetting records are already created with correct period
+        // values by SubjectSeeder. This method only corrects the priority field
+        // based on subject type, since SubjectSeeder defaults everything to 5.
+
         $classes = ClassRoom::active()->get();
 
         if ($classes->isEmpty()) {
@@ -28,7 +32,7 @@ class TimetableDataSeeder extends Seeder
             return;
         }
 
-        $createdCount = 0;
+        $updatedCount = 0;
 
         foreach ($classes as $class) {
             $subjects = Subject::where('class_room_id', $class->id)
@@ -44,32 +48,21 @@ class TimetableDataSeeder extends Seeder
             foreach ($subjects as $subject) {
                 $priority = match ($subject->type) {
                     'core' => 9,
-                    'optional' => 5,
-                    'co-curricular' => 3,
+                    'elective', 'optional' => 5,
+                    'co_curricular', 'co-curricular' => 3,
                     default => 5,
                 };
 
-                ClassSubjectSetting::updateOrCreate(
-                    [
-                        'class_room_id' => $class->id,
-                        'subject_id' => $subject->id,
-                    ],
-                    [
-                        'min_periods_per_week' => 1,
-                        'max_periods_per_week' => 6,
-                        'weekly_periods' => 4,
-                        'single_combined' => 'single',
-                        'is_active' => true,
-                        'priority' => $priority,
-                    ]
-                );
+                ClassSubjectSetting::where('class_room_id', $class->id)
+                    ->where('subject_id', $subject->id)
+                    ->update(['priority' => $priority, 'is_active' => true]);
 
-                $createdCount++;
+                $updatedCount++;
             }
 
-            $this->command->info("Settings created for {$class->full_name} ({$subjects->count()} subjects)");
+            $this->command->info("Priority updated for {$class->full_name} ({$subjects->count()} subjects)");
         }
 
-        $this->command->info("Total class subject settings: {$createdCount}");
+        $this->command->info("Total class subject settings updated: {$updatedCount}");
     }
 }

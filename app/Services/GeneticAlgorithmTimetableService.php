@@ -44,20 +44,17 @@ class GeneticAlgorithmTimetableService
         int $populationSize = 25,
         int $maxGenerations = 100
     ): array {
+        set_time_limit(0);
+        ini_set('memory_limit', '-1');
+
+        $this->errors = [];
+        $this->warnings = [];
+        $this->subjects = [];
+        $this->teachers = [];
+        $this->sections = [];
+
+        // Phase 1: Load data from DB (read-only, fast)
         try {
-            set_time_limit(0);
-            ini_set('memory_limit', '-1');
-
-            DB::beginTransaction();
-
-            $this->errors = [];
-            $this->warnings = [];
-
-            // Reset state for each class to prevent data accumulation
-            $this->subjects = [];
-            $this->teachers = [];
-            $this->sections = [];
-
             $this->loadClassData($classRoom);
 
             if (empty($this->subjects)) {
@@ -68,10 +65,22 @@ class GeneticAlgorithmTimetableService
                 throw new \Exception('No teachers available for the subjects');
             }
 
-            // Load locked slots before generation
             $lockedSlots = $this->loadLockedSlots($classRoom, $academicTerm);
+        } catch (\Throwable $e) {
+            Log::error('Timetable data load failed', [
+                'class' => $classRoom->full_name,
+                'error' => $e->getMessage(),
+            ]);
 
-            // Initialize GA config from timetable settings
+            return [
+                'success' => false,
+                'message' => 'Failed to load class data: '.$e->getMessage(),
+                'errors' => $this->errors,
+            ];
+        }
+
+        // Phase 2: Run the genetic algorithm (no DB writes)
+        try {
             \SchedulerConfig::init();
 
             $scheduler = new \GeneticAlgorithmScheduler(
@@ -89,7 +98,6 @@ class GeneticAlgorithmTimetableService
             $bestTimetable = $scheduler->generateTimetable();
             $generationDurationSeconds = round(microtime(true) - $generationStartedAt, 3);
 
-            // Apply a final repair pass on the best timetable before saving
             $finalRepair = new \TimetableRepair($this->subjects, $this->teachers, $this->sections);
             $finalRepair->repair($bestTimetable);
 
@@ -103,33 +111,64 @@ class GeneticAlgorithmTimetableService
                 'fitness' => $bestTimetable->fitness,
                 'clear_existing' => $this->clearExisting,
             ]);
-
-            $slotsCreated = $this->saveTimetableToDatabase($bestTimetable, $classRoom, $academicTerm, $this->clearExisting);
-
-            DB::commit();
-
-            return [
-                'success' => true,
-                'message' => "Timetable generated successfully for {$classRoom->full_name}",
-                'fitness' => $bestTimetable->fitness,
-                'slots' => $slotsCreated,
-                'warnings' => $this->warnings,
-            ];
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Timetable generation failed', [
+        } catch (\Throwable $e) {
+            Log::error('Genetic algorithm failed', [
                 'class' => $classRoom->full_name,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
 
             return [
                 'success' => false,
-                'message' => 'Failed to generate timetable: '.$e->getMessage(),
+                'message' => 'GA failed: '.$e->getMessage(),
                 'errors' => $this->errors,
             ];
         }
+
+        // Phase 3: Save to DB with retry on SQLite lock
+        $maxAttempts = 6;
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                $slotsCreated = DB::transaction(function () use ($bestTimetable, $classRoom, $academicTerm) {
+                    return $this->saveTimetableToDatabase($bestTimetable, $classRoom, $academicTerm, $this->clearExisting);
+                });
+
+                return [
+                    'success' => true,
+                    'message' => "Timetable generated successfully for {$classRoom->full_name}",
+                    'fitness' => $bestTimetable->fitness,
+                    'slots' => $slotsCreated,
+                    'warnings' => $this->warnings,
+                ];
+            } catch (\Throwable $e) {
+                $isLocked = str_contains($e->getMessage(), 'database is locked')
+                    || str_contains($e->getMessage(), 'General error: 5');
+
+                if ($isLocked && $attempt < $maxAttempts) {
+                    Log::warning("SQLite locked saving {$classRoom->full_name}, retrying (attempt {$attempt}/{$maxAttempts})");
+                    usleep(300000 * $attempt); // 300ms, 600ms, 900ms, 1200ms, 1500ms
+
+                    continue;
+                }
+
+                Log::error('Timetable save failed', [
+                    'class' => $classRoom->full_name,
+                    'error' => $e->getMessage(),
+                    'attempt' => $attempt,
+                ]);
+
+                return [
+                    'success' => false,
+                    'message' => 'Failed to save timetable: '.$e->getMessage(),
+                    'errors' => $this->errors,
+                ];
+            }
+        }
+
+        return [
+            'success' => false,
+            'message' => 'Failed to save timetable after '.$maxAttempts.' attempts (database locked)',
+            'errors' => $this->errors,
+        ];
     }
 
     private function loadLockedSlots(ClassRoom $classRoom, AcademicTerm $academicTerm): array

@@ -5,7 +5,6 @@ namespace App\Filament\Pages;
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\Subject;
-use App\Services\GeneticAlgorithmTimetableService;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Placeholder;
@@ -19,7 +18,6 @@ use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\HtmlString;
 
 class TimetableGenerator extends Page implements HasForms
@@ -40,13 +38,12 @@ class TimetableGenerator extends Page implements HasForms
 
     public ?array $data = [];
 
-    public ?array $generationResult = null;
-
     public bool $isGenerating = false;
 
-    public int $currentClassIndex = 0;
+    public ?string $progressKey = null;
 
-    public int $totalClasses = 0;
+    /** @var array<string, mixed>|null */
+    public ?array $progress = null;
 
     public function getEstimatedGenerationSeconds(): int
     {
@@ -123,7 +120,6 @@ class TimetableGenerator extends Page implements HasForms
                                     $totalPeriods = $classes->sum('weekly_periods');
                                     $totalSubjects = $classes->sum('total_subjects');
 
-                                    // Get subject count for selected classes
                                     $subjectStats = Subject::active()
                                         ->whereIn('class_room_id', $classIds)
                                         ->count();
@@ -215,7 +211,6 @@ class TimetableGenerator extends Page implements HasForms
                                         ->get();
                                     $settings = $get();
 
-                                    // Get additional validation info
                                     $validationData = [];
                                     if (! empty($classIds)) {
                                         $validationData['availableSubjects'] = Subject::active()
@@ -256,182 +251,117 @@ class TimetableGenerator extends Page implements HasForms
         return [];
     }
 
-    public function checkGenerationProgress(): void
-    {
-        // This method is called by wire:poll to update the UI
-        // The properties are already reactive, so no additional action needed
-    }
-
     public function generateTimetable(): void
     {
-        try {
-            $startedAt = microtime(true);
-            $data = $this->form->getState();
+        $data = $this->form->getState();
 
-            if (empty($data['class_ids'])) {
-                Notification::make()
-                    ->title('No Classes Selected')
-                    ->warning()
-                    ->body('Please select at least one class to generate a timetable.')
-                    ->send();
+        if (empty($data['class_ids'])) {
+            Notification::make()
+                ->title('No Classes Selected')
+                ->warning()
+                ->body('Please select at least one class to generate a timetable.')
+                ->send();
 
-                return;
-            }
+            return;
+        }
 
-            $service = (new GeneticAlgorithmTimetableService)
-                ->setClearExisting((bool) ($data['clear_existing'] ?? true));
-            $academicTerm = AcademicTerm::find($data['academic_term_id']);
-            $classes = ClassRoom::whereIn('id', $data['class_ids'])->get();
+        // Create unique keys for this run
+        $userId = auth()->id() ?? 'guest';
+        $runId = uniqid('timetable_', true);
+        $this->progressKey = 'timetable_progress_'.$userId.'_'.$runId;
+        $paramsKey = 'timetable_params_'.$userId.'_'.$runId;
 
-            // Initialize generation state
-            $this->isGenerating = true;
-            $this->totalClasses = count($classes);
-            $this->currentClassIndex = 0;
+        // Save params to cache so the artisan command can read them
+        Cache::put($paramsKey, $data, now()->addHours(1));
 
-            $results = [];
-            $totalSlots = 0;
-            $successCount = 0;
-            $allWarnings = [];
-            $allErrors = [];
+        // Write initial "queued" state so the UI can show something immediately
+        Cache::put($this->progressKey, [
+            'status' => 'starting',
+            'total' => count($data['class_ids']),
+            'completed' => 0,
+            'success_count' => 0,
+            'total_slots' => 0,
+            'class_statuses' => [],
+            'current_class' => 'Starting generation process...',
+            'term_id' => (int) ($data['academic_term_id'] ?? 0),
+            'first_class_id' => $data['class_ids'][0] ?? null,
+            'warnings' => [],
+            'errors' => [],
+        ], now()->addHours(2));
 
-            foreach ($classes as $index => $class) {
-                $this->currentClassIndex = $index + 1;
+        $this->isGenerating = true;
 
-                $result = $service->generateTimetable(
-                    $class,
-                    $academicTerm,
-                    20,
-                    150
-                );
+        // Launch the artisan command as a background process
+        $artisan = base_path('artisan');
+        $php = PHP_BINARY;
+        $cmd = sprintf(
+            '%s %s timetable:generate %s %s > /dev/null 2>&1 &',
+            escapeshellarg($php),
+            escapeshellarg($artisan),
+            escapeshellarg($this->progressKey),
+            escapeshellarg($paramsKey)
+        );
+        shell_exec($cmd);
+    }
 
-                $results[] = $result;
+    public function tick(): void
+    {
+        if (! $this->isGenerating || ! $this->progressKey) {
+            return;
+        }
 
-                if ($result['success']) {
-                    $successCount++;
-                    $totalSlots += $result['slots'] ?? 0;
-                    if (! empty($result['warnings'])) {
-                        $allWarnings = array_merge($allWarnings, $result['warnings']);
-                    }
-                } else {
-                    if (! empty($result['errors'])) {
-                        $allErrors = array_merge($allErrors, $result['errors']);
-                    }
-                    $allErrors[] = $result['message'];
-                }
-            }
+        $progress = Cache::get($this->progressKey);
 
-            $this->generationResult = [
-                'success' => $successCount > 0,
-                'results' => $results,
-                'statistics' => [
-                    'total_slots' => $totalSlots,
-                    'combined_slots' => 0,
-                    'classes_generated' => $successCount,
-                    'teachers_used' => 0,
-                ],
-                'warnings' => $allWarnings,
-                'errors' => $allErrors,
-            ];
+        if (! is_array($progress)) {
+            return;
+        }
 
-            $classCount = max(1, count($classes));
-            $elapsedSeconds = max(0.0, microtime(true) - $startedAt);
-            $secondsPerClass = $elapsedSeconds / $classCount;
-            $previousAvg = (float) Cache::get('ga_generation_avg_seconds_per_class', 60.0);
-            $newAvg = ($previousAvg * 0.7) + ($secondsPerClass * 0.3);
+        $this->progress = $progress;
+        $status = $progress['status'] ?? 'running';
 
-            Cache::forever('ga_generation_avg_seconds_per_class', max(10.0, min(600.0, $newAvg)));
+        if ($status === 'completed') {
+            $this->isGenerating = false;
+
+            $successCount = (int) ($progress['success_count'] ?? 0);
+            $totalSlots = (int) ($progress['total_slots'] ?? 0);
+            $total = (int) ($progress['total'] ?? 0);
 
             if ($successCount > 0) {
                 Notification::make()
                     ->title('Timetable Generated Successfully!')
                     ->success()
                     ->body(sprintf(
-                        'Generated %d slots for %d out of %d classes using Genetic Algorithm.',
+                        'Generated %d slots for %d out of %d classes.',
                         $totalSlots,
                         $successCount,
-                        count($classes)
+                        $total
                     ))
-                    ->duration(8000)
+                    ->duration(6000)
                     ->send();
 
-                if (! empty($allWarnings)) {
-                    foreach (array_slice($allWarnings, 0, 3) as $warning) {
-                        Notification::make()
-                            ->title('Generation Warning')
-                            ->warning()
-                            ->body($warning)
-                            ->send();
-                    }
-                }
-
-                // Reset generation state before redirecting
-                $this->isGenerating = false;
-
                 $redirectUrl = route('filament.admin.pages.timetable-viewer', [
-                    'term_id' => $academicTerm?->id,
-                    'class_id' => $data['class_ids'][0] ?? null,
+                    'term_id' => $progress['term_id'] ?? null,
+                    'class_id' => $progress['first_class_id'] ?? null,
                 ]);
 
-                $this->js('window.location.href = '.json_encode($redirectUrl).';');
-
-                return;
+                $this->js('setTimeout(function(){ window.location.href = '.json_encode($redirectUrl).'; }, 2000);');
             } else {
                 Notification::make()
                     ->title('Generation Failed')
                     ->danger()
-                    ->body('There were errors during generation. Check the details below.')
+                    ->body('There were errors during generation.')
                     ->persistent()
                     ->send();
-
-                foreach (array_slice($allErrors, 0, 3) as $error) {
-                    Notification::make()
-                        ->title('Error')
-                        ->danger()
-                        ->body($error)
-                        ->persistent()
-                        ->send();
-                }
             }
-
-            // Reset generation state
-            $this->isGenerating = false;
-        } catch (\Exception $e) {
-            // Reset generation state on error
+        } elseif ($status === 'failed') {
             $this->isGenerating = false;
 
-            Log::error('Timetable generation error: '.$e->getMessage(), [
-                'trace' => $e->getTraceAsString(),
-            ]);
             Notification::make()
-                ->title('Unexpected Error')
+                ->title('Generation Failed')
                 ->danger()
-                ->body('An unexpected error occurred during timetable generation. Please try again later.')
+                ->body($progress['error'] ?? 'An unknown error occurred.')
                 ->persistent()
                 ->send();
         }
-    }
-
-    /**
-     * Get relevant class ranges for the given classes
-     */
-    protected function getRelevantRangesForClasses($classes): array
-    {
-        return $classes->pluck('name')->map(function ($name) {
-            $classNum = (int) filter_var($name, FILTER_SANITIZE_NUMBER_INT);
-            if ($classNum >= 1 && $classNum <= 4) {
-                return '1 - 4';
-            }
-            if ($classNum >= 5 && $classNum <= 7) {
-                return '5 - 7';
-            }
-            if ($classNum == 8) {
-                return '8';
-            }
-            if ($classNum >= 9 && $classNum <= 10) {
-                return '9 - 10';
-            }
-
-            return null;
-        })->filter()->unique()->values()->toArray();
     }
 }

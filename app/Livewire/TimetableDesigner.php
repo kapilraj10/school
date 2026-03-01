@@ -452,14 +452,13 @@ class TimetableDesigner extends Component
         }
 
         $this->mergeTimetableSlots();
-        session()->flash('message', 'Period assigned (unsaved)!');
     }
 
     protected function validateAssignment(int $subjectId, int $teacherId, int $dayOfWeek, int $period): array
     {
         $validationService = new TimetableValidationService;
 
-        return $validationService->validateSlotAssignment(
+        $result = $validationService->validateSlotAssignment(
             $this->selectedClassId,
             $this->selectedTermId,
             $subjectId,
@@ -468,6 +467,15 @@ class TimetableDesigner extends Component
             $period,
             $this->unsavedChanges
         );
+
+        // Suppress incremental minimum-progress warnings — they fire on every
+        // assignment until the minimum is reached, which is expected behaviour.
+        $result['warnings'] = array_values(array_filter(
+            $result['warnings'] ?? [],
+            fn ($w) => ($w['type'] ?? '') !== 'weekly_minimum_progress'
+        ));
+
+        return $result;
     }
 
     protected function createUnsavedChange(string $dateKey, int $period, int $subjectId, int $teacherId, int $dayOfWeek, Subject $subject): void
