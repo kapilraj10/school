@@ -180,7 +180,7 @@
                                     class="w-full h-full flex items-center justify-center hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
                                     title="Toggle entire Period {{ $period }} column"
                                 >
-                                    {{ $period }}
+                                    Period {{ $period }}
                                 </button>
                             </th>
                         @endfor

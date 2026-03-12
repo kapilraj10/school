@@ -337,4 +337,23 @@ class TeacherResourceTest extends TestCase
             ->assertCanSeeTableRecords([$targetTeacher])
             ->assertCanNotSeeTableRecords([$wrongStatusTeacher, $wrongSubjectTeacher]);
     }
+
+    public function test_bulk_delete_action_exists(): void
+    {
+        Livewire::test(ListTeachers::class)
+            ->assertTableBulkActionExists('delete');
+    }
+
+    public function test_can_bulk_delete_teachers(): void
+    {
+        $teachers = Teacher::factory()->count(3)->create();
+
+        Livewire::test(ListTeachers::class)
+            ->callTableBulkAction('delete', $teachers)
+            ->assertHasNoTableActionErrors();
+
+        foreach ($teachers as $teacher) {
+            $this->assertModelMissing($teacher);
+        }
+    }
 }

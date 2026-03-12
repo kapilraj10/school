@@ -183,11 +183,39 @@ class TeacherForm
         if (isset($data['availability'])) {
             $availability = $data['availability'];
 
-            // If matrix is provided, use it directly
+            // If matrix is provided, use it directly (source of truth from Alpine.js)
             if (! empty($availability['matrix'])) {
-                $data['availability_matrix'] = $availability['matrix'];
+                $matrix = $availability['matrix'];
+
+                // Ensure matrix only includes days and periods that are in days/periods arrays
+                // (in case days/periods were updated without corresponding matrix update)
+                if (! empty($availability['days']) && ! empty($availability['periods'])) {
+                    $allowedDays = array_flip($availability['days']);
+                    $allowedPeriods = array_flip($availability['periods']);
+
+                    // Add any missing days/periods that should be available
+                    foreach ($availability['days'] as $day) {
+                        if (! isset($matrix[$day])) {
+                            $matrix[$day] = [];
+                        }
+                        foreach ($availability['periods'] as $period) {
+                            if (! isset($matrix[$day][$period])) {
+                                $matrix[$day][$period] = true;
+                            }
+                        }
+                    }
+
+                    // Remove days not in the allowed days list
+                    foreach (array_keys($matrix) as $day) {
+                        if (! isset($allowedDays[$day])) {
+                            unset($matrix[$day]);
+                        }
+                    }
+                }
+
+                $data['availability_matrix'] = $matrix;
             }
-            // Otherwise, build matrix from days and periods
+            // Build matrix from days and periods
             elseif (! empty($availability['days']) && ! empty($availability['periods'])) {
                 $matrix = [];
                 foreach ($availability['days'] as $day) {

@@ -41,7 +41,7 @@
                     </th>
                     @for($period = 1; $period <= $periodsPerDay; $period++)
                         <th class="px-2 py-3 text-center text-xs font-semibold text-gray-700 dark:text-white border-r last:border-r-0 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                            {{ $period }}
+                            Period {{ $period }}
                         </th>
                     @endfor
                 </tr>
