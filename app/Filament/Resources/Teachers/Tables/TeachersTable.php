@@ -37,18 +37,32 @@ class TeachersTable
                     ->weight('bold')
                     ->icon('heroicon-m-user'),
 
-                TextColumn::make('subjects')
+                TextColumn::make('subject_ids')
                     ->label('Subjects')
-                    ->formatStateUsing(function ($record) {
+                    ->state(function ($record) {
                         if (empty($record->subject_ids)) {
-                            return 'None';
+                            return ['None'];
                         }
-                        $subjects = Subject::query()
-                            ->whereIn('id', $record->subject_ids)
-                            ->pluck('name')
-                            ->toArray();
 
-                        return implode(', ', $subjects);
+                        $subjectLabels = Subject::query()
+                            ->whereIn('id', array_map('intval', (array) $record->subject_ids))
+                            ->with('classRoom:id,name')
+                            ->get(['id', 'name', 'class_room_id'])
+                            ->mapWithKeys(function (Subject $subject): array {
+                                $className = $subject->classRoom?->name;
+                                $label = $subject->name;
+
+                                if ($className) {
+                                    $label .= " - {$className}";
+                                }
+
+                                return [$label => $label];
+                            })
+                            ->sortKeys(SORT_NATURAL | SORT_FLAG_CASE)
+                            ->values()
+                            ->all();
+
+                        return $subjectLabels === [] ? ['None'] : $subjectLabels;
                     })
                     ->badge()
                     ->color(Color::Indigo)

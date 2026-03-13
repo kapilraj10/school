@@ -11,6 +11,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
+use Filament\Forms\Set;
 
 class TeacherForm
 {
@@ -85,6 +86,28 @@ class TeacherForm
                             ->preload()
                             ->native(false)
                             ->live()
+                            ->afterStateUpdated(function (Get $get, Set $set): void {
+                                $selectedClassRoomIds = array_filter((array) ($get('class_room_ids') ?? []));
+
+                                if (empty($selectedClassRoomIds)) {
+                                    $set('subject_ids', []);
+
+                                    return;
+                                }
+
+                                $allowedSubjectIds = Subject::query()
+                                    ->active()
+                                    ->whereIn('class_room_id', $selectedClassRoomIds)
+                                    ->pluck('id')
+                                    ->map(fn ($id) => (int) $id)
+                                    ->values()
+                                    ->all();
+
+                                $currentSubjectIds = array_map('intval', (array) ($get('subject_ids') ?? []));
+                                $validSubjectIds = array_values(array_intersect($currentSubjectIds, $allowedSubjectIds));
+
+                                $set('subject_ids', $validSubjectIds);
+                            })
                             ->helperText('Select specific classes to filter available subjects'),
                     ]),
 
@@ -94,23 +117,51 @@ class TeacherForm
                         Select::make('subject_ids')
                             ->label('Subjects Can Teach')
                             ->multiple()
+                            ->afterStateHydrated(function (Select $component, $state): void {
+                                $selectedSubjectIds = array_filter(array_map('intval', (array) ($state ?? [])));
+
+                                if (empty($selectedSubjectIds)) {
+                                    return;
+                                }
+
+                                $canonicalSubjectIds = Subject::query()
+                                    ->with('classRoom')
+                                    ->whereIn('id', $selectedSubjectIds)
+                                    ->orderBy('name')
+                                    ->get()
+                                    ->unique(fn (Subject $subject) => $subject->name.' - '.($subject->classRoom?->name ?? 'Unknown Class'))
+                                    ->pluck('id')
+                                    ->map(fn ($id) => (int) $id)
+                                    ->values()
+                                    ->all();
+
+                                $component->state($canonicalSubjectIds);
+                            })
                             ->options(function (Get $get) {
-                                $classRoomIds = $get('class_room_ids');
+                                $classRoomIds = array_filter((array) ($get('class_room_ids') ?? []));
 
                                 if (empty($classRoomIds)) {
-                                    return Subject::active()->pluck('name', 'id');
+                                    return [];
                                 }
 
                                 return Subject::active()
+                                    ->with('classRoom')
                                     ->whereIn('class_room_id', $classRoomIds)
                                     ->orderBy('name')
-                                    ->pluck('name', 'id');
+                                    ->get()
+                                    ->map(fn (Subject $subject) => [
+                                        'id' => $subject->id,
+                                        'label' => $subject->name.' - '.($subject->classRoom?->name ?? 'Unknown Class'),
+                                    ])
+                                    ->unique('label')
+                                    ->mapWithKeys(fn (array $option) => [$option['id'] => $option['label']]);
                             })
+                            ->disabled(fn (Get $get): bool => empty(array_filter((array) ($get('class_room_ids') ?? []))))
                             ->required()
                             ->searchable()
-                            ->preload()
+                            ->optionsLimit(1000)
                             ->native(false)
-                            ->helperText('Subjects are filtered based on selected classes'),
+                            ->helperText('Select classes first. All active subjects from those classes are shown.'),
                     ]),
 
                 Section::make('Teaching Capacity')
@@ -180,6 +231,42 @@ class TeacherForm
 
     public static function mutateFormDataBeforeSave(array $data): array
     {
+        if (! empty($data['subject_ids']) && ! empty($data['class_room_ids'])) {
+            $selectedSubjectIds = array_filter(array_map('intval', (array) $data['subject_ids']));
+            $selectedClassRoomIds = array_filter(array_map('intval', (array) $data['class_room_ids']));
+
+            $selectedClassesByName = ClassRoom::query()
+                ->whereIn('id', $selectedClassRoomIds)
+                ->get(['id', 'name'])
+                ->groupBy('name')
+                ->map(fn ($classes) => $classes->pluck('id')->map(fn ($id) => (int) $id)->all());
+
+            $expandedSubjectIds = Subject::query()
+                ->with('classRoom')
+                ->whereIn('id', $selectedSubjectIds)
+                ->get()
+                ->flatMap(function (Subject $subject) use ($selectedClassesByName) {
+                    $className = $subject->classRoom?->name;
+
+                    if ($className === null || ! $selectedClassesByName->has($className)) {
+                        return [$subject->id];
+                    }
+
+                    return Subject::query()
+                        ->active()
+                        ->where('name', $subject->name)
+                        ->whereIn('class_room_id', $selectedClassesByName->get($className))
+                        ->pluck('id')
+                        ->map(fn ($id) => (int) $id)
+                        ->all();
+                })
+                ->unique()
+                ->values()
+                ->all();
+
+            $data['subject_ids'] = $expandedSubjectIds;
+        }
+
         if (isset($data['availability'])) {
             $availability = $data['availability'];
 
