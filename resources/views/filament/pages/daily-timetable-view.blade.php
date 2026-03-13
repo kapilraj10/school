@@ -71,7 +71,7 @@
                         </thead>
                         <tbody>
                             @foreach($timetableData['rows'] as $rowData)
-                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                <tr>
                                     <td class="border border-gray-300 dark:border-gray-600 p-3 font-medium bg-gray-50 dark:bg-gray-800 sticky left-0 z-10">
                                         {{ $rowData['label'] }}
                                     </td>

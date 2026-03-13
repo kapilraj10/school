@@ -31,7 +31,7 @@
                         </thead>
                         <tbody>
                             @foreach($timetableData['days'] as $dayNum => $dayName)
-                                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                <tr>
                                     <td class="border border-gray-300 dark:border-gray-600 p-3 font-medium text-center bg-gray-50 dark:bg-gray-800">
                                         {{ $dayName }}
                                     </td>
