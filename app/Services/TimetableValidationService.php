@@ -466,6 +466,21 @@ class TimetableValidationService
         int $termId,
         int $classRoomId
     ): void {
+        if (! $teacher->isAvailable($day, $period)) {
+            $this->errors[] = [
+                'type' => 'teacher_unavailable',
+                'day' => $day,
+                'day_name' => $dayName,
+                'period' => $period,
+                'message' => sprintf(
+                    'Teacher %s is marked unavailable for %s Period %d.',
+                    $teacher->name,
+                    $dayName,
+                    $period
+                ),
+            ];
+        }
+
         if (! $teacher->canTeachClass($classRoomId)) {
             $this->errors[] = [
                 'type' => 'teacher_class_assignment',
@@ -902,6 +917,23 @@ class TimetableValidationService
             foreach ($slots[$day] as $period => $slot) {
                 if (! $slot || ! isset($slot['teacher_id']) || ! $slot['teacher_id']) {
                     continue;
+                }
+
+                $teacher = Teacher::find($slot['teacher_id']);
+                if ($teacher && ! $teacher->isAvailable($day, $period)) {
+                    $this->errors[] = [
+                        'type' => 'teacher_unavailable',
+                        'day' => $day,
+                        'day_name' => $dayName,
+                        'period' => $period,
+                        'teacher_id' => $slot['teacher_id'],
+                        'message' => sprintf(
+                            'Teacher %s is marked unavailable for %s Period %d',
+                            $slot['teacher_name'] ?? $teacher->name,
+                            $dayName,
+                            $period
+                        ),
+                    ];
                 }
 
                 // Check for conflicts with other classes

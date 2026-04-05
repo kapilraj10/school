@@ -12,6 +12,7 @@ use App\Models\Teacher;
 use App\Models\TimetableSetting;
 use App\Models\TimetableSlot;
 use App\Services\TimetableGeneratorService;
+use Illuminate\Database\QueryException;
 use Tests\TestCase;
 
 class TimetableGeneratorServiceTest extends TestCase
@@ -704,5 +705,37 @@ class TimetableGeneratorServiceTest extends TestCase
 
         // Should have class teacher assigned to period 1 on multiple days
         $this->assertGreaterThan(0, $period1Slots);
+    }
+
+    public function test_database_constraint_prevents_teacher_double_booking_across_classes(): void
+    {
+        $teacher = $this->createTeacher();
+        $subject = $this->createSubject();
+        $secondClass = ClassRoom::create([
+            'name' => '3',
+            'section' => 'A',
+        ]);
+
+        TimetableSlot::create([
+            'class_room_id' => $this->class->id,
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $subject->id,
+            'teacher_id' => $teacher->id,
+            'day' => 1,
+            'period' => 2,
+            'type' => 'regular',
+        ]);
+
+        $this->expectException(QueryException::class);
+
+        TimetableSlot::create([
+            'class_room_id' => $secondClass->id,
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $subject->id,
+            'teacher_id' => $teacher->id,
+            'day' => 1,
+            'period' => 2,
+            'type' => 'regular',
+        ]);
     }
 }

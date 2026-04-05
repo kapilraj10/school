@@ -6,6 +6,7 @@ use App\Filament\Resources\ClassRooms\Pages\CreateClassRoom;
 use App\Models\ClassRoom;
 use App\Models\Subject;
 use App\Models\Teacher;
+use App\Models\User;
 use Filament\Forms\Components\Actions\Action;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Hidden;
@@ -45,17 +46,23 @@ class ClassRoomForm
                                     ->helperText('Enter the class name without section')
                                     ->columnSpan(1),
 
-                                Select::make('section')
+                                TextInput::make('section')
                                     ->label('Section')
-                                    ->options([
-                                        'A' => 'Section A',
-                                        'B' => 'Section B',
-                                        'C' => 'Section C',
-                                        'D' => 'Section D',
-                                    ])
                                     ->required()
-                                    ->searchable()
-                                    ->native(false)
+                                    ->placeholder('e.g., A, B, C')
+                                    ->maxLength(10)
+                                    ->helperText('You can define any section label')
+                                    ->columnSpan(1),
+
+                                TextInput::make('capacity')
+                                    ->label('Class Capacity')
+                                    ->numeric()
+                                    ->required()
+                                    ->default(40)
+                                    ->minValue(1)
+                                    ->maxValue(200)
+                                    ->suffix('students')
+                                    ->helperText('Maximum number of students that can be assigned')
                                     ->columnSpan(1),
 
                                 Select::make('class_teacher_id')
@@ -76,6 +83,26 @@ class ClassRoomForm
                                     ->required()
                                     ->native(false)
                                     ->columnSpan(1),
+
+                                Select::make('student_ids')
+                                    ->label('Assigned Students')
+                                    ->multiple()
+                                    ->options(fn () => User::query()
+                                        ->orderBy('name')
+                                        ->get()
+                                        ->mapWithKeys(function (User $user): array {
+                                            $classSuffix = $user->classRoom
+                                                ? " (Currently: {$user->classRoom->full_name})"
+                                                : '';
+
+                                            return [$user->id => "{$user->name} ({$user->email}){$classSuffix}"];
+                                        })
+                                        ->all())
+                                    ->searchable()
+                                    ->preload()
+                                    ->native(false)
+                                    ->helperText('Select users to assign as students of this class')
+                                    ->columnSpanFull(),
                             ]),
                     ]),
 

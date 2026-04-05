@@ -18,6 +18,7 @@ use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Collection;
+use Illuminate\Database\QueryException;
 
 class TimetableDesigner extends Page implements HasForms
 {
@@ -209,20 +210,59 @@ class TimetableDesigner extends Page implements HasForms
             return;
         }
 
-        // Create or update the slot
-        $slot = TimetableSlot::updateOrCreate(
-            [
-                'class_room_id' => $this->selectedClassRoomId,
-                'academic_term_id' => $this->selectedTermId,
-                'day' => $day,
-                'period' => $period,
-            ],
-            [
-                'subject_id' => $subjectId,
-                'teacher_id' => $teacherId,
-                'type' => 'regular',
-            ]
+        $validationService = app(TimetableValidationService::class);
+        $validationResult = $validationService->validateSlotAssignment(
+            $this->selectedClassRoomId,
+            $this->selectedTermId,
+            $subjectId,
+            $teacherId,
+            $day,
+            $period,
         );
+
+        $this->validationErrors = $validationResult['errors'] ?? [];
+        $this->validationWarnings = $validationResult['warnings'] ?? [];
+
+        if (! empty($this->validationErrors)) {
+            $errorMessage = collect($this->validationErrors)
+                ->pluck('message')
+                ->filter()
+                ->take(2)
+                ->implode(' ');
+
+            Notification::make()
+                ->danger()
+                ->title('Cannot assign this slot')
+                ->body($errorMessage !== '' ? $errorMessage : 'Assignment violates timetable constraints.')
+                ->send();
+
+            return;
+        }
+
+        try {
+            // Create or update the slot
+            $slot = TimetableSlot::updateOrCreate(
+                [
+                    'class_room_id' => $this->selectedClassRoomId,
+                    'academic_term_id' => $this->selectedTermId,
+                    'day' => $day,
+                    'period' => $period,
+                ],
+                [
+                    'subject_id' => $subjectId,
+                    'teacher_id' => $teacherId,
+                    'type' => 'regular',
+                ]
+            );
+        } catch (QueryException $exception) {
+            Notification::make()
+                ->danger()
+                ->title('Cannot assign this slot')
+                ->body('Teacher is already assigned to another class at this time.')
+                ->send();
+
+            return;
+        }
 
         // Update local state
         $subject = Subject::find($subjectId);
@@ -251,6 +291,18 @@ class TimetableDesigner extends Page implements HasForms
             ->success()
             ->title('Slot assigned successfully')
             ->send();
+
+        if (! empty($this->validationWarnings)) {
+            Notification::make()
+                ->warning()
+                ->title('Assignment saved with warnings')
+                ->body(collect($this->validationWarnings)
+                    ->pluck('message')
+                    ->filter()
+                    ->take(2)
+                    ->implode(' '))
+                ->send();
+        }
     }
 
     /**

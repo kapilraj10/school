@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 
 class Teacher extends Model
 {
@@ -31,6 +33,17 @@ class Teacher extends Model
         'max_periods_per_week' => 'integer',
         'availability_matrix' => 'array',
     ];
+
+    protected static function booted(): void
+    {
+        static::saved(function (Teacher $teacher): void {
+            $teacher->syncSubjectRelationships();
+        });
+
+        static::deleted(function (Teacher $teacher): void {
+            $teacher->subjects()->detach();
+        });
+    }
 
     /**
      * Get the timetable slots for this teacher
@@ -59,7 +72,7 @@ class Teacher extends Model
     /**
      * Get classes this teacher is assigned to
      */
-    public function classRooms()
+    public function classRooms(): Collection
     {
         if (empty($this->class_room_ids)) {
             return collect([]);
@@ -71,7 +84,7 @@ class Teacher extends Model
     /**
      * Get subjects by IDs
      */
-    public function getSubjectsAttribute()
+    public function getSubjectsAttribute(): Collection
     {
         if (empty($this->subject_ids)) {
             return collect([]);
@@ -85,7 +98,7 @@ class Teacher extends Model
      */
     public function canTeachSubject(int $subjectId): bool
     {
-        return in_array($subjectId, $this->subject_ids ?? []);
+        return in_array($subjectId, array_map('intval', $this->subject_ids ?? []), true);
     }
 
     /**
@@ -97,7 +110,7 @@ class Teacher extends Model
             return true;
         }
 
-        return in_array($classRoomId, $this->class_room_ids);
+        return in_array($classRoomId, array_map('intval', $this->class_room_ids), true);
     }
 
     /**
@@ -105,17 +118,26 @@ class Teacher extends Model
      */
     public function isAvailable(int $day, int $period): bool
     {
-        if (empty($this->unavailable_periods)) {
+        $days = TimetableSlot::getDays();
+        $dayName = $days[$day] ?? null;
+
+        if ($dayName === null) {
             return true;
         }
 
-        foreach ($this->unavailable_periods as $unavailable) {
-            if ($unavailable['day'] == $day && $unavailable['period'] == $period) {
-                return false;
-            }
-        }
+        $dayMap = [
+            'Sunday' => 'Sun',
+            'Monday' => 'Mon',
+            'Tuesday' => 'Tue',
+            'Wednesday' => 'Wed',
+            'Thursday' => 'Thu',
+            'Friday' => 'Fri',
+            'Saturday' => 'Sat',
+        ];
 
-        return true;
+        $dayShort = $dayMap[$dayName] ?? $dayName;
+
+        return $this->isAvailableAt($dayShort, $period);
     }
 
     /**
@@ -169,14 +191,26 @@ class Teacher extends Model
             return true;
         }
 
-        return $this->availability_matrix[$dayShort][$period] ?? false;
+        return (bool) ($this->availability_matrix[$dayShort][$period] ?? false);
     }
 
     /**
      * Scope for active teachers
      */
-    public function scopeActive($query)
+    public function scopeActive(Builder $query): Builder
     {
         return $query->where('status', 'active');
+    }
+
+    public function syncSubjectRelationships(): void
+    {
+        $subjectIds = collect($this->subject_ids ?? [])
+            ->filter(static fn ($id): bool => is_numeric($id))
+            ->map(static fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $this->subjects()->sync($subjectIds);
     }
 }

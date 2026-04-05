@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\HasResourcePermissions;
 use App\Filament\Resources\AcademicTermResource\Pages;
 use App\Models\AcademicTerm;
 use Filament\Forms\Components\DatePicker;
@@ -17,6 +18,8 @@ use Filament\Tables\Table;
 
 class AcademicTermResource extends Resource
 {
+    use HasResourcePermissions;
+
     protected static ?string $model = AcademicTerm::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-calendar';
@@ -28,6 +31,11 @@ class AcademicTermResource extends Resource
     protected static ?string $navigationGroup = 'Academic Management';
 
     protected static ?int $navigationSort = 4;
+
+    protected static function permissionPrefix(): string
+    {
+        return 'academic_term';
+    }
 
     public static function getGloballySearchableAttributes(): array
     {

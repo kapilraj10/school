@@ -10,7 +10,9 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [HomeController::class, 'index'])->name('home');
 
 Route::middleware(['auth'])->group(function () {
-    Route::get('/timetable-designer', TimetableDesigner::class)->name('timetable-designer');
+    Route::get('/timetable-designer', TimetableDesigner::class)
+        ->middleware('permission:timetable_designer.view')
+        ->name('timetable-designer');
 
     Route::post('/track-click', function (Request $request) {
         $url = $request->input('url');

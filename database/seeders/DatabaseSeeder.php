@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->seedUsers();
+        $this->call(RolesAndPermissionsSeeder::class);
         $this->seedAcademicTerms();
         $this->seedPageClicks();
 

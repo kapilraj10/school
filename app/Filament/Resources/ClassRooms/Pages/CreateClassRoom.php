@@ -6,8 +6,11 @@ use App\Filament\Resources\ClassRooms\ClassRoomResource;
 use App\Models\ClassRoom;
 use App\Models\ClassSubjectSetting;
 use App\Models\Subject;
+use App\Models\User;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class CreateClassRoom extends CreateRecord
 {
@@ -17,15 +20,32 @@ class CreateClassRoom extends CreateRecord
 
     protected bool $copySubjectsFromSource = false;
 
+    /**
+     * @var array<int, int>
+     */
+    protected array $selectedStudentIds = [];
+
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        $this->selectedStudentIds = collect($data['student_ids'] ?? [])
+            ->map(static fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if (count($this->selectedStudentIds) > (int) ($data['capacity'] ?? 40)) {
+            throw ValidationException::withMessages([
+                'student_ids' => 'Assigned students exceed class capacity.',
+            ]);
+        }
+
         $this->copyFromClassRoomId = isset($data['copy_from_class_room_id'])
             ? (int) $data['copy_from_class_room_id']
             : null;
 
         $this->copySubjectsFromSource = (bool) ($data['copy_subjects_from_source'] ?? false);
 
-        unset($data['copy_from_class_room_id'], $data['copy_subjects_from_source'], $data['copy_from_class_message']);
+        unset($data['copy_from_class_room_id'], $data['copy_subjects_from_source'], $data['copy_from_class_message'], $data['student_ids']);
 
         // Set default status to active
         $data['status'] = $data['status'] ?? 'active';
@@ -39,6 +59,14 @@ class CreateClassRoom extends CreateRecord
 
     protected function afterCreate(): void
     {
+        DB::transaction(function (): void {
+            if ($this->selectedStudentIds !== []) {
+                User::query()
+                    ->whereIn('id', $this->selectedStudentIds)
+                    ->update(['class_room_id' => $this->record->id]);
+            }
+        });
+
         if (! $this->copyFromClassRoomId) {
             return;
         }

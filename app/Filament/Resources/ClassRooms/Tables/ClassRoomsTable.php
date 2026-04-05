@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ClassRooms\Tables;
 
+use App\Models\ClassRoom;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\BulkActionGroup;
 use Filament\Tables\Actions\DeleteAction;
@@ -54,6 +55,21 @@ class ClassRoomsTable
                     ->suffix(' subjects')
                     ->alignEnd(),
 
+                TextColumn::make('capacity')
+                    ->label('Capacity')
+                    ->numeric()
+                    ->sortable()
+                    ->suffix(' students')
+                    ->alignEnd(),
+
+                TextColumn::make('students_count')
+                    ->label('Assigned Students')
+                    ->counts('students')
+                    ->sortable()
+                    ->badge()
+                    ->color('primary')
+                    ->alignEnd(),
+
                 TextColumn::make('timetable_slots_count')
                     ->label('Timetable Slots')
                     ->counts('timetableSlots')
@@ -94,12 +110,12 @@ class ClassRoomsTable
 
                 SelectFilter::make('section')
                     ->label('Section')
-                    ->options([
-                        'A' => 'Section A',
-                        'B' => 'Section B',
-                        'C' => 'Section C',
-                        'D' => 'Section D',
-                    ])
+                    ->options(fn () => ClassRoom::query()
+                        ->select('section')
+                        ->distinct()
+                        ->orderBy('section')
+                        ->pluck('section', 'section')
+                        ->all())
                     ->multiple()
                     ->native(false),
             ])

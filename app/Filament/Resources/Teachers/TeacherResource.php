@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Teachers;
 
+use App\Filament\Concerns\HasResourcePermissions;
 use App\Filament\Resources\Teachers\Pages\CreateTeacher;
 use App\Filament\Resources\Teachers\Pages\EditTeacher;
 use App\Filament\Resources\Teachers\Pages\ListTeachers;
@@ -14,6 +15,8 @@ use Filament\Tables\Table;
 
 class TeacherResource extends Resource
 {
+    use HasResourcePermissions;
+
     protected static ?string $model = Teacher::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
@@ -29,6 +32,11 @@ class TeacherResource extends Resource
     protected static ?string $navigationGroup = 'Academic Management';
 
     protected static ?int $navigationSort = 3;
+
+    protected static function permissionPrefix(): string
+    {
+        return 'teacher';
+    }
 
     public static function getGloballySearchableAttributes(): array
     {

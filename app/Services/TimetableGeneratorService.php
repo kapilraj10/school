@@ -201,9 +201,23 @@ class TimetableGeneratorService
             return false;
         }
 
-        // Check if the period is in the available periods for this day
-        return in_array($period, $availabilityMatrix[$shortDay], true)
-            || in_array((string) $period, $availabilityMatrix[$shortDay], true);
+        $dayAvailability = $availabilityMatrix[$shortDay];
+
+        if (! is_array($dayAvailability)) {
+            return false;
+        }
+
+        if (array_key_exists($period, $dayAvailability)) {
+            return (bool) $dayAvailability[$period];
+        }
+
+        if (array_key_exists((string) $period, $dayAvailability)) {
+            return (bool) $dayAvailability[(string) $period];
+        }
+
+        // Legacy fallback: matrix stored as [1,2,3] style list
+        return in_array($period, $dayAvailability, true)
+            || in_array((string) $period, $dayAvailability, true);
     }
 
     /**

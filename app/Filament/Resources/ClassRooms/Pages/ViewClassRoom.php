@@ -111,6 +111,15 @@ class ViewClassRoom extends ViewRecord
                                     ->color('success')
                                     ->size(TextEntry\TextEntrySize::Large),
 
+                                TextEntry::make('capacity')
+                                    ->label('Class Capacity')
+                                    ->icon('heroicon-m-user-group')
+                                    ->suffix(' students')
+                                    ->numeric()
+                                    ->badge()
+                                    ->color('primary')
+                                    ->size(TextEntry\TextEntrySize::Large),
+
                                 TextEntry::make('timetableSlots')
                                     ->label('Allocated Slots')
                                     ->icon('heroicon-m-calendar')
@@ -119,6 +128,16 @@ class ViewClassRoom extends ViewRecord
                                     ->numeric()
                                     ->badge()
                                     ->color('info')
+                                    ->size(TextEntry\TextEntrySize::Large),
+
+                                TextEntry::make('students_count')
+                                    ->label('Assigned Students')
+                                    ->icon('heroicon-m-users')
+                                    ->getStateUsing(fn ($record) => $record->students()->count())
+                                    ->suffix(' students')
+                                    ->numeric()
+                                    ->badge()
+                                    ->color('warning')
                                     ->size(TextEntry\TextEntrySize::Large),
                             ]),
                     ])

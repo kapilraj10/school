@@ -16,6 +16,7 @@ class ClassRoom extends Model
         'section',
         'weekly_periods',
         'total_subjects',
+        'capacity',
         'status',
         'class_teacher_id',
     ];
@@ -23,6 +24,7 @@ class ClassRoom extends Model
     protected $casts = [
         'weekly_periods' => 'integer',
         'total_subjects' => 'integer',
+        'capacity' => 'integer',
     ];
 
     /**
@@ -42,6 +44,14 @@ class ClassRoom extends Model
     }
 
     /**
+     * Get students assigned to this class
+     */
+    public function students(): HasMany
+    {
+        return $this->hasMany(User::class, 'class_room_id');
+    }
+
+    /**
      * Get full class name (e.g., "Class 1 - A")
      */
     public function getFullNameAttribute(): string
@@ -55,5 +65,10 @@ class ClassRoom extends Model
     public function scopeActive($query)
     {
         return $query->where('status', 'active');
+    }
+
+    public function hasCapacityFor(int $studentCount): bool
+    {
+        return $studentCount <= $this->capacity;
     }
 }

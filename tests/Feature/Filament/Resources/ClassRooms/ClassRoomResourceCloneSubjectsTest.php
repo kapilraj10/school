@@ -8,6 +8,7 @@ use App\Models\ClassSubjectSetting;
 use App\Models\Subject;
 use App\Models\User;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 class ClassRoomResourceCloneSubjectsTest extends TestCase
@@ -19,6 +20,19 @@ class ClassRoomResourceCloneSubjectsTest extends TestCase
         parent::setUp();
 
         $this->user = User::factory()->create();
+        $permissions = [
+            'class_room.list',
+            'class_room.view',
+            'class_room.create',
+            'class_room.edit',
+            'class_room.delete',
+        ];
+
+        foreach ($permissions as $permission) {
+            Permission::findOrCreate($permission, 'web');
+        }
+
+        $this->user->givePermissionTo($permissions);
         $this->actingAs($this->user);
     }
 

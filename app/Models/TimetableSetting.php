@@ -73,6 +73,12 @@ class TimetableSetting extends Model
             // General settings
             'school_days' => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
             'periods_per_day' => 8,
+            'period_duration_minutes' => 45,
+            'school_start_time' => '09:00',
+            'short_break_after_period' => 3,
+            'short_break_duration_minutes' => 15,
+            'lunch_break_after_period' => 5,
+            'lunch_break_duration_minutes' => 30,
 
             // Algorithm settings
             'max_same_subject_per_day' => 2,

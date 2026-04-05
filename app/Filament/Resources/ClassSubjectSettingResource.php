@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\HasResourcePermissions;
 use App\Filament\Resources\ClassSubjectSettingResource\Pages;
 use App\Models\ClassRoom;
 use App\Models\ClassSubjectSetting;
@@ -11,9 +12,13 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class ClassSubjectSettingResource extends Resource
 {
+    use HasResourcePermissions;
+
     protected static ?string $model = ClassSubjectSetting::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-adjustments-horizontal';
@@ -27,6 +32,11 @@ class ClassSubjectSettingResource extends Resource
     protected static ?string $navigationGroup = 'Timetable Settings';
 
     protected static ?int $navigationSort = 2;
+
+    protected static function permissionPrefix(): string
+    {
+        return 'class_subject_setting';
+    }
 
     public static function getGlobalSearchResultTitle($record): string
     {
@@ -251,12 +261,17 @@ class ClassSubjectSettingResource extends Resource
                     ->label('Sync All Classes')
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')
+                    ->visible(fn () => (bool) Auth::user()?->can('class_subject_setting.edit'))
                     ->requiresConfirmation()
                     ->modalHeading('Sync Subject Settings')
                     ->modalDescription('This will sync subject settings for all classes based on their class range. Existing custom settings will be preserved.')
                     ->action(function () {
                         $classes = ClassRoom::active()->get();
                         foreach ($classes as $class) {
+                            if (! $class instanceof ClassRoom) {
+                                continue;
+                            }
+
                             ClassSubjectSetting::syncSubjectsForClass($class);
                         }
                         \Filament\Notifications\Notification::make()
@@ -270,6 +285,7 @@ class ClassSubjectSettingResource extends Resource
                     ->label('Copy from Another Class')
                     ->icon('heroicon-o-document-duplicate')
                     ->color('info')
+                    ->visible(fn () => (bool) Auth::user()?->can('class_subject_setting.create'))
                     ->form([
                         Forms\Components\Select::make('source_class_id')
                             ->label('Source Class (Copy From)')
@@ -337,7 +353,7 @@ class ClassSubjectSettingResource extends Resource
                         $copiedCount = 0;
 
                         // Use database transaction for data integrity
-                        \DB::transaction(function () use ($sourceClassId, $targetClassId, $conflictResolution, &$copiedCount) {
+                        DB::transaction(function () use ($sourceClassId, $targetClassId, $conflictResolution, &$copiedCount) {
                             // Get all source class subject settings
                             $sourceSettings = ClassSubjectSetting::where('class_room_id', $sourceClassId)
                                 ->with('subject')

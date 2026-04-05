@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ClassRooms;
 
+use App\Filament\Concerns\HasResourcePermissions;
 use App\Filament\Resources\ClassRooms\Pages\CreateClassRoom;
 use App\Filament\Resources\ClassRooms\Pages\EditClassRoom;
 use App\Filament\Resources\ClassRooms\Pages\ListClassRooms;
@@ -15,6 +16,8 @@ use Filament\Tables\Table;
 
 class ClassRoomResource extends Resource
 {
+    use HasResourcePermissions;
+
     protected static ?string $model = ClassRoom::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
@@ -30,6 +33,11 @@ class ClassRoomResource extends Resource
     protected static ?string $navigationGroup = 'Academic Management';
 
     protected static ?int $navigationSort = 1;
+
+    protected static function permissionPrefix(): string
+    {
+        return 'class_room';
+    }
 
     public static function getGloballySearchableAttributes(): array
     {

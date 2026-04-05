@@ -24,6 +24,7 @@ class ClassRoomFactory extends Factory
             'section' => fake()->randomElement(['A', 'B', 'C', 'D']),
             'weekly_periods' => 48,
             'total_subjects' => 8,
+            'capacity' => 40,
             'status' => 'active',
             'class_teacher_id' => null,
         ];

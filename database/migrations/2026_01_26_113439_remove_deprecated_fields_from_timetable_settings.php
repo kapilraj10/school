@@ -16,7 +16,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::table('timetable_settings')->insert([
+        DB::table('timetable_settings')->upsert([
             [
                 'key' => 'period_duration_minutes',
                 'value' => '40',
@@ -44,6 +44,6 @@ return new class extends Migration
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
-        ]);
+        ], ['key'], ['value', 'type', 'group', 'description', 'updated_at']);
     }
 };

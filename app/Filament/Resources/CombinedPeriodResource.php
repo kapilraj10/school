@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\HasResourcePermissions;
 use App\Filament\Resources\CombinedPeriodResource\Pages;
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
@@ -21,6 +22,8 @@ use Filament\Tables\Table;
 
 class CombinedPeriodResource extends Resource
 {
+    use HasResourcePermissions;
+
     protected static ?string $model = CombinedPeriod::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
@@ -32,6 +35,11 @@ class CombinedPeriodResource extends Resource
     protected static ?string $navigationGroup = 'Timetable Management';
 
     protected static ?int $navigationSort = 6;
+
+    protected static function permissionPrefix(): string
+    {
+        return 'combined_period';
+    }
 
     public static function getGloballySearchableAttributes(): array
     {

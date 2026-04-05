@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Concerns\HasResourcePermissions;
 use App\Filament\Resources\SubjectResource\Pages;
 use App\Models\ClassRoom;
+use App\Models\ClassSubjectSetting;
 use App\Models\Subject;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Section;
@@ -13,9 +15,12 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
 
 class SubjectResource extends Resource
 {
+    use HasResourcePermissions;
+
     protected static ?string $model = Subject::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-book-open';
@@ -27,6 +32,11 @@ class SubjectResource extends Resource
     protected static ?string $navigationGroup = 'Academic Management';
 
     protected static ?int $navigationSort = 3;
+
+    protected static function permissionPrefix(): string
+    {
+        return 'subject';
+    }
 
     public static function getGloballySearchableAttributes(): array
     {
@@ -71,7 +81,7 @@ class SubjectResource extends Resource
                             ->default('core')
                             ->required()
                             ->native(false)
-                            ->helperText('Period settings are configured per class in Class Subject Settings'),
+                            ->helperText('Choose the subject category for scheduling behavior.'),
                         Select::make('status')
                             ->options([
                                 'active' => 'Active',
@@ -80,6 +90,64 @@ class SubjectResource extends Resource
                             ->default('active')
                             ->required()
                             ->native(false),
+                    ]),
+                ]),
+
+            Section::make('Period Configuration')
+                ->description('Define weekly periods for this subject in the selected class')
+                ->schema([
+                    Grid::make(3)->schema([
+                        TextInput::make('min_periods_per_week')
+                            ->label('Minimum Periods/Week')
+                            ->numeric()
+                            ->required()
+                            ->default(1)
+                            ->minValue(0)
+                            ->maxValue(10),
+
+                        TextInput::make('weekly_periods')
+                            ->label('Target Periods/Week')
+                            ->numeric()
+                            ->required()
+                            ->default(4)
+                            ->minValue(1)
+                            ->maxValue(12),
+
+                        TextInput::make('max_periods_per_week')
+                            ->label('Maximum Periods/Week')
+                            ->numeric()
+                            ->required()
+                            ->default(6)
+                            ->minValue(1)
+                            ->maxValue(15),
+
+                        Select::make('single_combined')
+                            ->label('Period Mode')
+                            ->options([
+                                'single' => 'Single',
+                                'combined' => 'Combined',
+                            ])
+                            ->required()
+                            ->default('single')
+                            ->native(false),
+
+                        Select::make('setting_is_active')
+                            ->label('Setting Status')
+                            ->options([
+                                '1' => 'Active',
+                                '0' => 'Inactive',
+                            ])
+                            ->required()
+                            ->default('1')
+                            ->native(false),
+
+                        TextInput::make('priority')
+                            ->label('Priority')
+                            ->numeric()
+                            ->required()
+                            ->default(5)
+                            ->minValue(1)
+                            ->maxValue(10),
                     ]),
                 ]),
         ]);
@@ -117,6 +185,17 @@ class SubjectResource extends Resource
                         'inactive' => 'danger',
                         default => 'gray',
                     }),
+                Tables\Columns\TextColumn::make('periods_per_week')
+                    ->label('Periods/Week')
+                    ->state(function (Subject $record): int {
+                        return (int) ClassSubjectSetting::query()
+                            ->where('class_room_id', $record->class_room_id)
+                            ->where('subject_id', $record->id)
+                            ->value('weekly_periods');
+                    })
+                    ->sortable(false)
+                    ->badge()
+                    ->color('warning'),
             ])
             ->groups([
                 Tables\Grouping\Group::make('classRoom.name')
@@ -150,6 +229,7 @@ class SubjectResource extends Resource
                 Tables\Actions\Action::make('copy')
                     ->label('Copy')
                     ->icon('heroicon-o-clipboard-document')
+                    ->visible(fn () => (bool) Auth::user()?->can('subject.create'))
                     ->form([
                         Select::make('target_class_ids')
                             ->label('Copy to Classes')

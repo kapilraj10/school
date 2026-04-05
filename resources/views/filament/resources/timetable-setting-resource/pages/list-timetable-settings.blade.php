@@ -1,8 +1,8 @@
 <x-filament-panels::page>
     @php
-        function formatSettingKey($key) {
+        $formatSettingKey = function ($key) {
             return str_replace('_', ' ', ucwords(str_replace('_', ' ', $key)));
-        }
+        };
     @endphp
     
     <div class="space-y-6">
@@ -18,7 +18,7 @@
                     <div class="flex justify-between items-start mb-4">
                         <div class="flex-1">
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                                {{ formatSettingKey($record->key) }}
+                                {{ $formatSettingKey($record->key) }}
                             </h3>
                         </div>
                         <div class="flex gap-2 ml-2">

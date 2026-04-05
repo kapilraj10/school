@@ -11,6 +11,7 @@ use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\User;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 class TeacherResourceTest extends TestCase
@@ -22,6 +23,19 @@ class TeacherResourceTest extends TestCase
         parent::setUp();
 
         $this->user = User::factory()->create();
+        $permissions = [
+            'teacher.list',
+            'teacher.view',
+            'teacher.create',
+            'teacher.edit',
+            'teacher.delete',
+        ];
+
+        foreach ($permissions as $permission) {
+            Permission::findOrCreate($permission, 'web');
+        }
+
+        $this->user->givePermissionTo($permissions);
         $this->actingAs($this->user);
     }
 
@@ -54,8 +68,10 @@ class TeacherResourceTest extends TestCase
 
     public function test_can_create_teacher_with_availability_grid(): void
     {
-        $subject = Subject::factory()->create();
         $classroom = ClassRoom::factory()->create();
+        $subject = Subject::factory()->create([
+            'class_room_id' => $classroom->id,
+        ]);
 
         Livewire::test(CreateTeacher::class)
             ->fillForm([
@@ -79,6 +95,11 @@ class TeacherResourceTest extends TestCase
         $teacher = Teacher::where('email', 'jane@example.com')->first();
         $this->assertNotNull($teacher);
 
+        $this->assertDatabaseHas('teacher_subject', [
+            'teacher_id' => $teacher->id,
+            'subject_id' => $subject->id,
+        ]);
+
         // Verify availability_matrix has the correct days and periods
         $matrix = $teacher->availability_matrix;
         $this->assertIsArray($matrix);
@@ -96,10 +117,17 @@ class TeacherResourceTest extends TestCase
 
     public function test_can_edit_teacher_with_availability_grid(): void
     {
-        $subject = Subject::factory()->create();
+        $classroom = ClassRoom::factory()->create();
+        $subject = Subject::factory()->create([
+            'class_room_id' => $classroom->id,
+        ]);
+        $replacementSubject = Subject::factory()->create([
+            'class_room_id' => $classroom->id,
+        ]);
 
         $teacher = Teacher::factory()->create([
             'subject_ids' => [$subject->id],
+            'class_room_ids' => [$classroom->id],
             'availability_matrix' => [
                 'Mon' => [1 => true, 2 => true],
                 'Tue' => [1 => true, 2 => true],
@@ -114,6 +142,8 @@ class TeacherResourceTest extends TestCase
                 ],
             ])
             ->fillForm([
+                'class_room_ids' => [$classroom->id],
+                'subject_ids' => [$replacementSubject->id],
                 'availability' => [
                     'days' => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
                     'periods' => [1, 2, 3, 4, 5, 6, 7, 8],
@@ -137,6 +167,16 @@ class TeacherResourceTest extends TestCase
         foreach ([1, 2, 3, 4, 5, 6, 7, 8] as $period) {
             $this->assertTrue($matrix['Mon'][$period] ?? false);
         }
+
+        $this->assertDatabaseHas('teacher_subject', [
+            'teacher_id' => $teacher->id,
+            'subject_id' => $replacementSubject->id,
+        ]);
+
+        $this->assertDatabaseMissing('teacher_subject', [
+            'teacher_id' => $teacher->id,
+            'subject_id' => $subject->id,
+        ]);
     }
 
     public function test_availability_grid_displays_correctly_in_view(): void
