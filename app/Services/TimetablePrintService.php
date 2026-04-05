@@ -13,6 +13,21 @@ use Illuminate\Support\Facades\View;
 class TimetablePrintService
 {
     /**
+     * Canonical weekday map used by legacy timetable slots.
+     *
+     * @var array<int, string>
+     */
+    private const CANONICAL_DAY_NAMES = [
+        0 => 'Sunday',
+        1 => 'Monday',
+        2 => 'Tuesday',
+        3 => 'Wednesday',
+        4 => 'Thursday',
+        5 => 'Friday',
+        6 => 'Saturday',
+    ];
+
+    /**
      * Generate a PDF for a class timetable
      */
     public function generateClassTimetablePdf(int $classRoomId, int $academicTermId): \Barryvdh\DomPDF\PDF
@@ -294,16 +309,9 @@ class TimetablePrintService
             ->orderBy('period')
             ->get();
 
-        $organized = [];
         $days = TimetableSlot::getDays();
         $periods = TimetableSlot::getPeriods();
-        foreach (array_keys($days) as $day) {
-            $organized[$day] = [];
-            foreach (array_keys($periods) as $period) {
-                $slot = $slotsQuery->where('day', $day)->where('period', $period)->first();
-                $organized[$day][$period] = $slot;
-            }
-        }
+        $organized = $this->organizeSlotsByConfiguredDays($slotsQuery, $days, $periods);
 
         $totalSlots = collect($organized)->flatten(1)->filter()->count();
         $filledSlots = collect($organized)->flatten(1)->filter(fn ($slot) => $slot && $slot->subject_id)->count();
@@ -342,16 +350,9 @@ class TimetablePrintService
             ->orderBy('period')
             ->get();
 
-        $organized = [];
         $days = TimetableSlot::getDays();
         $periods = TimetableSlot::getPeriods();
-        foreach (array_keys($days) as $day) {
-            $organized[$day] = [];
-            foreach (array_keys($periods) as $period) {
-                $slot = $slotsQuery->where('day', $day)->where('period', $period)->first();
-                $organized[$day][$period] = $slot;
-            }
-        }
+        $organized = $this->organizeSlotsByConfiguredDays($slotsQuery, $days, $periods);
 
         $totalSlots = collect($organized)->flatten(1)->filter()->count();
         $filledSlots = collect($organized)->flatten(1)->filter(fn ($slot) => $slot && $slot->subject_id)->count();
@@ -379,18 +380,67 @@ class TimetablePrintService
             ->orderBy('period')
             ->get();
 
-        $organized = [];
         $days = TimetableSlot::getDays();
         $periods = TimetableSlot::getPeriods();
-        foreach (array_keys($days) as $day) {
-            $organized[$day] = [];
+
+        return $this->organizeSlotsByConfiguredDays($slotsQuery, $days, $periods);
+    }
+
+    /**
+     * Organize slot records into configured day/period keys.
+     *
+     * @param  \Illuminate\Support\Collection<int, \App\Models\TimetableSlot>  $slots
+     * @param  array<int, string>  $days
+     * @param  array<int, string>  $periods
+     * @return array<int, array<int, \App\Models\TimetableSlot|null>>
+     */
+    protected function organizeSlotsByConfiguredDays($slots, array $days, array $periods): array
+    {
+        $organized = [];
+
+        foreach (array_keys($days) as $dayKey) {
+            $organized[$dayKey] = [];
             foreach (array_keys($periods) as $period) {
-                $slot = $slotsQuery->where('day', $day)->where('period', $period)->first();
-                $organized[$day][$period] = $slot;
+                $organized[$dayKey][$period] = null;
             }
         }
 
+        foreach ($slots as $slot) {
+            $resolvedDayKey = $this->resolveSlotDayKey((int) $slot->day, $days);
+            $periodKey = (int) $slot->period;
+
+            if ($resolvedDayKey === null || ! array_key_exists($periodKey, $periods)) {
+                continue;
+            }
+
+            $organized[$resolvedDayKey][$periodKey] = $slot;
+        }
+
         return $organized;
+    }
+
+    /**
+     * Resolve a slot day value to a configured day key.
+     */
+    protected function resolveSlotDayKey(int $slotDay, array $configuredDays): ?int
+    {
+        // 1) Try canonical day-number -> day-name -> configured key mapping first.
+        $canonicalDayName = self::CANONICAL_DAY_NAMES[$slotDay] ?? null;
+
+        if ($canonicalDayName !== null) {
+            $configuredKey = array_search($canonicalDayName, $configuredDays, true);
+
+            if ($configuredKey !== false) {
+                return (int) $configuredKey;
+            }
+        }
+
+        // 2) Fallback to direct numeric key matching for legacy/custom data.
+        if (array_key_exists($slotDay, $configuredDays)) {
+            return $slotDay;
+        }
+
+        return null;
     }
 
     /**

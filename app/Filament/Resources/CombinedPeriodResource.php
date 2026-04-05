@@ -161,7 +161,21 @@ class CombinedPeriodResource extends Resource
                         if (empty($state)) {
                             return 'None';
                         }
-                        $count = count($state);
+
+                        if (is_string($state)) {
+                            $decoded = json_decode($state, true);
+                            if (json_last_error() === JSON_ERROR_NONE) {
+                                $state = $decoded;
+                            }
+                        }
+
+                        if ($state instanceof \Countable) {
+                            $count = count($state);
+                        } elseif (is_array($state)) {
+                            $count = count($state);
+                        } else {
+                            $count = 1;
+                        }
 
                         return "{$count} ".($count === 1 ? 'class' : 'classes');
                     }),

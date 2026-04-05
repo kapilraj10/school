@@ -8,6 +8,7 @@ use App\Models\ClassSubjectSetting;
 use App\Models\Room;
 use App\Models\Subject;
 use App\Models\Teacher;
+use App\Models\TimetableSetting;
 use App\Models\TimetableSlot;
 use App\Models\User;
 use App\Services\TimetablePrintService;
@@ -194,5 +195,25 @@ class PrintTimetableFeatureTest extends TestCase
         $response = $this->actingAs($this->user)->get(route('print.class-preview'));
 
         $response->assertStatus(404);
+    }
+
+    public function test_class_pdf_data_maps_slots_when_school_days_start_from_monday(): void
+    {
+        TimetableSetting::set('school_days', ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], 'array', 'general');
+
+        $printService = new TimetablePrintService;
+
+        $method = new \ReflectionMethod(TimetablePrintService::class, 'getClassTimetableData');
+        $method->setAccessible(true);
+
+        /** @var array{slots: array, days: array} $data */
+        $data = $method->invoke($printService, $this->class->id, $this->term->id);
+
+        $days = $data['days'];
+        $mondayKey = array_search('Monday', $days, true);
+
+        $this->assertNotFalse($mondayKey);
+        $this->assertNotNull($data['slots'][(int) $mondayKey][1] ?? null);
+        $this->assertEquals($this->subject->id, $data['slots'][(int) $mondayKey][1]?->subject_id);
     }
 }
