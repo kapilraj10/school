@@ -37,7 +37,7 @@
                         <span wire:loading wire:target="downloadPdf">Generating…</span>
                     </x-filament::button>
 
-                    {{-- Excel - class / teacher only --}}
+                    {{-- Excel - class / teacher / room --}}
                     <div x-show="!isPdfOnly">
                         <x-filament::button
                             wire:click="downloadExcel"
@@ -52,7 +52,7 @@
                         </x-filament::button>
                     </div>
 
-                    {{-- Print Preview - class / teacher only --}}
+                    {{-- Print Preview - class / teacher / room --}}
                     <div x-show="!isPdfOnly">
                         <x-filament::button
                             wire:click="previewOutput"
@@ -87,8 +87,8 @@
                 <li>Use <strong>landscape orientation</strong> for better readability.</li>
                 <li>Recommended paper size: <strong>A4</strong>.</li>
                 <li>PDF is recommended for sharing and distribution.</li>
-                <li>Excel is best for further editing of the timetable data.</li>
-                <li>Print Preview opens the timetable in a browser tab — use the browser's print dialog to print.</li>
+                <li>Excel is best for further editing of class, teacher, or room timetable data.</li>
+                <li>Print Preview opens class/teacher/room schedules in a browser tab — use the browser's print dialog to print.</li>
             </ul>
         </x-filament::section>
 

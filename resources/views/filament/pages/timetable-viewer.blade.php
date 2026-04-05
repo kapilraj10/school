@@ -7,7 +7,16 @@
         @if($timetableData)
             <x-filament::section>
                 <x-slot name="heading">
-                    {{ $timetableData['class']->full_name }} - {{ $timetableData['term']->name }}
+                    @php
+                        $viewType = $timetableData['viewType'] ?? 'class';
+                        $entity = $timetableData['entity'] ?? null;
+                        $entityTitle = match ($viewType) {
+                            'teacher' => $entity?->name,
+                            'room' => $entity?->name,
+                            default => $entity?->full_name,
+                        };
+                    @endphp
+                    {{ $entityTitle ?? 'Timetable' }} - {{ $timetableData['term']->name }}
                 </x-slot>
 
                 <x-slot name="headerEnd">
@@ -48,9 +57,22 @@
                                                             <span class="text-xs">(Combined)</span>
                                                         @endif
                                                     </div>
-                                                    <div class="text-xs text-gray-600 dark:text-gray-400">
-                                                        {{ $slot->teacher?->employee_id ?? 'No Teacher' }}
-                                                    </div>
+                                                    @if(($timetableData['viewType'] ?? 'class') === 'teacher')
+                                                        <div class="text-xs text-gray-600 dark:text-gray-400">
+                                                            {{ $slot->classRoom?->full_name ?? 'No Class' }}
+                                                        </div>
+                                                    @elseif(($timetableData['viewType'] ?? 'class') === 'room')
+                                                        <div class="text-xs text-gray-600 dark:text-gray-400">
+                                                            {{ $slot->classRoom?->full_name ?? 'No Class' }}
+                                                        </div>
+                                                        <div class="text-xs text-gray-600 dark:text-gray-400">
+                                                            {{ $slot->teacher?->name ?? 'No Teacher' }}
+                                                        </div>
+                                                    @else
+                                                        <div class="text-xs text-gray-600 dark:text-gray-400">
+                                                            {{ $slot->teacher?->employee_id ?? 'No Teacher' }}
+                                                        </div>
+                                                    @endif
                                                 </div>
                                             @else
                                                 <div class="text-center text-gray-400 dark:text-gray-600 text-sm">

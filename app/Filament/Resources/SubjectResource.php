@@ -6,6 +6,7 @@ use App\Filament\Concerns\HasResourcePermissions;
 use App\Filament\Resources\SubjectResource\Pages;
 use App\Models\ClassRoom;
 use App\Models\ClassSubjectSetting;
+use App\Models\Room;
 use App\Models\Subject;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Section;
@@ -148,6 +149,15 @@ class SubjectResource extends Resource
                             ->default(5)
                             ->minValue(1)
                             ->maxValue(10),
+
+                        Select::make('room_id')
+                            ->label('Special Room / Lab')
+                            ->options(Room::query()->orderBy('name')->pluck('name', 'id'))
+                            ->searchable()
+                            ->preload()
+                            ->native(false)
+                            ->nullable()
+                            ->helperText('Optional room for this subject, like Computer Lab or Science Lab.'),
                     ]),
                 ]),
         ]);
@@ -196,6 +206,10 @@ class SubjectResource extends Resource
                     ->sortable(false)
                     ->badge()
                     ->color('warning'),
+                Tables\Columns\TextColumn::make('assignedRoom.name')
+                    ->label('Special Room')
+                    ->placeholder('-')
+                    ->sortable(false),
             ])
             ->groups([
                 Tables\Grouping\Group::make('classRoom.name')

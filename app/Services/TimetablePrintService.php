@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
+use App\Models\Room;
 use App\Models\Teacher;
 use App\Models\TimetableSlot;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -34,6 +35,21 @@ class TimetablePrintService
         $data = $this->getTeacherScheduleData($teacherId, $academicTermId);
 
         $pdf = Pdf::loadView('print.teacher-schedule', $data);
+        $pdf->setPaper('A4', 'landscape');
+        $pdf->setOption('isHtml5ParserEnabled', true);
+        $pdf->setOption('isRemoteEnabled', true);
+
+        return $pdf;
+    }
+
+    /**
+     * Generate a PDF for a room/lab schedule
+     */
+    public function generateRoomSchedulePdf(int $roomId, int $academicTermId): \Barryvdh\DomPDF\PDF
+    {
+        $data = $this->getRoomScheduleData($roomId, $academicTermId);
+
+        $pdf = Pdf::loadView('print.room-schedule', $data);
         $pdf->setPaper('A4', 'landscape');
         $pdf->setOption('isHtml5ParserEnabled', true);
         $pdf->setOption('isRemoteEnabled', true);
@@ -192,6 +208,53 @@ class TimetablePrintService
         return response()->download($tempFile, $filename)->deleteFileAfterSend(true);
     }
 
+    public function exportRoomScheduleToExcel(int $roomId, int $academicTermId, string $filename)
+    {
+        $data = $this->getRoomScheduleData($roomId, $academicTermId);
+
+        $writer = new \OpenSpout\Writer\XLSX\Writer;
+        $tempFile = tempnam(sys_get_temp_dir(), 'room_schedule_');
+        $writer->openToFile($tempFile);
+
+        $sheet = $writer->getCurrentSheet();
+        $sheet->setName('Room Schedule');
+
+        $titleRow = [
+            \OpenSpout\Common\Entity\Row::fromValues([
+                "Room Schedule: {$data['room']->name} - {$data['term']->name}",
+            ]),
+        ];
+        $writer->addRows($titleRow);
+        $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues(['']));
+
+        $header = ['Day / Period'];
+        foreach ($data['periods'] as $period => $label) {
+            $header[] = $label;
+        }
+        $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues($header));
+
+        foreach ($data['days'] as $dayNum => $dayName) {
+            $row = [$dayName];
+            foreach (array_keys($data['periods']) as $period) {
+                $slot = $data['slots'][$dayNum][$period] ?? null;
+                if ($slot && $slot->subject) {
+                    $cellData = ($slot->classRoom?->full_name ?? 'No Class')."\n".$slot->subject->name;
+                    if ($slot->teacher) {
+                        $cellData .= "\n".$slot->teacher->name;
+                    }
+                    $row[] = $cellData;
+                } else {
+                    $row[] = 'Free';
+                }
+            }
+            $writer->addRow(\OpenSpout\Common\Entity\Row::fromValues($row));
+        }
+
+        $writer->close();
+
+        return response()->download($tempFile, $filename)->deleteFileAfterSend(true);
+    }
+
     /**
      * Get organized timetable data for a class
      */
@@ -247,6 +310,54 @@ class TimetablePrintService
 
         return [
             'teacher' => $teacher,
+            'term' => $term,
+            'slots' => $organized,
+            'days' => $days,
+            'periods' => $periods,
+            'totalSlots' => $totalSlots,
+            'filledSlots' => $filledSlots,
+        ];
+    }
+
+    /**
+     * Get organized schedule data for a room/lab
+     */
+    protected function getRoomScheduleData(int $roomId, int $academicTermId): array
+    {
+        $room = Room::findOrFail($roomId);
+        $term = AcademicTerm::findOrFail($academicTermId);
+
+        $slotsQuery = TimetableSlot::query()
+            ->where('academic_term_id', $academicTermId)
+            ->whereExists(function ($query) use ($roomId): void {
+                $query->selectRaw('1')
+                    ->from('class_subject_settings')
+                    ->whereColumn('class_subject_settings.class_room_id', 'timetable_slots.class_room_id')
+                    ->whereColumn('class_subject_settings.subject_id', 'timetable_slots.subject_id')
+                    ->where('class_subject_settings.room_id', $roomId)
+                    ->where('class_subject_settings.is_active', true);
+            })
+            ->with(['subject', 'teacher', 'classRoom', 'combinedPeriod'])
+            ->orderBy('day')
+            ->orderBy('period')
+            ->get();
+
+        $organized = [];
+        $days = TimetableSlot::getDays();
+        $periods = TimetableSlot::getPeriods();
+        foreach (array_keys($days) as $day) {
+            $organized[$day] = [];
+            foreach (array_keys($periods) as $period) {
+                $slot = $slotsQuery->where('day', $day)->where('period', $period)->first();
+                $organized[$day][$period] = $slot;
+            }
+        }
+
+        $totalSlots = collect($organized)->flatten(1)->filter()->count();
+        $filledSlots = collect($organized)->flatten(1)->filter(fn ($slot) => $slot && $slot->subject_id)->count();
+
+        return [
+            'room' => $room,
             'term' => $term,
             'slots' => $organized,
             'days' => $days,
@@ -333,6 +444,8 @@ class TimetablePrintService
                 return "timetable_{$entity->full_name}_{$term->name}_{$timestamp}.pdf";
             case 'teacher':
                 return "schedule_{$entity->name}_{$term->name}_{$timestamp}.pdf";
+            case 'room':
+                return "room_schedule_{$entity->name}_{$term->name}_{$timestamp}.pdf";
             case 'all_classes':
                 return "timetables_all_classes_{$term->name}_{$timestamp}.pdf";
             case 'master':

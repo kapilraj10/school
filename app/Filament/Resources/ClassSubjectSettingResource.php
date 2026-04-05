@@ -6,6 +6,7 @@ use App\Filament\Concerns\HasResourcePermissions;
 use App\Filament\Resources\ClassSubjectSettingResource\Pages;
 use App\Models\ClassRoom;
 use App\Models\ClassSubjectSetting;
+use App\Models\Room;
 use App\Models\Subject;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -121,6 +122,19 @@ class ClassSubjectSettingResource extends Resource
                                     ->suffix('/week')
                                     ->helperText('Maximum periods allowed per week'),
                             ]),
+
+                        Forms\Components\Select::make('room_id')
+                            ->label('Special Room / Lab')
+                            ->options(
+                                Room::query()
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->native(false)
+                            ->nullable()
+                            ->helperText('Optional: assign a specific room/lab for this subject (e.g., Computer Lab).'),
                     ]),
 
                 Forms\Components\Section::make('Additional Settings')
@@ -170,6 +184,11 @@ class ClassSubjectSettingResource extends Resource
                     ->label('Subject')
                     ->sortable()
                     ->searchable(),
+
+                Tables\Columns\TextColumn::make('room.name')
+                    ->label('Special Room')
+                    ->placeholder('-')
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('min_periods_per_week')
                     ->label('Min/Week')
@@ -235,6 +254,11 @@ class ClassSubjectSettingResource extends Resource
                 Tables\Filters\SelectFilter::make('subject_id')
                     ->label('Subject')
                     ->options(Subject::active()->pluck('name', 'id'))
+                    ->searchable(),
+
+                Tables\Filters\SelectFilter::make('room_id')
+                    ->label('Special Room / Lab')
+                    ->options(Room::query()->orderBy('name')->pluck('name', 'id'))
                     ->searchable(),
 
                 Tables\Filters\SelectFilter::make('single_combined')
@@ -395,6 +419,7 @@ class ClassSubjectSettingResource extends Resource
                                 $copyData = [
                                     'class_room_id' => $targetClassId,
                                     'subject_id' => $sourceSetting->subject_id,
+                                    'room_id' => $sourceSetting->room_id,
                                     'min_periods_per_week' => $sourceSetting->min_periods_per_week,
                                     'weekly_periods' => $sourceSetting->weekly_periods,
                                     'max_periods_per_week' => $sourceSetting->max_periods_per_week,

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 class Subject extends Model
 {
@@ -45,6 +46,21 @@ class Subject extends Model
     public function classSubjectSettings(): HasMany
     {
         return $this->hasMany(ClassSubjectSetting::class);
+    }
+
+    /**
+     * Get assigned room/lab through class subject setting
+     */
+    public function assignedRoom(): HasOneThrough
+    {
+        return $this->hasOneThrough(
+            Room::class,
+            ClassSubjectSetting::class,
+            'subject_id',
+            'id',
+            'id',
+            'room_id'
+        );
     }
 
     /**

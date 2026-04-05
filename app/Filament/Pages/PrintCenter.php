@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
+use App\Models\Room;
 use App\Models\Teacher;
 use App\Services\TimetablePrintService;
 use Filament\Forms\Components\Select;
@@ -36,9 +37,18 @@ class PrintCenter extends Page implements HasForms
     {
         $currentTerm = AcademicTerm::where('is_active', true)->first();
 
+        $selectedPrintType = request('print_type', 'class');
+        $selectedTermId = request('term_id', $currentTerm?->id);
+        $selectedClassId = request('class_room_id');
+        $selectedTeacherId = request('teacher_id');
+        $selectedRoomId = request('room_id');
+
         $this->form->fill([
-            'academic_term_id' => $currentTerm?->id,
-            'print_type' => 'class',
+            'academic_term_id' => $selectedTermId,
+            'print_type' => $selectedPrintType,
+            'class_room_id' => $selectedClassId,
+            'teacher_id' => $selectedTeacherId,
+            'room_id' => $selectedRoomId,
         ]);
     }
 
@@ -58,6 +68,7 @@ class PrintCenter extends Page implements HasForms
                     ->options([
                         'class' => 'Class Timetable',
                         'teacher' => 'Teacher Schedule',
+                        'room' => 'Room Schedule',
                         'all_classes' => 'All Classes (Bulk)',
                         'master' => 'Master Timetable',
                     ])
@@ -79,6 +90,14 @@ class PrintCenter extends Page implements HasForms
                     ->options(Teacher::active()->pluck('name', 'id'))
                     ->visible(fn (Get $get) => $get('print_type') === 'teacher')
                     ->required(fn (Get $get) => $get('print_type') === 'teacher')
+                    ->native(false)
+                    ->searchable(),
+
+                Select::make('room_id')
+                    ->label('Select Room / Lab')
+                    ->options(Room::active()->orderBy('name')->pluck('name', 'id'))
+                    ->visible(fn (Get $get) => $get('print_type') === 'room')
+                    ->required(fn (Get $get) => $get('print_type') === 'room')
                     ->native(false)
                     ->searchable(),
 
@@ -128,6 +147,16 @@ class PrintCenter extends Page implements HasForms
             return null;
         }
 
+        if ($data['print_type'] === 'room' && empty($data['room_id'])) {
+            Notification::make()
+                ->title('Validation Error')
+                ->danger()
+                ->body('Please select a room/lab to print.')
+                ->send();
+
+            return null;
+        }
+
         try {
             $printService = new TimetablePrintService;
             $term = AcademicTerm::findOrFail($data['academic_term_id']);
@@ -139,6 +168,9 @@ class PrintCenter extends Page implements HasForms
 
                 case 'teacher':
                     return $this->handleTeacherPrint($data, $printService, $term);
+
+                case 'room':
+                    return $this->handleRoomPrint($data, $printService, $term);
 
                 case 'all_classes':
                     return $this->handleAllClassesPrint($data, $printService, $term);
@@ -210,6 +242,36 @@ class PrintCenter extends Page implements HasForms
         if ($data['format'] === 'excel') {
             return $this->exportTeacherToExcel($teacher->id, $term->id, $teacher, $term);
         }
+
+        return null;
+    }
+
+    protected function handleRoomPrint(array $data, TimetablePrintService $printService, AcademicTerm $term)
+    {
+        $room = Room::findOrFail($data['room_id']);
+
+        if ($data['format'] === 'pdf') {
+            $pdf = $printService->generateRoomSchedulePdf($room->id, $term->id);
+            $filename = $printService->generateFilename('room', $room, $term);
+
+            return response()->streamDownload(
+                fn () => print ($pdf->output()),
+                $filename
+            );
+        }
+
+        if ($data['format'] === 'print') {
+            return redirect()->route('print.room-preview', [
+                'room_id' => $room->id,
+                'term_id' => $term->id,
+            ]);
+        }
+
+        if ($data['format'] === 'excel') {
+            return $this->exportRoomToExcel($room->id, $term->id, $room, $term);
+        }
+
+        return null;
     }
 
     protected function handleAllClassesPrint(array $data, TimetablePrintService $printService, AcademicTerm $term)
@@ -264,5 +326,13 @@ class PrintCenter extends Page implements HasForms
         $filename = "teacher-schedule-{$teacher->name}-{$term->name}.xlsx";
 
         return $printService->exportTeacherScheduleToExcel($teacherId, $termId, $filename);
+    }
+
+    protected function exportRoomToExcel(int $roomId, int $termId, Room $room, AcademicTerm $term)
+    {
+        $printService = new TimetablePrintService;
+        $filename = "room-schedule-{$room->name}-{$term->name}.xlsx";
+
+        return $printService->exportRoomScheduleToExcel($roomId, $termId, $filename);
     }
 }

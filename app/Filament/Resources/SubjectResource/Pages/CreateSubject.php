@@ -22,6 +22,7 @@ class CreateSubject extends CreateRecord
             'weekly_periods' => (int) ($data['weekly_periods'] ?? 4),
             'max_periods_per_week' => (int) ($data['max_periods_per_week'] ?? 6),
             'single_combined' => (string) ($data['single_combined'] ?? 'single'),
+            'room_id' => isset($data['room_id']) ? (int) $data['room_id'] : null,
             'is_active' => ((string) ($data['setting_is_active'] ?? '1')) === '1',
             'priority' => (int) ($data['priority'] ?? 5),
         ];
@@ -31,6 +32,7 @@ class CreateSubject extends CreateRecord
             $data['weekly_periods'],
             $data['max_periods_per_week'],
             $data['single_combined'],
+            $data['room_id'],
             $data['setting_is_active'],
             $data['priority'],
         );

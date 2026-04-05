@@ -40,6 +40,9 @@ class TimetableValidationService
     /** Active school-day map: [dayOfWeek => dayName], populated from TimetableSetting */
     private array $dayNames = [];
 
+    /** @var array<string, int|null> */
+    private array $subjectRoomCache = [];
+
     public function __construct()
     {
         // Load all dynamic settings from the database (with sensible defaults)
@@ -120,8 +123,8 @@ class TimetableValidationService
         $this->validateSingleSlot($existingSlots, $subject, $teacher, $day, $period, $classRoomId, $termId);
 
         return [
-            'errors' => $this->errors,
-            'warnings' => $this->warnings,
+            'errors' => $this->withSuggestions($this->errors),
+            'warnings' => $this->withSuggestions($this->warnings),
         ];
     }
 
@@ -144,11 +147,14 @@ class TimetableValidationService
         $this->validateHardConstraints($slots, $classRoomId, $termId);
         $this->validateSoftConstraints($slots, $classRoomId);
 
+        $errors = $this->withSuggestions($this->errors);
+        $warnings = $this->withSuggestions($this->warnings);
+
         return [
-            'errors' => $this->errors,
-            'warnings' => $this->warnings,
-            'has_errors' => count($this->errors) > 0,
-            'has_warnings' => count($this->warnings) > 0,
+            'errors' => $errors,
+            'warnings' => $warnings,
+            'has_errors' => count($errors) > 0,
+            'has_warnings' => count($warnings) > 0,
         ];
     }
 
@@ -169,11 +175,14 @@ class TimetableValidationService
         $this->validateHardConstraints($slots, $classRoomId, $termId);
         $this->validateSoftConstraints($slots, $classRoomId);
 
+        $errors = $this->withSuggestions($this->errors);
+        $warnings = $this->withSuggestions($this->warnings);
+
         return [
-            'errors' => $this->errors,
-            'warnings' => $this->warnings,
-            'has_errors' => count($this->errors) > 0,
-            'has_warnings' => count($this->warnings) > 0,
+            'errors' => $errors,
+            'warnings' => $warnings,
+            'has_errors' => count($errors) > 0,
+            'has_warnings' => count($warnings) > 0,
         ];
     }
 
@@ -262,6 +271,7 @@ class TimetableValidationService
                 'subject_type' => $slot->subject?->type ?? null,
                 'teacher_id' => $slot->teacher_id,
                 'teacher_name' => $slot->teacher?->name ?? 'Unknown',
+                'room_id' => $this->getAssignedRoomId($classRoomId, (int) $slot->subject_id),
             ];
         }
 
@@ -339,10 +349,13 @@ class TimetableValidationService
             $this->validateTeacherSlot($teacher, $day, $period, $dayName, $termId, $classRoomId);
         }
 
-        // 5. Check weekly requirements (warning if needed)
+        // 5. Check room/lab conflict constraints
+        $this->validateRoomSlot($classRoomId, $subject->id, $day, $period, $termId, $dayName);
+
+        // 6. Check weekly requirements (warning if needed)
         $this->checkWeeklySingleSlot($existingSlots, $subject, $classRoomId);
 
-        // 6. Soft validation - check if subject already appears today
+        // 7. Soft validation - check if subject already appears today
         if ($subjectCountToday > 0) {
             $this->warnings[] = [
                 'type' => 'daily_repetition',
@@ -626,14 +639,180 @@ class TimetableValidationService
         // 5. Check teacher constraints
         $this->checkTeacherConstraints($slots, $termId, $classRoomId);
 
-        // 6. Check subject allocations are balanced across the week
+        // 6. Check room/lab constraints
+        $this->checkRoomConstraints($slots, $termId, $classRoomId);
+
+        // 7. Check subject allocations are balanced across the week
         $this->checkSubjectWeeklyBalance($slots);
 
-        // 7. Check combined subjects only span sections of the same grade
+        // 8. Check combined subjects only span sections of the same grade
         $this->checkCombinedSubjectRules($classRoomId, $termId);
 
-        // 8. Check no physical activity subject in period 5
+        // 9. Check no physical activity subject in period 5
         $this->checkPhysicalSubjectFifthPeriod($slots);
+    }
+
+    /**
+     * HARD: Validate subject room assignment for a single slot.
+     */
+    private function validateRoomSlot(
+        int $classRoomId,
+        int $subjectId,
+        int $day,
+        int $period,
+        int $termId,
+        string $dayName
+    ): void {
+        $roomId = $this->getAssignedRoomId($classRoomId, $subjectId);
+        if (! $roomId) {
+            return;
+        }
+
+        $conflict = TimetableSlot::query()
+            ->where('academic_term_id', $termId)
+            ->where('day', $day)
+            ->where('period', $period)
+            ->where('class_room_id', '!=', $classRoomId)
+            ->whereExists(function ($query) use ($roomId): void {
+                $query->selectRaw('1')
+                    ->from('class_subject_settings')
+                    ->whereColumn('class_subject_settings.class_room_id', 'timetable_slots.class_room_id')
+                    ->whereColumn('class_subject_settings.subject_id', 'timetable_slots.subject_id')
+                    ->where('class_subject_settings.room_id', $roomId)
+                    ->where('class_subject_settings.is_active', true);
+            })
+            ->with(['classRoom', 'subject'])
+            ->first();
+
+        if (! $conflict) {
+            return;
+        }
+
+        $conflictClass = $conflict->classRoom ? "{$conflict->classRoom->name} {$conflict->classRoom->section}" : 'another class';
+        $conflictSubject = $conflict->subject?->name ?? 'another subject';
+
+        $this->errors[] = [
+            'type' => 'room_conflict',
+            'day' => $day,
+            'day_name' => $dayName,
+            'period' => $period,
+            'room_id' => $roomId,
+            'message' => sprintf(
+                'Assigned room/lab is already used by %s (%s) on %s Period %d.',
+                $conflictClass,
+                $conflictSubject,
+                $dayName,
+                $period,
+            ),
+        ];
+    }
+
+    /**
+     * HARD: Check room/lab clashes across classes.
+     */
+    private function checkRoomConstraints(array $slots, int $termId, int $classRoomId): void
+    {
+        foreach ($this->dayNames as $day => $dayName) {
+            if (! isset($slots[$day])) {
+                continue;
+            }
+
+            foreach ($slots[$day] as $period => $slot) {
+                if (! $slot || ! isset($slot['subject_id'])) {
+                    continue;
+                }
+
+                $subjectId = (int) $slot['subject_id'];
+                $roomId = $this->getAssignedRoomId($classRoomId, $subjectId);
+
+                if (! $roomId) {
+                    continue;
+                }
+
+                $conflictExists = TimetableSlot::query()
+                    ->where('academic_term_id', $termId)
+                    ->where('day', $day)
+                    ->where('period', $period)
+                    ->where('class_room_id', '!=', $classRoomId)
+                    ->whereExists(function ($query) use ($roomId): void {
+                        $query->selectRaw('1')
+                            ->from('class_subject_settings')
+                            ->whereColumn('class_subject_settings.class_room_id', 'timetable_slots.class_room_id')
+                            ->whereColumn('class_subject_settings.subject_id', 'timetable_slots.subject_id')
+                            ->where('class_subject_settings.room_id', $roomId)
+                            ->where('class_subject_settings.is_active', true);
+                    })
+                    ->exists();
+
+                if ($conflictExists) {
+                    $this->errors[] = [
+                        'type' => 'room_conflict',
+                        'day' => $day,
+                        'day_name' => $dayName,
+                        'period' => $period,
+                        'room_id' => $roomId,
+                        'message' => sprintf(
+                            '%s has a room/lab clash on %s Period %d. The assigned special room is used by another class.',
+                            $slot['subject_name'] ?? 'This subject',
+                            $dayName,
+                            $period,
+                        ),
+                    ];
+                }
+            }
+        }
+    }
+
+    private function getAssignedRoomId(int $classRoomId, int $subjectId): ?int
+    {
+        $key = "{$classRoomId}:{$subjectId}";
+
+        if (array_key_exists($key, $this->subjectRoomCache)) {
+            return $this->subjectRoomCache[$key];
+        }
+
+        $roomId = ClassSubjectSetting::query()
+            ->where('class_room_id', $classRoomId)
+            ->where('subject_id', $subjectId)
+            ->where('is_active', true)
+            ->value('room_id');
+
+        $this->subjectRoomCache[$key] = $roomId !== null ? (int) $roomId : null;
+
+        return $this->subjectRoomCache[$key];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $issues
+     * @return array<int, array<string, mixed>>
+     */
+    private function withSuggestions(array $issues): array
+    {
+        return array_map(function (array $issue): array {
+            if (isset($issue['suggestion']) && is_string($issue['suggestion']) && $issue['suggestion'] !== '') {
+                return $issue;
+            }
+
+            $type = (string) ($issue['type'] ?? '');
+            $suggestion = match ($type) {
+                'teacher_conflict' => 'Assign an available teacher for this period, or move one of the conflicting classes to another period.',
+                'teacher_unavailable' => 'Pick a period where the teacher is available, or assign another teacher for this subject.',
+                'teacher_workload' => 'Move one period to a less loaded day or split the load across additional qualified teachers.',
+                'subject_daily_limit' => 'Spread this subject across different days to keep daily repetitions within limits.',
+                'weekly_minimum' => 'Add more periods for this subject in currently empty or low-impact slots.',
+                'weekly_maximum' => 'Reduce this subject by replacing extra periods with under-scheduled subjects.',
+                'room_conflict' => 'Move one conflicting class to another period, or assign a different room/lab for one of the subjects.',
+                'empty_slots' => 'Fill empty slots with pending required subjects while respecting teacher and room constraints.',
+                'cognitive_load' => 'Insert a lighter subject between heavy subjects to improve learning flow.',
+                default => null,
+            };
+
+            if ($suggestion !== null) {
+                $issue['suggestion'] = $suggestion;
+            }
+
+            return $issue;
+        }, $issues);
     }
 
     /**

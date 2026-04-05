@@ -61,4 +61,18 @@ Route::middleware(['auth'])->group(function () {
 
         return $data->stream();
     })->name('print.teacher-preview');
+
+    Route::get('/print/room-preview', function () {
+        $roomId = request('room_id');
+        $termId = request('term_id');
+
+        if (! $roomId || ! $termId) {
+            abort(404, 'Missing parameters');
+        }
+
+        $printService = new TimetablePrintService;
+        $data = $printService->generateRoomSchedulePdf($roomId, $termId);
+
+        return $data->stream();
+    })->name('print.room-preview');
 });

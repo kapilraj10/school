@@ -6,6 +6,7 @@ use App\Filament\Pages\TimetableDesigner;
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\ClassSubjectSetting;
+use App\Models\Room;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimetableSlot;
@@ -240,6 +241,142 @@ class TimetableDesignerTest extends TestCase
             'day' => 1,
             'period' => 1,
             'subject_id' => $this->mathSubject->id, // Still the old subject
+        ]);
+    }
+
+    public function test_cannot_assign_slot_when_teacher_is_unavailable(): void
+    {
+        $availabilityMatrix = $this->teacher1->availability_matrix;
+        $availabilityMatrix['Mon'][1] = false;
+
+        $unavailableTeacher = Teacher::factory()->create([
+            'name' => 'Unavailable Teacher',
+            'status' => 'active',
+            'availability_matrix' => $availabilityMatrix,
+        ]);
+
+        $component = Livewire::test(TimetableDesigner::class)
+            ->set('selectedClassRoomId', $this->classRoom->id)
+            ->set('selectedTermId', $this->term->id)
+            ->call('assignSlot', 1, 1, $this->mathSubject->id, $unavailableTeacher->id)
+            ->assertNotified();
+
+        $errors = $component->get('validationErrors');
+        $this->assertNotEmpty($errors);
+        $this->assertNotNull(collect($errors)->firstWhere('type', 'teacher_unavailable'));
+
+        $this->assertDatabaseMissing('timetable_slots', [
+            'class_room_id' => $this->classRoom->id,
+            'academic_term_id' => $this->term->id,
+            'day' => 1,
+            'period' => 1,
+            'teacher_id' => $unavailableTeacher->id,
+        ]);
+    }
+
+    public function test_cannot_double_book_teacher_across_classes_on_manual_assignment(): void
+    {
+        $otherClass = ClassRoom::factory()->create([
+            'name' => 'Class 6',
+            'section' => 'B',
+            'status' => 'active',
+        ]);
+
+        TimetableSlot::factory()->create([
+            'class_room_id' => $otherClass->id,
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $this->englishSubject->id,
+            'teacher_id' => $this->teacher1->id,
+            'day' => 1,
+            'period' => 1,
+        ]);
+
+        $component = Livewire::test(TimetableDesigner::class)
+            ->set('selectedClassRoomId', $this->classRoom->id)
+            ->set('selectedTermId', $this->term->id)
+            ->call('assignSlot', 1, 1, $this->mathSubject->id, $this->teacher1->id)
+            ->assertNotified();
+
+        $errors = $component->get('validationErrors');
+        $this->assertNotEmpty($errors);
+        $this->assertNotNull(collect($errors)->firstWhere('type', 'teacher_conflict'));
+
+        $this->assertDatabaseMissing('timetable_slots', [
+            'class_room_id' => $this->classRoom->id,
+            'academic_term_id' => $this->term->id,
+            'day' => 1,
+            'period' => 1,
+            'teacher_id' => $this->teacher1->id,
+        ]);
+    }
+
+    public function test_detects_room_clash_and_returns_fix_suggestion(): void
+    {
+        $specialLab = Room::factory()->create([
+            'name' => 'Computer Lab A',
+            'code' => 'LAB-COMP-A',
+            'type' => 'computer_lab',
+            'status' => 'active',
+        ]);
+
+        ClassSubjectSetting::query()
+            ->where('class_room_id', $this->classRoom->id)
+            ->where('subject_id', $this->mathSubject->id)
+            ->update(['room_id' => $specialLab->id]);
+
+        $otherClass = ClassRoom::factory()->create([
+            'name' => 'Class 6',
+            'section' => 'C',
+            'status' => 'active',
+        ]);
+
+        $otherSubject = Subject::factory()->create([
+            'name' => 'Computer Science',
+            'code' => 'COMP-6C',
+            'class_room_id' => $otherClass->id,
+            'type' => 'core',
+            'status' => 'active',
+        ]);
+
+        ClassSubjectSetting::create([
+            'class_room_id' => $otherClass->id,
+            'subject_id' => $otherSubject->id,
+            'room_id' => $specialLab->id,
+            'min_periods_per_week' => 2,
+            'max_periods_per_week' => 4,
+            'weekly_periods' => 3,
+            'single_combined' => 'single',
+            'is_active' => true,
+        ]);
+
+        TimetableSlot::factory()->create([
+            'class_room_id' => $otherClass->id,
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $otherSubject->id,
+            'teacher_id' => $this->teacher2->id,
+            'day' => 1,
+            'period' => 1,
+        ]);
+
+        $component = Livewire::test(TimetableDesigner::class)
+            ->set('selectedClassRoomId', $this->classRoom->id)
+            ->set('selectedTermId', $this->term->id)
+            ->call('assignSlot', 1, 1, $this->mathSubject->id, $this->teacher1->id)
+            ->assertNotified();
+
+        $errors = $component->get('validationErrors');
+        $roomConflict = collect($errors)->firstWhere('type', 'room_conflict');
+
+        $this->assertNotNull($roomConflict);
+        $this->assertArrayHasKey('suggestion', $roomConflict);
+        $this->assertNotEmpty($roomConflict['suggestion']);
+
+        $this->assertDatabaseMissing('timetable_slots', [
+            'class_room_id' => $this->classRoom->id,
+            'academic_term_id' => $this->term->id,
+            'day' => 1,
+            'period' => 1,
+            'subject_id' => $this->mathSubject->id,
         ]);
     }
 

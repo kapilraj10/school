@@ -6,6 +6,7 @@ use App\Filament\Resources\SubjectResource\Pages\CreateSubject;
 use App\Filament\Resources\SubjectResource\Pages\EditSubject;
 use App\Models\ClassRoom;
 use App\Models\ClassSubjectSetting;
+use App\Models\Room;
 use App\Models\Subject;
 use App\Models\User;
 use Livewire\Livewire;
@@ -143,6 +144,48 @@ class SubjectManagementTest extends TestCase
         $this->assertDatabaseMissing('class_subject_settings', [
             'class_room_id' => $oldClassRoom->id,
             'subject_id' => $subject->id,
+        ]);
+    }
+
+    public function test_can_assign_special_room_for_subject_setting(): void
+    {
+        $classRoom = ClassRoom::factory()->create([
+            'name' => 'Class 8',
+            'section' => 'B',
+        ]);
+
+        $room = Room::factory()->create([
+            'name' => 'Computer Lab B',
+            'code' => 'LAB-COMP-B',
+            'type' => 'computer_lab',
+        ]);
+
+        Livewire::test(CreateSubject::class)
+            ->fillForm([
+                'name' => 'Computer Science',
+                'code' => 'COMP-8B',
+                'class_room_id' => $classRoom->id,
+                'type' => 'core',
+                'status' => 'active',
+                'min_periods_per_week' => 2,
+                'weekly_periods' => 4,
+                'max_periods_per_week' => 5,
+                'single_combined' => 'single',
+                'room_id' => $room->id,
+                'setting_is_active' => '1',
+                'priority' => 6,
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $subject = Subject::query()->where('code', 'COMP-8B')->first();
+
+        $this->assertNotNull($subject);
+
+        $this->assertDatabaseHas('class_subject_settings', [
+            'class_room_id' => $classRoom->id,
+            'subject_id' => $subject->id,
+            'room_id' => $room->id,
         ]);
     }
 }

@@ -10,6 +10,7 @@ class ClassSubjectSetting extends Model
     protected $fillable = [
         'class_room_id',
         'subject_id',
+        'room_id',
         'min_periods_per_week',
         'max_periods_per_week',
         'weekly_periods',
@@ -41,6 +42,14 @@ class ClassSubjectSetting extends Model
     public function subject(): BelongsTo
     {
         return $this->belongsTo(Subject::class);
+    }
+
+    /**
+     * Get the assigned special room/lab for this class-subject setting
+     */
+    public function room(): BelongsTo
+    {
+        return $this->belongsTo(Room::class);
     }
 
     /**

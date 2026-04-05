@@ -4,7 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
+use App\Models\ClassSubjectSetting;
+use App\Models\Room;
+use App\Models\Subject;
 use App\Models\Teacher;
+use App\Models\TimetableSlot;
 use App\Models\User;
 use App\Services\TimetablePrintService;
 use Tests\TestCase;
@@ -18,6 +22,10 @@ class PrintTimetableFeatureTest extends TestCase
     protected ClassRoom $class;
 
     protected Teacher $teacher;
+
+    protected Room $room;
+
+    protected Subject $subject;
 
     protected function setUp(): void
     {
@@ -52,6 +60,41 @@ class PrintTimetableFeatureTest extends TestCase
             'phone' => '1234567890',
             'status' => 'active',
         ]);
+
+        $this->room = Room::factory()->create([
+            'name' => 'Computer Lab A',
+            'code' => 'LAB-COMP-A',
+            'type' => 'computer_lab',
+            'status' => 'active',
+        ]);
+
+        $this->subject = Subject::factory()->create([
+            'name' => 'Computer Science',
+            'code' => 'COMP-10A',
+            'class_room_id' => $this->class->id,
+            'type' => 'core',
+            'status' => 'active',
+        ]);
+
+        ClassSubjectSetting::create([
+            'class_room_id' => $this->class->id,
+            'subject_id' => $this->subject->id,
+            'room_id' => $this->room->id,
+            'min_periods_per_week' => 2,
+            'max_periods_per_week' => 4,
+            'weekly_periods' => 3,
+            'single_combined' => 'single',
+            'is_active' => true,
+        ]);
+
+        TimetableSlot::factory()->create([
+            'class_room_id' => $this->class->id,
+            'subject_id' => $this->subject->id,
+            'teacher_id' => $this->teacher->id,
+            'academic_term_id' => $this->term->id,
+            'day' => 1,
+            'period' => 1,
+        ]);
     }
 
     public function test_timetable_print_service_can_generate_class_pdf(): void
@@ -69,6 +112,16 @@ class PrintTimetableFeatureTest extends TestCase
         $printService = new TimetablePrintService;
 
         $pdf = $printService->generateTeacherSchedulePdf($this->teacher->id, $this->term->id);
+
+        $this->assertNotNull($pdf);
+        $this->assertInstanceOf(\Barryvdh\DomPDF\PDF::class, $pdf);
+    }
+
+    public function test_timetable_print_service_can_generate_room_pdf(): void
+    {
+        $printService = new TimetablePrintService;
+
+        $pdf = $printService->generateRoomSchedulePdf($this->room->id, $this->term->id);
 
         $this->assertNotNull($pdf);
         $this->assertInstanceOf(\Barryvdh\DomPDF\PDF::class, $pdf);
@@ -114,6 +167,17 @@ class PrintTimetableFeatureTest extends TestCase
     {
         $response = $this->actingAs($this->user)->get(route('print.teacher-preview', [
             'teacher_id' => $this->teacher->id,
+            'term_id' => $this->term->id,
+        ]));
+
+        $response->assertStatus(200);
+        $response->assertHeader('content-type', 'application/pdf');
+    }
+
+    public function test_authenticated_user_can_access_room_print_preview(): void
+    {
+        $response = $this->actingAs($this->user)->get(route('print.room-preview', [
+            'room_id' => $this->room->id,
             'term_id' => $this->term->id,
         ]));
 

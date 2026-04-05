@@ -27,6 +27,7 @@ class EditSubject extends EditRecord
         $data['weekly_periods'] = $setting?->weekly_periods ?? 4;
         $data['max_periods_per_week'] = $setting?->max_periods_per_week ?? 6;
         $data['single_combined'] = $setting?->single_combined ?? 'single';
+        $data['room_id'] = $setting?->room_id;
         $data['setting_is_active'] = $setting?->is_active ? '1' : '0';
         $data['priority'] = $setting?->priority ?? 5;
 
@@ -40,6 +41,7 @@ class EditSubject extends EditRecord
             'weekly_periods' => (int) ($data['weekly_periods'] ?? 4),
             'max_periods_per_week' => (int) ($data['max_periods_per_week'] ?? 6),
             'single_combined' => (string) ($data['single_combined'] ?? 'single'),
+            'room_id' => isset($data['room_id']) ? (int) $data['room_id'] : null,
             'is_active' => ((string) ($data['setting_is_active'] ?? '1')) === '1',
             'priority' => (int) ($data['priority'] ?? 5),
         ];
@@ -49,6 +51,7 @@ class EditSubject extends EditRecord
             $data['weekly_periods'],
             $data['max_periods_per_week'],
             $data['single_combined'],
+            $data['room_id'],
             $data['setting_is_active'],
             $data['priority'],
         );
