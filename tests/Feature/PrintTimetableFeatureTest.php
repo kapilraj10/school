@@ -11,6 +11,7 @@ use App\Models\Teacher;
 use App\Models\TimetableSlot;
 use App\Models\User;
 use App\Services\TimetablePrintService;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class PrintTimetableFeatureTest extends TestCase
@@ -176,6 +177,9 @@ class PrintTimetableFeatureTest extends TestCase
 
     public function test_authenticated_user_can_access_room_print_preview(): void
     {
+        Role::findOrCreate('admin', 'web');
+        $this->user->assignRole('admin');
+
         $response = $this->actingAs($this->user)->get(route('print.room-preview', [
             'room_id' => $this->room->id,
             'term_id' => $this->term->id,

@@ -14,6 +14,7 @@ use Filament\Forms\Form;
 use Filament\Forms\Get;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Support\Facades\Auth;
 
 class PrintCenter extends Page implements HasForms
 {
@@ -33,6 +34,13 @@ class PrintCenter extends Page implements HasForms
 
     public ?array $data = [];
 
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+
+        return $user !== null && $user->hasAnyRole(['super-admin', 'admin', 'teacher', 'student']);
+    }
+
     public function mount(): void
     {
         $currentTerm = AcademicTerm::where('is_active', true)->first();
@@ -50,6 +58,8 @@ class PrintCenter extends Page implements HasForms
             'teacher_id' => $selectedTeacherId,
             'room_id' => $selectedRoomId,
         ]);
+
+        $this->enforceRolePrintConstraints();
     }
 
     public function form(Form $form): Form
@@ -65,15 +75,26 @@ class PrintCenter extends Page implements HasForms
 
                 Select::make('print_type')
                     ->label('Print Type')
-                    ->options([
-                        'class' => 'Class Timetable',
-                        'teacher' => 'Teacher Schedule',
-                        'room' => 'Room Schedule',
-                        'all_classes' => 'All Classes (Bulk)',
-                        'master' => 'Master Timetable',
-                    ])
+                    ->options(function (): array {
+                        if ($this->isTeacherUser()) {
+                            return ['teacher' => 'Teacher Schedule'];
+                        }
+
+                        if ($this->isStudentUser()) {
+                            return ['class' => 'Class Timetable'];
+                        }
+
+                        return [
+                            'class' => 'Class Timetable',
+                            'teacher' => 'Teacher Schedule',
+                            'room' => 'Room Schedule',
+                            'all_classes' => 'All Classes (Bulk)',
+                            'master' => 'Master Timetable',
+                        ];
+                    })
                     ->required()
                     ->live()
+                    ->disabled(fn (): bool => ! $this->isAdminUser())
                     ->native(false)
                     ->helperText('Select what you want to print'),
 
@@ -82,6 +103,7 @@ class PrintCenter extends Page implements HasForms
                     ->options(ClassRoom::active()->get()->mapWithKeys(fn ($c) => [$c->id => $c->full_name]))
                     ->visible(fn (Get $get) => $get('print_type') === 'class')
                     ->required(fn (Get $get) => $get('print_type') === 'class')
+                    ->disabled(fn (): bool => $this->isStudentUser())
                     ->native(false)
                     ->searchable(),
 
@@ -90,6 +112,7 @@ class PrintCenter extends Page implements HasForms
                     ->options(Teacher::active()->pluck('name', 'id'))
                     ->visible(fn (Get $get) => $get('print_type') === 'teacher')
                     ->required(fn (Get $get) => $get('print_type') === 'teacher')
+                    ->disabled(fn (): bool => $this->isTeacherUser())
                     ->native(false)
                     ->searchable(),
 
@@ -123,6 +146,8 @@ class PrintCenter extends Page implements HasForms
 
     public function generateOutput(string $format = 'pdf'): mixed
     {
+        $this->enforceRolePrintConstraints();
+
         $data = $this->form->getState();
         $data['format'] = $format;
 
@@ -334,5 +359,52 @@ class PrintCenter extends Page implements HasForms
         $filename = "room-schedule-{$room->name}-{$term->name}.xlsx";
 
         return $printService->exportRoomScheduleToExcel($roomId, $termId, $filename);
+    }
+
+    private function enforceRolePrintConstraints(): void
+    {
+        if ($this->isTeacherUser()) {
+            $teacher = $this->currentUserTeacher();
+
+            $this->data['print_type'] = 'teacher';
+            $this->data['teacher_id'] = $teacher?->id;
+            $this->data['class_room_id'] = null;
+            $this->data['room_id'] = null;
+
+            return;
+        }
+
+        if ($this->isStudentUser()) {
+            $this->data['print_type'] = 'class';
+            $this->data['class_room_id'] = Auth::user()?->class_room_id;
+            $this->data['teacher_id'] = null;
+            $this->data['room_id'] = null;
+        }
+    }
+
+    private function currentUserTeacher(): ?Teacher
+    {
+        $email = Auth::user()?->email;
+
+        if (! $email) {
+            return null;
+        }
+
+        return Teacher::active()->where('email', $email)->first();
+    }
+
+    private function isAdminUser(): bool
+    {
+        return (bool) Auth::user()?->hasAnyRole(['super-admin', 'admin']);
+    }
+
+    private function isTeacherUser(): bool
+    {
+        return (bool) Auth::user()?->hasRole('teacher');
+    }
+
+    private function isStudentUser(): bool
+    {
+        return (bool) Auth::user()?->hasRole('student');
     }
 }

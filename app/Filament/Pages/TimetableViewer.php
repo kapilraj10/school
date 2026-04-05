@@ -15,6 +15,7 @@ use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Enums\MaxWidth;
+use Illuminate\Support\Facades\Auth;
 
 class TimetableViewer extends Page implements HasForms
 {
@@ -63,9 +64,18 @@ class TimetableViewer extends Page implements HasForms
             'room_id' => $roomId,
         ]);
 
+        $this->enforceRoleViewConstraints();
+
         if ($selectedTermId) {
             $this->loadTimetable();
         }
+    }
+
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+
+        return $user !== null && $user->hasAnyRole(['super-admin', 'admin', 'teacher', 'student']);
     }
 
     public function form(Form $form): Form
@@ -74,14 +84,25 @@ class TimetableViewer extends Page implements HasForms
             ->schema([
                 Select::make('view_type')
                     ->label('View By')
-                    ->options([
-                        'class' => 'Class',
-                        'teacher' => 'Teacher',
-                        'room' => 'Room',
-                    ])
+                    ->options(function (): array {
+                        if ($this->isTeacherUser()) {
+                            return ['teacher' => 'Teacher'];
+                        }
+
+                        if ($this->isStudentUser()) {
+                            return ['class' => 'Class'];
+                        }
+
+                        return [
+                            'class' => 'Class',
+                            'teacher' => 'Teacher',
+                            'room' => 'Room',
+                        ];
+                    })
                     ->default('class')
                     ->required()
                     ->live()
+                    ->disabled(fn (): bool => ! $this->isAdminUser())
                     ->afterStateUpdated(function (): void {
                         $this->timetableData = null;
                         $this->loadTimetable();
@@ -102,6 +123,7 @@ class TimetableViewer extends Page implements HasForms
                     ->options(ClassRoom::active()->get()->mapWithKeys(fn ($c) => [$c->id => $c->full_name]))
                     ->required(fn ($get): bool => ($get('view_type') ?? 'class') === 'class')
                     ->visible(fn ($get): bool => ($get('view_type') ?? 'class') === 'class')
+                    ->disabled(fn (): bool => $this->isStudentUser())
                     ->live()
                     ->afterStateUpdated(fn () => $this->loadTimetable())
                     ->native(false)
@@ -112,6 +134,7 @@ class TimetableViewer extends Page implements HasForms
                     ->options(Teacher::active()->pluck('name', 'id'))
                     ->required(fn ($get): bool => ($get('view_type') ?? 'class') === 'teacher')
                     ->visible(fn ($get): bool => ($get('view_type') ?? 'class') === 'teacher')
+                    ->disabled(fn (): bool => $this->isTeacherUser())
                     ->live()
                     ->afterStateUpdated(fn () => $this->loadTimetable())
                     ->native(false)
@@ -133,6 +156,8 @@ class TimetableViewer extends Page implements HasForms
 
     public function loadTimetable(): void
     {
+        $this->enforceRoleViewConstraints();
+
         $data = $this->form->getState();
 
         if (! isset($data['academic_term_id'])) {
@@ -253,7 +278,7 @@ class TimetableViewer extends Page implements HasForms
                 ->icon('heroicon-m-printer')
                 ->color('gray')
                 ->extraAttributes(['onclick' => 'window.print()'])
-                ->visible(fn () => isset($this->data['academic_term_id']) && isset($this->data['class_room_id'])),
+                ->visible(fn (): bool => $this->timetableData !== null),
 
             Action::make('goToPrintCenter')
                 ->label('Export / Print')
@@ -272,5 +297,64 @@ class TimetableViewer extends Page implements HasForms
                 })
                 ->visible(fn () => isset($this->data['academic_term_id'])),
         ];
+    }
+
+    private function enforceRoleViewConstraints(): void
+    {
+        if ($this->isTeacherUser()) {
+            $teacher = $this->currentUserTeacher();
+
+            if (! $teacher) {
+                $this->timetableData = null;
+
+                Notification::make()
+                    ->warning()
+                    ->title('Teacher profile not linked')
+                    ->body('Please ask admin to link your user email with a teacher record.')
+                    ->send();
+
+                return;
+            }
+
+            $this->data['view_type'] = 'teacher';
+            $this->data['teacher_id'] = $teacher->id;
+            $this->data['class_room_id'] = null;
+            $this->data['room_id'] = null;
+        }
+
+        if ($this->isStudentUser()) {
+            $classRoomId = Auth::user()?->class_room_id;
+
+            $this->data['view_type'] = 'class';
+            $this->data['class_room_id'] = $classRoomId;
+            $this->data['teacher_id'] = null;
+            $this->data['room_id'] = null;
+        }
+    }
+
+    private function currentUserTeacher(): ?Teacher
+    {
+        $email = Auth::user()?->email;
+
+        if (! $email) {
+            return null;
+        }
+
+        return Teacher::active()->where('email', $email)->first();
+    }
+
+    private function isAdminUser(): bool
+    {
+        return (bool) Auth::user()?->hasAnyRole(['super-admin', 'admin']);
+    }
+
+    private function isTeacherUser(): bool
+    {
+        return (bool) Auth::user()?->hasRole('teacher');
+    }
+
+    private function isStudentUser(): bool
+    {
+        return (bool) Auth::user()?->hasRole('student');
     }
 }

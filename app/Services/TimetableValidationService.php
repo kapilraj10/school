@@ -5,6 +5,9 @@ namespace App\Services;
 use App\Models\ClassRoom;
 use App\Models\ClassSubjectSetting;
 use App\Models\CombinedPeriod;
+use App\Models\ExamSchedule;
+use App\Models\Holiday;
+use App\Models\SpecialEvent;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimetableSetting;
@@ -300,6 +303,9 @@ class TimetableValidationService
     ): void {
         $dayName = $this->dayNames[$day] ?? "Day {$day}";
 
+        // 0. Academic calendar constraints
+        $this->validateAcademicCalendarConstraints($classRoomId, $termId, $day, $period, $dayName);
+
         // 1. Check subject daily limit (max 2 periods per day for this subject)
         $subjectCountToday = 0;
         foreach ($existingSlots[$day] ?? [] as $p => $slot) {
@@ -553,6 +559,91 @@ class TimetableValidationService
                     $periodsToday,
                     $dayName,
                     $this->maxTeacherPeriodsPerDay
+                ),
+            ];
+        }
+    }
+
+    /**
+     * Validate calendar-based restrictions (holidays, exams, special events).
+     */
+    private function validateAcademicCalendarConstraints(
+        int $classRoomId,
+        int $termId,
+        int $day,
+        int $period,
+        string $dayName
+    ): void {
+        $term = \App\Models\AcademicTerm::query()->find($termId);
+
+        if (! $term) {
+            return;
+        }
+
+        $recurringHoliday = Holiday::query()
+            ->where('type', 'recurring')
+            ->get()
+            ->first(function (Holiday $holiday) use ($day) {
+                return (int) $holiday->date->dayOfWeek === $day;
+            });
+
+        if ($recurringHoliday) {
+            $this->errors[] = [
+                'type' => 'holiday_conflict',
+                'day' => $day,
+                'day_name' => $dayName,
+                'period' => $period,
+                'message' => sprintf(
+                    '%s is marked as a recurring holiday (%s).',
+                    $dayName,
+                    $recurringHoliday->name
+                ),
+            ];
+        }
+
+        $examConflict = ExamSchedule::query()
+            ->where('academic_term_id', $termId)
+            ->where('day_of_week', $day)
+            ->where(function ($query) use ($classRoomId) {
+                $query->where('is_school_wide', true)
+                    ->orWhere('class_room_id', $classRoomId);
+            })
+            ->first();
+
+        if ($examConflict) {
+            $this->errors[] = [
+                'type' => 'exam_schedule_conflict',
+                'day' => $day,
+                'day_name' => $dayName,
+                'period' => $period,
+                'message' => sprintf(
+                    'Exam scheduled on %s (%s). Timetable slot assignment is blocked.',
+                    $dayName,
+                    $examConflict->title
+                ),
+            ];
+        }
+
+        $eventConflict = SpecialEvent::query()
+            ->where('academic_term_id', $termId)
+            ->where('day_of_week', $day)
+            ->where('blocks_timetable', true)
+            ->where(function ($query) use ($classRoomId) {
+                $query->where('is_school_wide', true)
+                    ->orWhere('class_room_id', $classRoomId);
+            })
+            ->first();
+
+        if ($eventConflict) {
+            $this->errors[] = [
+                'type' => 'special_event_conflict',
+                'day' => $day,
+                'day_name' => $dayName,
+                'period' => $period,
+                'message' => sprintf(
+                    'Special event on %s (%s) blocks timetable assignments.',
+                    $dayName,
+                    $eventConflict->name
                 ),
             ];
         }

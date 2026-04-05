@@ -6,7 +6,10 @@ use App\Filament\Pages\TimetableDesigner;
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\ClassSubjectSetting;
+use App\Models\ExamSchedule;
+use App\Models\Holiday;
 use App\Models\Room;
+use App\Models\SpecialEvent;
 use App\Models\Subject;
 use App\Models\Teacher;
 use App\Models\TimetableSlot;
@@ -378,6 +381,200 @@ class TimetableDesignerTest extends TestCase
             'period' => 1,
             'subject_id' => $this->mathSubject->id,
         ]);
+    }
+
+    public function test_can_apply_substitute_teacher_to_existing_slot(): void
+    {
+        $slot = TimetableSlot::factory()->create([
+            'class_room_id' => $this->classRoom->id,
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $this->mathSubject->id,
+            'teacher_id' => $this->teacher1->id,
+            'day' => 1,
+            'period' => 1,
+        ]);
+
+        Livewire::test(TimetableDesigner::class)
+            ->set('selectedClassRoomId', $this->classRoom->id)
+            ->set('selectedTermId', $this->term->id)
+            ->call('loadTimetable')
+            ->call('applySubstituteTeacher', 1, 1, $this->teacher2->id, 'Teacher on leave', null)
+            ->assertNotified();
+
+        $this->assertDatabaseHas('timetable_slots', [
+            'id' => $slot->id,
+            'teacher_id' => $this->teacher2->id,
+            'is_temporary' => true,
+            'temporary_type' => 'substitute_teacher',
+            'original_teacher_id' => $this->teacher1->id,
+        ]);
+    }
+
+    public function test_cannot_apply_substitute_teacher_when_teacher_conflicts(): void
+    {
+        TimetableSlot::factory()->create([
+            'class_room_id' => $this->classRoom->id,
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $this->mathSubject->id,
+            'teacher_id' => $this->teacher1->id,
+            'day' => 1,
+            'period' => 1,
+        ]);
+
+        $otherClass = ClassRoom::factory()->create([
+            'name' => 'Class 7',
+            'section' => 'A',
+            'status' => 'active',
+        ]);
+
+        TimetableSlot::factory()->create([
+            'class_room_id' => $otherClass->id,
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $this->englishSubject->id,
+            'teacher_id' => $this->teacher2->id,
+            'day' => 1,
+            'period' => 1,
+        ]);
+
+        $component = Livewire::test(TimetableDesigner::class)
+            ->set('selectedClassRoomId', $this->classRoom->id)
+            ->set('selectedTermId', $this->term->id)
+            ->call('loadTimetable')
+            ->call('applySubstituteTeacher', 1, 1, $this->teacher2->id, 'Emergency replacement', null)
+            ->assertNotified();
+
+        $errors = $component->get('validationErrors');
+        $this->assertNotNull(collect($errors)->firstWhere('type', 'teacher_conflict'));
+
+        $this->assertDatabaseHas('timetable_slots', [
+            'class_room_id' => $this->classRoom->id,
+            'academic_term_id' => $this->term->id,
+            'day' => 1,
+            'period' => 1,
+            'teacher_id' => $this->teacher1->id,
+            'is_temporary' => false,
+        ]);
+    }
+
+    public function test_can_apply_temporary_schedule_change_and_revert_it(): void
+    {
+        $slot = TimetableSlot::factory()->create([
+            'class_room_id' => $this->classRoom->id,
+            'academic_term_id' => $this->term->id,
+            'subject_id' => $this->mathSubject->id,
+            'teacher_id' => $this->teacher1->id,
+            'day' => 2,
+            'period' => 2,
+        ]);
+
+        $component = Livewire::test(TimetableDesigner::class)
+            ->set('selectedClassRoomId', $this->classRoom->id)
+            ->set('selectedTermId', $this->term->id)
+            ->call('loadTimetable')
+            ->call(
+                'applyTemporaryScheduleChange',
+                2,
+                2,
+                $this->englishSubject->id,
+                $this->teacher2->id,
+                'Special event week',
+                null
+            )
+            ->assertNotified();
+
+        $this->assertDatabaseHas('timetable_slots', [
+            'id' => $slot->id,
+            'subject_id' => $this->englishSubject->id,
+            'teacher_id' => $this->teacher2->id,
+            'is_temporary' => true,
+            'temporary_type' => 'schedule_adjustment',
+            'original_subject_id' => $this->mathSubject->id,
+            'original_teacher_id' => $this->teacher1->id,
+        ]);
+
+        $component->call('revertTemporaryChange', 2, 2)
+            ->assertNotified();
+
+        $this->assertDatabaseHas('timetable_slots', [
+            'id' => $slot->id,
+            'subject_id' => $this->mathSubject->id,
+            'teacher_id' => $this->teacher1->id,
+            'is_temporary' => false,
+            'temporary_type' => null,
+            'original_subject_id' => null,
+            'original_teacher_id' => null,
+        ]);
+    }
+
+    public function test_cannot_assign_slot_on_recurring_holiday_day(): void
+    {
+        Holiday::query()->create([
+            'name' => 'Weekly School Closure',
+            'date' => now()->next('Monday')->toDateString(),
+            'type' => 'recurring',
+            'description' => 'Recurring closure every Monday',
+        ]);
+
+        $component = Livewire::test(TimetableDesigner::class)
+            ->set('selectedClassRoomId', $this->classRoom->id)
+            ->set('selectedTermId', $this->term->id)
+            ->call('assignSlot', 1, 1, $this->mathSubject->id, $this->teacher1->id)
+            ->assertNotified();
+
+        $errors = $component->get('validationErrors');
+        $this->assertNotNull(collect($errors)->firstWhere('type', 'holiday_conflict'));
+
+        $this->assertDatabaseMissing('timetable_slots', [
+            'class_room_id' => $this->classRoom->id,
+            'academic_term_id' => $this->term->id,
+            'day' => 1,
+            'period' => 1,
+        ]);
+    }
+
+    public function test_cannot_assign_slot_when_exam_is_scheduled_for_the_day(): void
+    {
+        ExamSchedule::query()->create([
+            'academic_term_id' => $this->term->id,
+            'class_room_id' => null,
+            'title' => 'School-wide Midterm',
+            'exam_type' => 'midterm',
+            'date' => now()->addDays(7)->toDateString(),
+            'day_of_week' => 2,
+            'is_school_wide' => true,
+        ]);
+
+        $component = Livewire::test(TimetableDesigner::class)
+            ->set('selectedClassRoomId', $this->classRoom->id)
+            ->set('selectedTermId', $this->term->id)
+            ->call('assignSlot', 2, 1, $this->englishSubject->id, $this->teacher2->id)
+            ->assertNotified();
+
+        $errors = $component->get('validationErrors');
+        $this->assertNotNull(collect($errors)->firstWhere('type', 'exam_schedule_conflict'));
+    }
+
+    public function test_cannot_assign_slot_when_blocking_special_event_exists(): void
+    {
+        SpecialEvent::query()->create([
+            'academic_term_id' => $this->term->id,
+            'class_room_id' => null,
+            'name' => 'Sports Meet',
+            'event_type' => 'event',
+            'date' => now()->addDays(9)->toDateString(),
+            'day_of_week' => 3,
+            'is_school_wide' => true,
+            'blocks_timetable' => true,
+        ]);
+
+        $component = Livewire::test(TimetableDesigner::class)
+            ->set('selectedClassRoomId', $this->classRoom->id)
+            ->set('selectedTermId', $this->term->id)
+            ->call('assignSlot', 3, 2, $this->mathSubject->id, $this->teacher1->id)
+            ->assertNotified();
+
+        $errors = $component->get('validationErrors');
+        $this->assertNotNull(collect($errors)->firstWhere('type', 'special_event_conflict'));
     }
 
     public function test_can_remove_slot(): void

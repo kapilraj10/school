@@ -21,6 +21,8 @@ class RolesAndPermissionsSeeder extends Seeder
 
         $superAdmin = Role::findOrCreate('super-admin', 'web');
         $admin = Role::findOrCreate('admin', 'web');
+        $teacher = Role::findOrCreate('teacher', 'web');
+        $student = Role::findOrCreate('student', 'web');
         $volunteer = Role::findOrCreate('volunteer', 'web');
 
         $allPermissions = Permission::query()->pluck('name')->all();
@@ -43,12 +45,24 @@ class RolesAndPermissionsSeeder extends Seeder
             'academic_term.view',
             'holiday.list',
             'holiday.view',
+            'exam_schedule.list',
+            'exam_schedule.view',
+            'special_event.list',
+            'special_event.view',
             'combined_period.list',
             'combined_period.view',
             'class_subject_setting.list',
             'class_subject_setting.view',
             'timetable_setting.list',
             'timetable_setting.view',
+        ]);
+
+        $teacher->syncPermissions([
+            'dashboard.view',
+        ]);
+
+        $student->syncPermissions([
+            'dashboard.view',
         ]);
 
         $adminUser = User::query()->where('email', 'admin@admin.com')->first();

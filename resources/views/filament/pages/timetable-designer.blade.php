@@ -111,6 +111,15 @@
                                                                             👤 {{ $slot['teacher_name'] }}
                                                                         </div>
                                                                     @endif
+
+                                                                    @if($slot['is_temporary'] ?? false)
+                                                                        <div class="text-[10px] font-medium text-orange-700 dark:text-orange-300 bg-orange-100 dark:bg-orange-900/30 border border-orange-300 dark:border-orange-700 rounded px-1 py-0.5">
+                                                                            TEMP · {{ str_replace('_', ' ', $slot['temporary_type'] ?? 'adjustment') }}
+                                                                            @if(!empty($slot['temporary_effective_until']))
+                                                                                (till {{ $slot['temporary_effective_until'] }})
+                                                                            @endif
+                                                                        </div>
+                                                                    @endif
                                                                     
                                                                     {{-- Action Buttons --}}
                                                                     <div class="flex gap-1 mt-2">
@@ -136,6 +145,17 @@
                                                                             >
                                                                                 ✕
                                                                             </button>
+
+                                                                            @if($slot['is_temporary'] ?? false)
+                                                                                <button
+                                                                                    type="button"
+                                                                                    wire:click="revertTemporaryChange({{ $day }}, {{ $period }})"
+                                                                                    class="text-xs px-2 py-1 rounded bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/30 text-orange-600 dark:text-orange-400"
+                                                                                    title="Revert temporary change"
+                                                                                >
+                                                                                    ↩
+                                                                                </button>
+                                                                            @endif
                                                                         @endif
                                                                     </div>
                                                                 </div>

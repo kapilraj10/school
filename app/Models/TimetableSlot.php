@@ -85,29 +85,39 @@ class TimetableSlot extends Model
     protected $fillable = [
         'class_room_id',
         'subject_id',
+        'original_subject_id',
         'teacher_id',
+        'original_teacher_id',
         'academic_term_id',
         'combined_period_id',
         'day',
         'period',
         'date',
+        'temporary_effective_from',
+        'temporary_effective_until',
         'start_time',
         'end_time',
         'type',
+        'temporary_type',
         'status',
         'is_locked',
         'is_combined',
+        'is_temporary',
         'notes',
+        'temporary_reason',
     ];
 
     protected $casts = [
         'day' => 'integer',
         'period' => 'integer',
         'date' => 'date',
+        'temporary_effective_from' => 'date',
+        'temporary_effective_until' => 'date',
         'start_time' => 'datetime',
         'end_time' => 'datetime',
         'is_locked' => 'boolean',
         'is_combined' => 'boolean',
+        'is_temporary' => 'boolean',
     ];
 
     /**
@@ -127,11 +137,27 @@ class TimetableSlot extends Model
     }
 
     /**
+     * Get the original subject for temporary slot changes
+     */
+    public function originalSubject(): BelongsTo
+    {
+        return $this->belongsTo(Subject::class, 'original_subject_id');
+    }
+
+    /**
      * Get the teacher for this slot
      */
     public function teacher(): BelongsTo
     {
         return $this->belongsTo(Teacher::class);
+    }
+
+    /**
+     * Get the original teacher for temporary substitutions
+     */
+    public function originalTeacher(): BelongsTo
+    {
+        return $this->belongsTo(Teacher::class, 'original_teacher_id');
     }
 
     /**

@@ -11,14 +11,17 @@ use App\Models\TimetableSlot;
 use App\Services\GeneticAlgorithmTimetableService;
 use App\Services\TimetableValidationService;
 use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Illuminate\Support\Collection;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class TimetableDesigner extends Page implements HasForms
 {
@@ -154,7 +157,7 @@ class TimetableDesigner extends Page implements HasForms
         // Load existing slots from database
         $slots = TimetableSlot::where('class_room_id', $this->selectedClassRoomId)
             ->where('academic_term_id', $this->selectedTermId)
-            ->with(['subject', 'teacher'])
+            ->with(['subject', 'teacher', 'originalSubject', 'originalTeacher'])
             ->get();
 
         foreach ($slots as $slot) {
@@ -165,9 +168,18 @@ class TimetableDesigner extends Page implements HasForms
                 'subject_name' => $slot->subject?->name,
                 'subject_code' => $slot->subject?->code,
                 'teacher_name' => $slot->teacher?->name,
+                'original_subject_id' => $slot->original_subject_id,
+                'original_teacher_id' => $slot->original_teacher_id,
+                'original_subject_name' => $slot->originalSubject?->name,
+                'original_teacher_name' => $slot->originalTeacher?->name,
                 'is_locked' => $slot->is_locked,
                 'is_combined' => $slot->is_combined,
+                'is_temporary' => $slot->is_temporary,
                 'type' => $slot->type,
+                'temporary_type' => $slot->temporary_type,
+                'temporary_reason' => $slot->temporary_reason,
+                'temporary_effective_from' => $slot->temporary_effective_from?->toDateString(),
+                'temporary_effective_until' => $slot->temporary_effective_until?->toDateString(),
             ];
         }
 
@@ -252,6 +264,13 @@ class TimetableDesigner extends Page implements HasForms
                     'subject_id' => $subjectId,
                     'teacher_id' => $teacherId,
                     'type' => 'regular',
+                    'is_temporary' => false,
+                    'original_subject_id' => null,
+                    'original_teacher_id' => null,
+                    'temporary_type' => null,
+                    'temporary_reason' => null,
+                    'temporary_effective_from' => null,
+                    'temporary_effective_until' => null,
                 ]
             );
         } catch (QueryException $exception) {
@@ -277,7 +296,16 @@ class TimetableDesigner extends Page implements HasForms
             'teacher_name' => $teacher?->name,
             'is_locked' => false,
             'is_combined' => false,
+            'is_temporary' => false,
             'type' => 'regular',
+            'temporary_type' => null,
+            'temporary_reason' => null,
+            'temporary_effective_from' => null,
+            'temporary_effective_until' => null,
+            'original_subject_id' => null,
+            'original_teacher_id' => null,
+            'original_subject_name' => null,
+            'original_teacher_name' => null,
         ];
 
         // Recalculate placements and constraint status
@@ -342,6 +370,303 @@ class TimetableDesigner extends Page implements HasForms
         Notification::make()
             ->success()
             ->title('Slot removed successfully')
+            ->send();
+    }
+
+    /**
+     * Assign a substitute teacher for an existing slot.
+     */
+    public function applySubstituteTeacher(int $day, int $period, int $substituteTeacherId, ?string $reason = null, ?string $effectiveUntil = null): void
+    {
+        if (! $this->selectedClassRoomId || ! $this->selectedTermId) {
+            Notification::make()
+                ->warning()
+                ->title('Please select a class and term first')
+                ->send();
+
+            return;
+        }
+
+        $slotState = $this->timetableSlots[$day][$period] ?? null;
+
+        if (! $slotState) {
+            Notification::make()
+                ->warning()
+                ->title('Cannot substitute an empty slot')
+                ->send();
+
+            return;
+        }
+
+        if (($slotState['is_locked'] ?? false) === true) {
+            Notification::make()
+                ->warning()
+                ->title('Cannot update a locked slot')
+                ->send();
+
+            return;
+        }
+
+        $slot = TimetableSlot::query()->find($slotState['id']);
+
+        if (! $slot) {
+            Notification::make()
+                ->danger()
+                ->title('Slot not found')
+                ->send();
+
+            return;
+        }
+
+        $originalTeacherId = $slot->teacher_id;
+
+        if ($originalTeacherId === $substituteTeacherId) {
+            Notification::make()
+                ->warning()
+                ->title('Substitute teacher is already assigned to this slot')
+                ->send();
+
+            return;
+        }
+
+        $validationService = app(TimetableValidationService::class);
+        $validationResult = $validationService->validateSlotAssignment(
+            $this->selectedClassRoomId,
+            $this->selectedTermId,
+            (int) $slot->subject_id,
+            $substituteTeacherId,
+            $day,
+            $period,
+        );
+
+        $this->validationErrors = $validationResult['errors'] ?? [];
+        $this->validationWarnings = $validationResult['warnings'] ?? [];
+
+        if (! empty($this->validationErrors)) {
+            Notification::make()
+                ->danger()
+                ->title('Cannot assign substitute teacher')
+                ->body(collect($this->validationErrors)->pluck('message')->filter()->take(2)->implode(' '))
+                ->send();
+
+            return;
+        }
+
+        try {
+            $slot->update([
+                'teacher_id' => $substituteTeacherId,
+                'is_temporary' => true,
+                'temporary_type' => 'substitute_teacher',
+                'temporary_reason' => $reason,
+                'temporary_effective_from' => Carbon::today()->toDateString(),
+                'temporary_effective_until' => $effectiveUntil,
+                'original_teacher_id' => $slot->original_teacher_id ?? $originalTeacherId,
+            ]);
+        } catch (QueryException) {
+            Notification::make()
+                ->danger()
+                ->title('Cannot assign substitute teacher')
+                ->body('Teacher is already assigned to another class at this time.')
+                ->send();
+
+            return;
+        }
+
+        $this->loadTimetable();
+
+        Notification::make()
+            ->success()
+            ->title('Substitute teacher assigned successfully')
+            ->send();
+    }
+
+    /**
+     * Apply a temporary subject/teacher change for an existing slot.
+     */
+    public function applyTemporaryScheduleChange(
+        int $day,
+        int $period,
+        int $subjectId,
+        ?int $teacherId = null,
+        ?string $reason = null,
+        ?string $effectiveUntil = null
+    ): void {
+        if (! $this->selectedClassRoomId || ! $this->selectedTermId) {
+            Notification::make()
+                ->warning()
+                ->title('Please select a class and term first')
+                ->send();
+
+            return;
+        }
+
+        $slotState = $this->timetableSlots[$day][$period] ?? null;
+
+        if (! $slotState) {
+            Notification::make()
+                ->warning()
+                ->title('Cannot apply temporary change to an empty slot')
+                ->send();
+
+            return;
+        }
+
+        if (($slotState['is_locked'] ?? false) === true) {
+            Notification::make()
+                ->warning()
+                ->title('Cannot update a locked slot')
+                ->send();
+
+            return;
+        }
+
+        $slot = TimetableSlot::query()->find($slotState['id']);
+
+        if (! $slot) {
+            Notification::make()
+                ->danger()
+                ->title('Slot not found')
+                ->send();
+
+            return;
+        }
+
+        $validationService = app(TimetableValidationService::class);
+        $validationResult = $validationService->validateSlotAssignment(
+            $this->selectedClassRoomId,
+            $this->selectedTermId,
+            $subjectId,
+            $teacherId,
+            $day,
+            $period,
+        );
+
+        $this->validationErrors = $validationResult['errors'] ?? [];
+        $this->validationWarnings = $validationResult['warnings'] ?? [];
+
+        if (! empty($this->validationErrors)) {
+            Notification::make()
+                ->danger()
+                ->title('Cannot apply temporary change')
+                ->body(collect($this->validationErrors)->pluck('message')->filter()->take(2)->implode(' '))
+                ->send();
+
+            return;
+        }
+
+        try {
+            $slot->update([
+                'subject_id' => $subjectId,
+                'teacher_id' => $teacherId,
+                'is_temporary' => true,
+                'temporary_type' => 'schedule_adjustment',
+                'temporary_reason' => $reason,
+                'temporary_effective_from' => Carbon::today()->toDateString(),
+                'temporary_effective_until' => $effectiveUntil,
+                'original_subject_id' => $slot->original_subject_id ?? $slotState['subject_id'],
+                'original_teacher_id' => $slot->original_teacher_id ?? $slotState['teacher_id'],
+            ]);
+        } catch (QueryException) {
+            Notification::make()
+                ->danger()
+                ->title('Cannot apply temporary change')
+                ->body('Teacher is already assigned to another class at this time.')
+                ->send();
+
+            return;
+        }
+
+        $this->loadTimetable();
+
+        Notification::make()
+            ->success()
+            ->title('Temporary schedule change applied')
+            ->send();
+    }
+
+    /**
+     * Revert a temporary substitution or temporary schedule change.
+     */
+    public function revertTemporaryChange(int $day, int $period): void
+    {
+        $slotState = $this->timetableSlots[$day][$period] ?? null;
+
+        if (! $slotState) {
+            return;
+        }
+
+        if (($slotState['is_locked'] ?? false) === true) {
+            Notification::make()
+                ->warning()
+                ->title('Cannot update a locked slot')
+                ->send();
+
+            return;
+        }
+
+        if (($slotState['is_temporary'] ?? false) !== true) {
+            Notification::make()
+                ->warning()
+                ->title('This slot has no temporary change to revert')
+                ->send();
+
+            return;
+        }
+
+        $slot = TimetableSlot::query()->find($slotState['id']);
+
+        if (! $slot) {
+            Notification::make()
+                ->danger()
+                ->title('Slot not found')
+                ->send();
+
+            return;
+        }
+
+        $restoreSubjectId = $slot->original_subject_id ?? $slot->subject_id;
+        $restoreTeacherId = $slot->original_teacher_id ?? $slot->teacher_id;
+
+        $validationService = app(TimetableValidationService::class);
+        $validationResult = $validationService->validateSlotAssignment(
+            (int) $slot->class_room_id,
+            (int) $slot->academic_term_id,
+            (int) $restoreSubjectId,
+            $restoreTeacherId,
+            $day,
+            $period,
+        );
+
+        $this->validationErrors = $validationResult['errors'] ?? [];
+        $this->validationWarnings = $validationResult['warnings'] ?? [];
+
+        if (! empty($this->validationErrors)) {
+            Notification::make()
+                ->danger()
+                ->title('Cannot revert temporary change')
+                ->body(collect($this->validationErrors)->pluck('message')->filter()->take(2)->implode(' '))
+                ->send();
+
+            return;
+        }
+
+        $slot->update([
+            'subject_id' => $restoreSubjectId,
+            'teacher_id' => $restoreTeacherId,
+            'is_temporary' => false,
+            'temporary_type' => null,
+            'temporary_reason' => null,
+            'temporary_effective_from' => null,
+            'temporary_effective_until' => null,
+            'original_subject_id' => null,
+            'original_teacher_id' => null,
+        ]);
+
+        $this->loadTimetable();
+
+        Notification::make()
+            ->success()
+            ->title('Temporary change reverted')
             ->send();
     }
 
@@ -622,7 +947,132 @@ class TimetableDesigner extends Page implements HasForms
                 ->color('primary')
                 ->requiresConfirmation()
                 ->action('autoGenerate'),
+
+            Action::make('substituteTeacher')
+                ->label('Substitute Teacher')
+                ->icon('heroicon-o-user-plus')
+                ->color('info')
+                ->form([
+                    Select::make('day')
+                        ->label('Day')
+                        ->options($this->days)
+                        ->required(),
+                    Select::make('period')
+                        ->label('Period')
+                        ->options($this->getPeriodOptions())
+                        ->required(),
+                    Select::make('substitute_teacher_id')
+                        ->label('Substitute Teacher')
+                        ->options(
+                            Teacher::query()
+                                ->where('status', 'active')
+                                ->pluck('name', 'id')
+                        )
+                        ->searchable()
+                        ->required(),
+                    DatePicker::make('temporary_effective_until')
+                        ->label('Effective Until')
+                        ->native(false),
+                    Textarea::make('temporary_reason')
+                        ->label('Reason')
+                        ->rows(3)
+                        ->maxLength(1000),
+                ])
+                ->action(function (array $data): void {
+                    $this->applySubstituteTeacher(
+                        (int) $data['day'],
+                        (int) $data['period'],
+                        (int) $data['substitute_teacher_id'],
+                        $data['temporary_reason'] ?? null,
+                        $data['temporary_effective_until'] ?? null,
+                    );
+                }),
+
+            Action::make('temporaryScheduleChange')
+                ->label('Temporary Change')
+                ->icon('heroicon-o-arrow-path-rounded-square')
+                ->color('gray')
+                ->form([
+                    Select::make('day')
+                        ->label('Day')
+                        ->options($this->days)
+                        ->required(),
+                    Select::make('period')
+                        ->label('Period')
+                        ->options($this->getPeriodOptions())
+                        ->required(),
+                    Select::make('subject_id')
+                        ->label('Temporary Subject')
+                        ->options(
+                            Subject::query()
+                                ->where('status', 'active')
+                                ->pluck('name', 'id')
+                        )
+                        ->searchable()
+                        ->required(),
+                    Select::make('teacher_id')
+                        ->label('Temporary Teacher')
+                        ->options(
+                            Teacher::query()
+                                ->where('status', 'active')
+                                ->pluck('name', 'id')
+                        )
+                        ->searchable(),
+                    DatePicker::make('temporary_effective_until')
+                        ->label('Effective Until')
+                        ->native(false),
+                    Textarea::make('temporary_reason')
+                        ->label('Reason')
+                        ->rows(3)
+                        ->maxLength(1000),
+                ])
+                ->action(function (array $data): void {
+                    $this->applyTemporaryScheduleChange(
+                        (int) $data['day'],
+                        (int) $data['period'],
+                        (int) $data['subject_id'],
+                        isset($data['teacher_id']) ? (int) $data['teacher_id'] : null,
+                        $data['temporary_reason'] ?? null,
+                        $data['temporary_effective_until'] ?? null,
+                    );
+                }),
+
+            Action::make('revertTemporaryChange')
+                ->label('Revert Temporary')
+                ->icon('heroicon-o-arrow-uturn-left')
+                ->color('warning')
+                ->form([
+                    Select::make('day')
+                        ->label('Day')
+                        ->options($this->days)
+                        ->required(),
+                    Select::make('period')
+                        ->label('Period')
+                        ->options($this->getPeriodOptions())
+                        ->required(),
+                ])
+                ->action(function (array $data): void {
+                    $this->revertTemporaryChange(
+                        (int) $data['day'],
+                        (int) $data['period'],
+                    );
+                }),
         ];
+    }
+
+    /**
+     * Get period options for header actions.
+     *
+     * @return array<int, string>
+     */
+    protected function getPeriodOptions(): array
+    {
+        $periodOptions = [];
+        for ($period = 1; $period <= $this->periodsPerDay; $period++) {
+            $periodOptions[$period] = "Period {$period}";
+        }
+
+        return $periodOptions;
     }
 
     /**
