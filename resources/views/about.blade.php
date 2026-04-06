@@ -1,5 +1,14 @@
 @php
     $pageTitle = 'About Us - Yumak Bauddha Mandal School';
+  $site = [
+    'name' => 'YUMAK BAUDDHA MANDAL SCHOOL',
+    'tagline' => 'Nursery to Class 10',
+    'phone' => '+977 01-5523144',
+    'email' => 'info@ybms.com',
+    'hours' => 'Sun - Fri : 09:00 am - 05:30 pm',
+  ];
+  $navLinks = ['Home', 'About Us', 'Courses', 'Blog', 'Event', 'Staff', 'Gallery', 'Contact Us'];
+  $activeNav = 'About Us';
     $breadcrumb = ['Home', 'About Us'];
 
     $about = [
@@ -44,6 +53,45 @@
   <script src="{{ asset('js/about.js') }}" defer></script>
 </head>
 <body>
+
+<div class="topbar">
+  <div class="contact">
+    <span>Call us : {{ $site['phone'] }}</span>
+    <span>Email : {{ $site['email'] }}</span>
+  </div>
+  <div class="hours">{{ $site['hours'] }}</div>
+</div>
+
+<nav class="navbar">
+  <a href="{{ route('home') }}" class="logo">
+    <img src="{{ asset('images/logo.png') }}" alt="{{ $site['name'] }} logo" class="logo-image">
+    <div class="logo-text">
+      <div class="name">{{ $site['name'] }}</div>
+      <div class="sub">{{ $site['tagline'] }}</div>
+    </div>
+  </a>
+
+  <ul class="nav-links">
+    @foreach ($navLinks as $link)
+      @php
+        $url = '#';
+
+        if ($link === 'Home') {
+            $url = route('home');
+        } elseif ($link === 'About Us') {
+            $url = route('about');
+        } elseif ($link === 'Gallery') {
+            $url = route('gallery');
+        }
+      @endphp
+      <li>
+        <a href="{{ $url }}" class="{{ $link === $activeNav ? 'active' : '' }}">{{ $link }}</a>
+      </li>
+    @endforeach
+  </ul>
+
+  <button class="nav-search" type="button" title="Search">&#128269;</button>
+</nav>
 
 <section class="hero-banner">
   <div class="hero-content">
