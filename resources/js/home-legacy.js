@@ -1,0 +1,9 @@
+import '../legacy-source/js/jquery.js';
+import '../legacy-source/js/bootstrap.min.js';
+import '../legacy-source/js/slick.min.js';
+import '../legacy-source/js/dl-menu/modernizr.custom.js';
+import '../legacy-source/js/dl-menu/jquery.dlmenu.js';
+import '../legacy-source/js/jquery.prettyPhoto.js';
+import '../legacy-source/js/jquery-filterable.js';
+import '../legacy-source/js/waypoints-min.js';
+import '../legacy-source/js/custom.js';

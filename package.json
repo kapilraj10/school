@@ -3,8 +3,9 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "vite build",
-        "dev": "vite"
+        "sync:legacy": "mkdir -p css js public/css public/js && cp -r resources/legacy-source/css/. css/ && cp -r resources/legacy-source/js/. js/ && cp -r resources/legacy-source/css/. public/css/ && cp -r resources/legacy-source/js/. public/js/",
+        "build": "npm run sync:legacy && vite build",
+        "dev": "npm run sync:legacy && vite"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",

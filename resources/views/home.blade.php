@@ -1,184 +1,264 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ config('app.name', 'Laravel') }} - School Timetable</title>
-
-    <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
-
-    @vite(['resources/css/app.css', 'resources/js/app.js', 'resources/js/pages/home.js'])
-
-    <script>
-        if (localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            document.documentElement.classList.add('dark');
-        }
-    </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Univercity of Education</title>
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <link rel="stylesheet" href="{{ asset('css/home.css') }}">
+  <script src="{{ asset('js/home.js') }}" defer></script>
 </head>
-<body class="bg-linear-to-br from-gray-50 to-blue-50 dark:from-gray-950 dark:to-gray-950 text-gray-900 dark:text-gray-100 min-h-screen">
-    <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
-        <div class="text-center mb-12 mt-8">
-            <img src="/timetable_logo.png" alt="Timetable Logo" class="mx-auto mb-4 w-24 h-24 object-contain" />
-            <h1 class="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-                {{ config('app.name', 'School Timetable') }}
-            </h1>
-            <p class="text-lg text-gray-600 dark:text-gray-400">Creating timetable made easy</p>
-            
-            <div class="flex justify-center items-center gap-4 mt-6">
-                @php
-                    $adminLabel = auth()->check() ? 'Admin Panel' : 'Go to Admin Panel';
-                @endphp
+<body>
 
-                <a href="/admin" class="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-md">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    {{ $adminLabel }}
-                </a>
-                
-                <button onclick="toggleTheme()" class="inline-flex items-center px-4 py-3 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors border border-gray-300 dark:border-gray-600 shadow-md">
-                    <svg class="w-5 h-5 mr-2 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                    <svg class="w-5 h-5 mr-2 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                    </svg>
-                    <span class="hidden dark:block">Light</span>
-                    <span class="block dark:hidden">Dark</span>
-                </button>
-            </div>
-        </div>
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="contact">
+    <span><i class="fa fa-phone"></i> Call us : +01 123 456</span>
+    <span><i class="fa fa-envelope"></i> Email : info@info.com</span>
+  </div>
+  <div class="hours">
+    <i class="fa fa-clock"></i> Sun - Fri : 09:00 am - 05:30 pm
+  </div>
+</div>
 
-        {{-- @if ($academicTerms->count() > 1)
-            <div class="mb-6 flex justify-center">
-                <div class="w-full max-w-md">
-                    <label for="term-selector" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 text-center">
-                        Academic Term
-                    </label>
-                    <select 
-                        id="term-selector" 
-                        onchange="switchTerm()"
-                        class="block w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
-                    >
-                        @foreach ($academicTerms as $term)
-                            <option value="{{ $term->id }}" {{ $currentTerm && $currentTerm->id === $term->id ? 'selected' : '' }}>
-                                {{ $term->full_name }}
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
-            </div>
-        @endif
-
-        @if ($currentTerm)
-            <div class="mb-8 max-w-2xl mx-auto">
-                <div class="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-center">
-                    <p class="text-sm text-blue-900 dark:text-blue-300">
-                        <span class="font-semibold">Current Term:</span> {{ $currentTerm->full_name }}
-                    </p>
-                </div>
-            </div>
-        @else
-            <div class="mb-8 max-w-2xl mx-auto">
-                <div class="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-center">
-                    <p class="text-sm text-amber-900 dark:text-amber-300">
-                        No active academic term found. Please contact your administrator.
-                    </p>
-                </div>
-            </div>
-        @endif --}}
-
-        @if (blank($classes))
-            <div class="text-center py-16 bg-white dark:bg-gray-800 rounded-lg shadow-md max-w-2xl mx-auto">
-                <svg class="mx-auto h-20 w-20 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                <h3 class="mt-4 text-xl font-semibold text-gray-900 dark:text-gray-100">No classes found</h3>
-                <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">Please contact your administrator to add classes.</p>
-            </div>
-        @else
-            <div class="mb-8">
-                <h2 class="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-4 text-center">Select a Class</h2>
-                
-                <div class="flex flex-wrap gap-3 justify-center max-w-4xl mx-auto">
-                    @foreach ($classes as $index => $class)
-                        <button
-                            type="button"
-                            data-class-button="{{ $class->id }}"
-                            onclick="switchClass('{{ $class->id }}')"
-                            class="px-6 py-3 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 transition-all shadow-sm hover:shadow-md {{ $index === 0 ? 'bg-blue-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700' }}"
-                        >
-                            {{ $class->full_name }}
-                        </button>
-                    @endforeach
-                </div>
-            </div>
-
-            <div class="space-y-6">
-                @foreach ($classes as $index => $class)
-                    <div 
-                        data-class-card="{{ $class->id }}"
-                        class="{{ $index === 0 ? '' : 'hidden' }}"
-                    >
-                        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-                            <div class="px-6 py-5 bg-linear-to-r from-blue-600 to-blue-700 text-white">
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-                                    <div>
-                                        <h3 class="text-2xl font-bold">
-                                            {{ $class->full_name }} Timetable
-                                        </h3>
-                                        @if ($class->classTeacher)
-                                            <p class="text-sm text-blue-100 mt-1">
-                                                Class Teacher: {{ $class->classTeacher->name }}
-                                            </p>
-                                        @endif
-                                    </div>
-
-                                    <div class="flex items-center gap-2 self-start">
-                                        <button id="toggle-teacher-btn" onclick="toggleTeacherNames()" class="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-3 text-xs font-medium text-white shadow-sm ring-1 ring-white/20 transition-colors hover:bg-white/15" title="Toggle Teacher Names">
-                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                            </svg>
-                                            <span>Teacher Names</span>
-                                        </button>
-
-                                        <div class="flex items-center gap-1.5 rounded-lg bg-white/10 p-1.5 shadow-sm ring-1 ring-white/20">
-                                            <button onclick="decreaseFontSize()" class="p-1.5 hover:bg-white/10 rounded transition-colors" title="Decrease Font Size">
-                                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
-                                                </svg>
-                                            </button>
-                                            <span class="text-xs font-medium text-white w-11 text-center font-size-display">100%</span>
-                                            <button onclick="increaseFontSize()" class="p-1.5 hover:bg-white/10 rounded transition-colors" title="Increase Font Size">
-                                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="p-6 timetable-container">
-                                <x-timetable-grid 
-                                    :slots="$timetableSlots->get($class->id) ?? collect([])"
-                                    :className="$class->full_name"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        @endif
-
-        <footer class="mt-16 py-8 border-t border-gray-200 dark:border-gray-700">
-            <div class="text-center">
-                <p class="text-sm text-gray-600 dark:text-gray-400">
-                    &copy; {{ date('Y') }} {{ config('app.name', 'School Timetable Management System - Animesh Shakya') }}. All rights reserved.
-                </p>
-            </div>
-        </footer>
+<!-- NAVBAR -->
+<nav>
+  <a href="#" class="logo">
+    <!-- Atom logo SVG -->
+    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="30" cy="30" rx="28" ry="12" fill="none" stroke="#e8a020" stroke-width="2.5"/>
+      <ellipse cx="30" cy="30" rx="28" ry="12" fill="none" stroke="#e03020" stroke-width="2.5" transform="rotate(60 30 30)"/>
+      <ellipse cx="30" cy="30" rx="28" ry="12" fill="none" stroke="#e8a020" stroke-width="2.5" transform="rotate(120 30 30)"/>
+      <circle cx="30" cy="30" r="5" fill="#e03020"/>
+    </svg>
+    <div class="logo-text">
+      <strong>UNIVERCITY</strong>
+      <span>of education</span>
     </div>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#" class="active">Home</a></li>
+    <li><a href="#">About Us</a></li>
+    <li><a href="#">Courses</a></li>
+    <li><a href="#">Blog</a></li>
+    <li><a href="#">Event</a></li>
+    <li><a href="#">Staff</a></li>
+    <li><a href="#">Gallery</a></li>
+    <li><a href="#">Contact Us</a></li>
+  </ul>
+  <button class="nav-search"><i class="fa fa-search"></i></button>
+</nav>
+
+<!-- HERO SLIDER -->
+<div class="slider" id="slider">
+  <div class="slide slide-1 active">
+    <div class="slide-content">
+      <p class="slide-subtitle">The Best Learning Institution</p>
+      <h1 class="slide-title">Welcome to<br>Our University</h1>
+      <p class="slide-desc">Lorem ipsum dolor sit amet, consectetur adipiscing elit</p>
+      <a href="#" class="btn-gold">Read More</a>
+    </div>
+  </div>
+  <div class="slide slide-2">
+    <div class="slide-content">
+      <p class="slide-subtitle">The Best Learning Institution</p>
+      <h1 class="slide-title">World Class<br>Education</h1>
+      <p class="slide-desc">Sed ut perspiciatis unde omnis iste natus error sit voluptatem</p>
+      <a href="#" class="btn-gold">Read More</a>
+    </div>
+  </div>
+  <div class="slide slide-3">
+    <div class="slide-content">
+      <p class="slide-subtitle">The Best Learning Institution</p>
+      <h1 class="slide-title">Build Your<br>Future Today</h1>
+      <p class="slide-desc">Nemo enim ipsam voluptatem quia voluptas sit aspernatur</p>
+      <a href="#" class="btn-gold">Read More</a>
+    </div>
+  </div>
+
+  <!-- Slider Dots -->
+  <div class="slider-dots">
+    <div class="dot active" onclick="goToSlide(0)"></div>
+    <div class="dot" onclick="goToSlide(1)"></div>
+    <div class="dot" onclick="goToSlide(2)"></div>
+  </div>
+</div>
+
+<!-- SEARCH COURSES BAND -->
+<div class="search-band">
+  <div class="search-box">
+    <h3>Search Courses</h3>
+    <div class="search-row">
+      <select>
+        <option>Select Category</option>
+        <option>Science</option>
+        <option>Arts</option>
+        <option>Commerce</option>
+        <option>Engineering</option>
+      </select>
+      <input type="text" placeholder="Search keyword..."/>
+      <button class="btn-search"><i class="fa fa-search"></i> Search</button>
+    </div>
+  </div>
+</div>
+
+<!-- COURSES -->
+<section style="background:#f5f5f5;">
+  <div class="section-title">
+    <h2>Popular Courses</h2>
+    <div class="underline"></div>
+    <p>Explore our wide range of courses taught by expert faculty members</p>
+  </div>
+  <div class="courses-grid">
+    <div class="course-card">
+      <img src="https://images.unsplash.com/photo-1532012197267-da84d127e765?w=600&q=80" alt="Course"/>
+      <div class="course-card-body">
+        <span class="course-tag">Science</span>
+        <h4>Bachelor of Computer Science</h4>
+        <p>Learn programming, algorithms, AI and software engineering fundamentals.</p>
+        <div class="course-meta">
+          <span><i class="fa fa-clock"></i> 4 Years</span>
+          <span><i class="fa fa-users"></i> 120 Students</span>
+          <span><i class="fa fa-star"></i> 4.8</span>
+        </div>
+      </div>
+    </div>
+    <div class="course-card">
+      <img src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=600&q=80" alt="Course"/>
+      <div class="course-card-body">
+        <span class="course-tag">Commerce</span>
+        <h4>Master of Business Administration</h4>
+        <p>Develop leadership, strategic thinking and business management skills.</p>
+        <div class="course-meta">
+          <span><i class="fa fa-clock"></i> 2 Years</span>
+          <span><i class="fa fa-users"></i> 80 Students</span>
+          <span><i class="fa fa-star"></i> 4.6</span>
+        </div>
+      </div>
+    </div>
+    <div class="course-card">
+      <img src="https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?w=600&q=80" alt="Course"/>
+      <div class="course-card-body">
+        <span class="course-tag">Science</span>
+        <h4>Bachelor of Pharmacy</h4>
+        <p>Study drug development, pharmacology and pharmaceutical sciences.</p>
+        <div class="course-meta">
+          <span><i class="fa fa-clock"></i> 4 Years</span>
+          <span><i class="fa fa-users"></i> 60 Students</span>
+          <span><i class="fa fa-star"></i> 4.7</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats">
+  <div class="stats-grid">
+    <div>
+      <div class="stat-num" data-target="1250">0</div>
+      <div class="stat-label">Students Enrolled</div>
+    </div>
+    <div>
+      <div class="stat-num" data-target="85">0</div>
+      <div class="stat-label">Expert Faculty</div>
+    </div>
+    <div>
+      <div class="stat-num" data-target="48">0</div>
+      <div class="stat-label">Courses Available</div>
+    </div>
+    <div>
+      <div class="stat-num" data-target="20">0</div>
+      <div class="stat-label">Years of Excellence</div>
+    </div>
+  </div>
+</section>
+
+<!-- EVENTS -->
+<section>
+  <div class="section-title">
+    <h2>Upcoming Events</h2>
+    <div class="underline"></div>
+    <p>Stay updated with the latest happenings at our university</p>
+  </div>
+  <div class="events-list" style="max-width:720px;margin:0 auto;">
+    <div class="event-item">
+      <div class="event-date"><div class="day">15</div><div class="mon">Apr</div></div>
+      <div class="event-info">
+        <h4>Annual Science & Technology Symposium</h4>
+        <p>Join leading researchers and students to discuss the future of technology and innovation.</p>
+        <div class="meta"><i class="fa fa-map-marker-alt"></i> Main Auditorium &nbsp;|&nbsp; <i class="fa fa-clock"></i> 9:00 AM – 5:00 PM</div>
+      </div>
+    </div>
+    <div class="event-item">
+      <div class="event-date"><div class="day">22</div><div class="mon">Apr</div></div>
+      <div class="event-info">
+        <h4>Open Campus Day for Prospective Students</h4>
+        <p>Tour our facilities, meet faculty, and learn about admission requirements.</p>
+        <div class="meta"><i class="fa fa-map-marker-alt"></i> Campus Grounds &nbsp;|&nbsp; <i class="fa fa-clock"></i> 10:00 AM – 2:00 PM</div>
+      </div>
+    </div>
+    <div class="event-item">
+      <div class="event-date"><div class="day">05</div><div class="mon">May</div></div>
+      <div class="event-info">
+        <h4>Graduation Ceremony 2026</h4>
+        <p>Celebrating the achievements of our graduating class of 2026.</p>
+        <div class="meta"><i class="fa fa-map-marker-alt"></i> University Stadium &nbsp;|&nbsp; <i class="fa fa-clock"></i> 4:00 PM</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-grid">
+    <div class="footer-col">
+      <h5>About Univercity</h5>
+      <p>We are committed to providing world-class education and fostering intellectual growth, innovation, and leadership for the next generation of professionals.</p>
+      <div class="social-links">
+        <a href="#"><i class="fab fa-facebook-f"></i></a>
+        <a href="#"><i class="fab fa-twitter"></i></a>
+        <a href="#"><i class="fab fa-linkedin-in"></i></a>
+        <a href="#"><i class="fab fa-youtube"></i></a>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h5>Quick Links</h5>
+      <ul>
+        <li><a href="#">Home</a></li>
+        <li><a href="#">About Us</a></li>
+        <li><a href="#">Courses</a></li>
+        <li><a href="#">Events</a></li>
+        <li><a href="#">Blog</a></li>
+        <li><a href="#">Contact Us</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h5>Our Courses</h5>
+      <ul>
+        <li><a href="#">Computer Science</a></li>
+        <li><a href="#">Business Admin</a></li>
+        <li><a href="#">Engineering</a></li>
+        <li><a href="#">Medical Science</a></li>
+        <li><a href="#">Arts & Design</a></li>
+        <li><a href="#">Law</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h5>Contact Info</h5>
+      <ul>
+        <li><a href="#"><i class="fa fa-map-marker-alt" style="color:var(--gold);margin-right:8px"></i> 123 University Ave, City</a></li>
+        <li><a href="#"><i class="fa fa-phone" style="color:var(--gold);margin-right:8px"></i> +01 123 456</a></li>
+        <li><a href="#"><i class="fa fa-envelope" style="color:var(--gold);margin-right:8px"></i> info@info.com</a></li>
+        <li><a href="#"><i class="fa fa-clock" style="color:var(--gold);margin-right:8px"></i> Mon–Sat: 9am–5:30pm</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    &copy; 2026 Univercity of Education. All Rights Reserved.
+  </div>
+</footer>
+
 </body>
 </html>
