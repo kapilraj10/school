@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Univercity of Education</title>
+  <title>Yumak Buddha Mandal School</title>
   <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;600;700;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
   <link rel="stylesheet" href="{{ asset('css/home.css') }}">
@@ -14,8 +14,8 @@
 <!-- TOP BAR -->
 <div class="topbar">
   <div class="contact">
-    <span><i class="fa fa-phone"></i> Call us : +01 123 456</span>
-    <span><i class="fa fa-envelope"></i> Email : info@info.com</span>
+    <span><i class="fa fa-phone"></i> Call us : +977 01-5523144</span>
+    <span><i class="fa fa-envelope"></i> Email : info@ybms.com</span>
   </div>
   <div class="hours">
     <i class="fa fa-clock"></i> Sun - Fri : 09:00 am - 05:30 pm
@@ -25,21 +25,15 @@
 <!-- NAVBAR -->
 <nav>
   <a href="#" class="logo">
-    <!-- Atom logo SVG -->
-    <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-      <ellipse cx="30" cy="30" rx="28" ry="12" fill="none" stroke="#e8a020" stroke-width="2.5"/>
-      <ellipse cx="30" cy="30" rx="28" ry="12" fill="none" stroke="#e03020" stroke-width="2.5" transform="rotate(60 30 30)"/>
-      <ellipse cx="30" cy="30" rx="28" ry="12" fill="none" stroke="#e8a020" stroke-width="2.5" transform="rotate(120 30 30)"/>
-      <circle cx="30" cy="30" r="5" fill="#e03020"/>
-    </svg>
+    <img src="{{ asset('images/logo.png') }}" alt="Yumak Bauddha Mandal School logo" class="logo-image">
     <div class="logo-text">
-      <strong>UNIVERCITY</strong>
-      <span>of education</span>
+      <strong>Y.B.M.S</strong>
+      <span>Nursery to Class 10</span>
     </div>
   </a>
   <ul class="nav-links">
     <li><a href="#" class="active">Home</a></li>
-    <li><a href="#">About Us</a></li>
+  <li><a href="{{ route('about') }}">About Us</a></li>
     <li><a href="#">Courses</a></li>
     <li><a href="#">Blog</a></li>
     <li><a href="#">Event</a></li>
@@ -54,25 +48,25 @@
 <div class="slider" id="slider">
   <div class="slide slide-1 active">
     <div class="slide-content">
-      <p class="slide-subtitle">The Best Learning Institution</p>
-      <h1 class="slide-title">Welcome to<br>Our University</h1>
-      <p class="slide-desc">Lorem ipsum dolor sit amet, consectetur adipiscing elit</p>
+      <p class="slide-subtitle">Quality School Education</p>
+      <h1 class="slide-title">Welcome to<br>Yumak Bauddha Mandal School</h1>
+      <p class="slide-desc">Admissions open for students from Nursery to Class 10.</p>
       <a href="#" class="btn-gold">Read More</a>
     </div>
   </div>
   <div class="slide slide-2">
     <div class="slide-content">
-      <p class="slide-subtitle">The Best Learning Institution</p>
-      <h1 class="slide-title">World Class<br>Education</h1>
-      <p class="slide-desc">Sed ut perspiciatis unde omnis iste natus error sit voluptatem</p>
+      <p class="slide-subtitle">Learning with Values</p>
+      <h1 class="slide-title">Strong Foundation<br>for Every Child</h1>
+      <p class="slide-desc">We nurture young minds with modern teaching from Nursery to Class 10.</p>
       <a href="#" class="btn-gold">Read More</a>
     </div>
   </div>
   <div class="slide slide-3">
     <div class="slide-content">
-      <p class="slide-subtitle">The Best Learning Institution</p>
-      <h1 class="slide-title">Build Your<br>Future Today</h1>
-      <p class="slide-desc">Nemo enim ipsam voluptatem quia voluptas sit aspernatur</p>
+      <p class="slide-subtitle">A Better Future Starts Here</p>
+      <h1 class="slide-title">Grow, Learn,<br>and Succeed</h1>
+      <p class="slide-desc">Join Yumak Bauddha Mandal School and build a bright future from the early years.</p>
       <a href="#" class="btn-gold">Read More</a>
     </div>
   </div>
@@ -227,7 +221,7 @@
       <h5>Quick Links</h5>
       <ul>
         <li><a href="#">Home</a></li>
-        <li><a href="#">About Us</a></li>
+  <li><a href="{{ route('about') }}">About Us</a></li>
         <li><a href="#">Courses</a></li>
         <li><a href="#">Events</a></li>
         <li><a href="#">Blog</a></li>
