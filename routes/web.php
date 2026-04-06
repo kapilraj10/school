@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::view('/about', 'about')->name('about');
+Route::view('/gallery', 'gallery')->name('gallery');
 
 Route::redirect('/login', '/admin/login')->name('login');
 

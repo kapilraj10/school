@@ -38,7 +38,7 @@
     <li><a href="#">Blog</a></li>
     <li><a href="#">Event</a></li>
     <li><a href="#">Staff</a></li>
-    <li><a href="#">Gallery</a></li>
+  <li><a href="{{ route('gallery') }}">Gallery</a></li>
     <li><a href="#">Contact Us</a></li>
   </ul>
   <button class="nav-search"><i class="fa fa-search"></i></button>
