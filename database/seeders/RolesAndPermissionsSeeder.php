@@ -45,6 +45,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'academic_term.view',
             'holiday.list',
             'holiday.view',
+            'school_gallery.list',
+            'school_gallery.view',
             'exam_schedule.list',
             'exam_schedule.view',
             'special_event.list',

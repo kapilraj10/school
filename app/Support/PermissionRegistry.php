@@ -38,6 +38,10 @@ class PermissionRegistry
                 'label' => 'Holidays',
                 'actions' => ['list', 'view', 'create', 'edit', 'delete'],
             ],
+            'school_gallery' => [
+                'label' => 'School Gallery',
+                'actions' => ['list', 'view', 'create', 'edit', 'delete'],
+            ],
             'exam_schedule' => [
                 'label' => 'Exam Schedules',
                 'actions' => ['list', 'view', 'create', 'edit', 'delete'],
