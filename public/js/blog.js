@@ -39,21 +39,31 @@ if (document.readyState === 'loading') {
   initMobileNav();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const fills = document.querySelectorAll('.bar-fill');
+const postItems = document.querySelectorAll('.post-item');
 
-  if (!fills.length) {
-    return;
-  }
+if (postItems.length > 0) {
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    },
+    { threshold: 0.1 },
+  );
 
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.style.width = `${entry.target.dataset.pct}%`;
-        observer.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.3 });
+  postItems.forEach((item) => {
+    observer.observe(item);
+  });
+}
 
-  fills.forEach((fill) => observer.observe(fill));
-});
+const sidebarSearchForm = document.querySelector('#sidebarSearchForm');
+const sidebarSearchInput = document.querySelector('#sidebarSearchInput');
+
+if (sidebarSearchForm !== null && sidebarSearchInput !== null) {
+  sidebarSearchForm.addEventListener('submit', () => {
+    sidebarSearchInput.value = sidebarSearchInput.value.trim();
+  });
+}

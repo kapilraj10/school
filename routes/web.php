@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::view('/about', 'about')->name('about');
 Route::view('/gallery', 'gallery')->name('gallery');
+Route::view('/staff', 'staff')->name('staff');
+Route::view('/blog', 'blog')->name('blog');
+Route::view('/contact', 'contact')->name('contact');
 
 Route::redirect('/login', '/admin/login')->name('login');
 

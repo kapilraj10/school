@@ -7,7 +7,7 @@
     'email' => 'info@ybms.com',
     'hours' => 'Sun - Fri : 09:00 am - 05:30 pm',
   ];
-  $navLinks = ['Home', 'About Us', 'Courses', 'Blog', 'Event', 'Staff', 'Gallery', 'Contact Us'];
+  $navLinks = ['Home', 'About Us', 'Blog', 'Staff', 'Gallery', 'Contact Us'];
   $activeNav = 'About Us';
     $breadcrumb = ['Home', 'About Us'];
 
@@ -49,6 +49,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{{ $pageTitle }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
   <link rel="stylesheet" href="{{ asset('css/about.css') }}">
   <script src="{{ asset('js/about.js') }}" defer></script>
 </head>
@@ -56,22 +57,27 @@
 
 <div class="topbar">
   <div class="contact">
-    <span>Call us : {{ $site['phone'] }}</span>
-    <span>Email : {{ $site['email'] }}</span>
+    <span><i class="fa fa-phone"></i> Call us : {{ $site['phone'] }}</span>
+    <span><i class="fa fa-envelope"></i> Email : {{ $site['email'] }}</span>
   </div>
-  <div class="hours">{{ $site['hours'] }}</div>
+  <div class="hours">
+    <i class="fa fa-clock"></i> {{ $site['hours'] }}
+  </div>
 </div>
 
-<nav class="navbar">
+<nav>
   <a href="{{ route('home') }}" class="logo">
     <img src="{{ asset('images/logo.png') }}" alt="{{ $site['name'] }} logo" class="logo-image">
     <div class="logo-text">
-      <div class="name">{{ $site['name'] }}</div>
-      <div class="sub">{{ $site['tagline'] }}</div>
+      <strong>Y.B.M</strong>
+      <span>Enlightening Minds, Shaping Futures</span>
     </div>
   </a>
 
-  <ul class="nav-links">
+  <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="primaryNav">
+    <i class="fa fa-bars" aria-hidden="true"></i>
+  </button>
+  <ul class="nav-links" id="primaryNav">
     @foreach ($navLinks as $link)
       @php
         $url = '#';
@@ -82,6 +88,12 @@
             $url = route('about');
         } elseif ($link === 'Gallery') {
             $url = route('gallery');
+    } elseif ($link === 'Staff') {
+      $url = route('staff');
+    } elseif ($link === 'Blog') {
+      $url = route('blog');
+    } elseif ($link === 'Contact Us') {
+      $url = route('contact');
         }
       @endphp
       <li>
@@ -90,7 +102,7 @@
     @endforeach
   </ul>
 
-  <button class="nav-search" type="button" title="Search">&#128269;</button>
+  <button class="nav-search" type="button" title="Search"><i class="fa fa-search"></i></button>
 </nav>
 
 <section class="hero-banner">
@@ -173,6 +185,55 @@
     </div>
   </div>
 </section>
+
+<footer>
+  <div class="footer-grid">
+    <div class="footer-col">
+      <h5>About School</h5>
+      <p>Yumak Bauddha Mandal School provides quality education from Nursery to Class 10 with focus on values, creativity, and academic excellence.</p>
+      <div class="social-links">
+        <a href="#"><i class="fab fa-facebook-f"></i></a>
+        <a href="#"><i class="fab fa-twitter"></i></a>
+        <a href="#"><i class="fab fa-linkedin-in"></i></a>
+        <a href="#"><i class="fab fa-youtube"></i></a>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h5>Quick Links</h5>
+      <ul>
+        <li><a href="{{ route('home') }}">Home</a></li>
+        <li><a href="{{ route('about') }}">About Us</a></li>
+        <li><a href="{{ route('blog') }}">Blog</a></li>
+        <li><a href="{{ route('staff') }}">Staff</a></li>
+        <li><a href="{{ route('gallery') }}">Gallery</a></li>
+        <li><a href="{{ route('contact') }}">Contact Us</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h5>School Highlights</h5>
+      <ul>
+        <li><a href="#">Play Ground</a></li>
+        <li><a href="#">Music and Dance</a></li>
+        <li><a href="#">Arts and Crafts</a></li>
+        <li><a href="#">Safe Transportation</a></li>
+        <li><a href="#">Healthy Food</a></li>
+        <li><a href="#">Educational Tour</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h5>Contact Info</h5>
+      <ul>
+        <li><a href="#"><i class="fa fa-map-marker-alt" style="color:var(--gold);margin-right:8px"></i> Kathmandu, Nepal</a></li>
+        <li><a href="tel:+977015523144"><i class="fa fa-phone" style="color:var(--gold);margin-right:8px"></i> +977 01-5523144</a></li>
+        <li><a href="mailto:info@ybms.com"><i class="fa fa-envelope" style="color:var(--gold);margin-right:8px"></i> info@ybms.com</a></li>
+        <li><a href="#"><i class="fa fa-clock" style="color:var(--gold);margin-right:8px"></i> Sun–Fri: 9:00am–5:30pm</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    &copy; 2026 Yumak Bauddha Mandal School. All Rights Reserved.
+  </div>
+</footer>
 
 </body>
 </html>

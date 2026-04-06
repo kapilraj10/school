@@ -40,20 +40,20 @@ if (document.readyState === 'loading') {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const fills = document.querySelectorAll('.bar-fill');
+  const button = document.getElementById('scrollTop');
 
-  if (!fills.length) {
+  if (!button) {
     return;
   }
 
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.style.width = `${entry.target.dataset.pct}%`;
-        observer.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.3 });
+  window.addEventListener('scroll', () => {
+    button.classList.toggle('visible', window.scrollY > 300);
+  });
 
-  fills.forEach((fill) => observer.observe(fill));
+  button.addEventListener('click', () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  });
 });
