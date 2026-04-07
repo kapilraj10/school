@@ -42,9 +42,17 @@ if (document.readyState === 'loading') {
 const contactForm = document.getElementById('contactForm');
 const successMessage = document.getElementById('successMessage');
 
+if (successMessage !== null && !successMessage.hidden) {
+  window.setTimeout(() => {
+    successMessage.hidden = true;
+  }, 5000);
+}
+
 if (contactForm !== null) {
   contactForm.addEventListener('submit', (event) => {
-    event.preventDefault();
+    if (successMessage !== null) {
+      successMessage.hidden = true;
+    }
 
     const fields = [
       { name: 'name', label: 'Name' },
@@ -89,19 +97,17 @@ if (contactForm !== null) {
       }
     });
 
-    if (valid) {
-      if (successMessage !== null) {
-        successMessage.hidden = false;
-      }
-
-      contactForm.reset();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!valid) {
+      event.preventDefault();
     }
   });
 
   contactForm.querySelectorAll('input, textarea').forEach((element) => {
     element.addEventListener('input', () => {
       element.classList.remove('error');
+      if (successMessage !== null) {
+        successMessage.hidden = true;
+      }
       const errorElement = contactForm.querySelector(`[data-error-for='${element.name}']`);
 
       if (errorElement !== null) {

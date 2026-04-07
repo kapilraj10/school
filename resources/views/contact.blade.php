@@ -6,6 +6,7 @@
   ];
   $navLinks = ['Home', 'About Us', 'Blog', 'Staff', 'Gallery', 'Contact Us'];
   $activeNav = 'Contact Us';
+  $mapEmbedUrl = $mapEmbedUrl ?? \App\Models\ContactSetting::mapEmbedUrl();
 
   $infoCards = [
     [
@@ -110,32 +111,36 @@
 
   <div class="contact-grid">
     <div class="contact-form">
-      <div class="alert-success" id="successMessage" hidden>
-        <i class="fa fa-check-circle"></i>
-        <span>Your message has been sent successfully! We will get back to you soon.</span>
-      </div>
+      @if (session()->has('contact_success'))
+        <div class="alert-success" id="successMessage">
+          <i class="fa fa-check-circle"></i>
+          <span>{{ session('contact_success') }}</span>
+        </div>
+      @else
+        <div class="alert-success" id="successMessage" hidden></div>
+      @endif
 
-      <form method="POST" action="{{ route('contact') }}" novalidate id="contactForm">
+      <form method="POST" action="{{ route('contact.submit') }}" novalidate id="contactForm">
         @csrf
 
         <div class="form-group">
-          <input type="text" name="name" placeholder="Your Name" />
-          <span class="error-msg" data-error-for="name"></span>
+          <input type="text" name="name" placeholder="Your Name" value="{{ old('name') }}" />
+          <span class="error-msg" data-error-for="name">{{ $errors->first('name') }}</span>
         </div>
 
         <div class="form-group">
-          <input type="email" name="email" placeholder="Your Email" />
-          <span class="error-msg" data-error-for="email"></span>
+          <input type="email" name="email" placeholder="Your Email" value="{{ old('email') }}" />
+          <span class="error-msg" data-error-for="email">{{ $errors->first('email') }}</span>
         </div>
 
         <div class="form-group">
-          <input type="text" name="subject" placeholder="Subject" />
-          <span class="error-msg" data-error-for="subject"></span>
+          <input type="text" name="subject" placeholder="Subject" value="{{ old('subject') }}" />
+          <span class="error-msg" data-error-for="subject">{{ $errors->first('subject') }}</span>
         </div>
 
         <div class="form-group">
-          <textarea name="message" placeholder="Message"></textarea>
-          <span class="error-msg" data-error-for="message"></span>
+          <textarea name="message" placeholder="Message">{{ old('message') }}</textarea>
+          <span class="error-msg" data-error-for="message">{{ $errors->first('message') }}</span>
         </div>
 
         <button type="submit" class="btn-send">
@@ -172,7 +177,7 @@
 
   <div class="map-wrap">
     <iframe
-      src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d56516.31713633893!2d85.29111329985891!3d27.70895594415669!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x39eb1854f0f6f5b9%3A0xd5f9f47f5f8f8dc9!2sKathmandu!5e0!3m2!1sen!2snp!4v1680000000000"
+      src="{{ $mapEmbedUrl }}"
       allowfullscreen=""
       loading="lazy">
     </iframe>

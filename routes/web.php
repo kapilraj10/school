@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ContactSubmissionController;
 use App\Http\Controllers\HomeController;
 use App\Livewire\TimetableDesigner;
 use App\Models\PageClick;
@@ -12,7 +13,8 @@ Route::view('/about', 'about')->name('about');
 Route::view('/gallery', 'gallery')->name('gallery');
 Route::view('/staff', 'staff')->name('staff');
 Route::view('/blog', 'blog')->name('blog');
-Route::view('/contact', 'contact')->name('contact');
+Route::get('/contact', [ContactSubmissionController::class, 'create'])->name('contact');
+Route::post('/contact', [ContactSubmissionController::class, 'store'])->name('contact.submit');
 
 Route::redirect('/login', '/admin/login')->name('login');
 
