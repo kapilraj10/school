@@ -82,6 +82,9 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->brandName('Y.B.M')
+            ->brandLogo(asset('images/logo.png'))
+            ->brandLogoHeight('3rem')
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -92,6 +95,7 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make()->label('Timetable Management'),
                 NavigationGroup::make()->label('View Timetable'),
                 NavigationGroup::make()->label('Timetable Settings'),
+                NavigationGroup::make()->label('Website Management'),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
