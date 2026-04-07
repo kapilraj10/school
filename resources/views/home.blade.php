@@ -13,53 +13,6 @@
     'btn_text' => 'Learn More',
     'btn_link' => route('about'),
   ];
-
-  $testimonials = [
-    [
-      'quote' => 'Sed ea amet kasd elitr stet, stet rebum et ipsum est duo elitr eirmod clita lorem. Dolor tempor ipsum clita lorem sanctus.',
-      'name' => 'Ram Prasad Sharma',
-      'role' => 'Engineer',
-      'img' => asset('images/slide1.png'),
-      'stars' => 5,
-    ],
-    [
-      'quote' => 'Sed ea amet kasd elitr stet, stet rebum et ipsum est duo elitr eirmod clita lorem. Dolor tempor ipsum clita lorem sanctus.',
-      'name' => 'Sunita Thapa',
-      'role' => 'Doctor',
-      'img' => asset('images/slide-2.png'),
-      'stars' => 5,
-    ],
-    [
-      'quote' => 'Sed ea amet kasd elitr stet, stet rebum et ipsum est duo elitr eirmod clita lorem. Dolor tempor ipsum clita lorem sanctus.',
-      'name' => 'David Wilson',
-      'role' => 'Banker',
-      'img' => asset('images/slide-3.png'),
-      'stars' => 4,
-    ],
-    [
-      'quote' => 'Sed ea amet kasd elitr stet, stet rebum et ipsum est duo elitr eirmod clita lorem. Dolor tempor ipsum clita lorem sanctus.',
-      'name' => 'Priya Adhikari',
-      'role' => 'Journalist',
-      'img' => asset('images/logo.jpg'),
-      'stars' => 5,
-    ],
-    [
-      'quote' => 'Sed ea amet kasd elitr stet, stet rebum et ipsum est duo elitr eirmod clita lorem. Dolor tempor ipsum clita lorem sanctus.',
-      'name' => 'Bikash Gurung',
-      'role' => 'Architect',
-      'img' => asset('images/inerpageslider.jpg'),
-      'stars' => 5,
-    ],
-    [
-      'quote' => 'Sed ea amet kasd elitr stet, stet rebum et ipsum est duo elitr eirmod clita lorem. Dolor tempor ipsum clita lorem sanctus.',
-      'name' => 'Anita Rai',
-      'role' => 'Teacher',
-      'img' => asset('images/slide1.png'),
-      'stars' => 4,
-    ],
-  ];
-
-  $testimonialGroups = array_chunk($testimonials, 3);
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -111,36 +64,26 @@
 
 <!-- HERO SLIDER -->
 <div class="slider" id="slider">
-  <div class="slide slide-1 active">
-    <div class="slide-content">
-      <p class="slide-subtitle">Quality School Education</p>
-      <h1 class="slide-title">Welcome to<br>Yumak Bauddha Mandal School</h1>
-      <p class="slide-desc">Admissions open for students from Nursery to Class 10.</p>
-      <a href="#" class="btn-gold">Read More</a>
+  @foreach ($heroSlides as $index => $slide)
+    <div
+      class="slide {{ $index === 0 ? 'active' : '' }}"
+      style="background-image: url('{{ data_get($slide, 'background_image_url', asset('images/slide1.png')) }}');">
+      <div class="slide-content">
+        <p class="slide-subtitle">{{ data_get($slide, 'subtitle') }}</p>
+        <h1 class="slide-title">{!! nl2br(e(data_get($slide, 'title'))) !!}</h1>
+        <p class="slide-desc">{{ data_get($slide, 'description') }}</p>
+        @if (filled(data_get($slide, 'button_text')))
+          <a href="{{ data_get($slide, 'button_link', '#') }}" class="btn-gold">{{ data_get($slide, 'button_text') }}</a>
+        @endif
+      </div>
     </div>
-  </div>
-  <div class="slide slide-2">
-    <div class="slide-content">
-      <p class="slide-subtitle">Learning with Values</p>
-      <h1 class="slide-title">Strong Foundation<br>for Every Child</h1>
-      <p class="slide-desc">We nurture young minds with modern teaching from Nursery to Class 10.</p>
-      <a href="#" class="btn-gold">Read More</a>
-    </div>
-  </div>
-  <div class="slide slide-3">
-    <div class="slide-content">
-      <p class="slide-subtitle">A Better Future Starts Here</p>
-      <h1 class="slide-title">Grow, Learn,<br>and Succeed</h1>
-      <p class="slide-desc">Join Yumak Bauddha Mandal School and build a bright future from the early years.</p>
-      <a href="#" class="btn-gold">Read More</a>
-    </div>
-  </div>
+  @endforeach
 
   <!-- Slider Dots -->
   <div class="slider-dots">
-    <div class="dot active" onclick="goToSlide(0)"></div>
-    <div class="dot" onclick="goToSlide(1)"></div>
-    <div class="dot" onclick="goToSlide(2)"></div>
+    @foreach ($heroSlides as $index => $slide)
+      <div class="dot {{ $index === 0 ? 'active' : '' }}" onclick="goToSlide({{ $index }})"></div>
+    @endforeach
   </div>
 </div>
 
@@ -262,16 +205,16 @@
     </button>
 
     <div class="testimonial-slider-track" id="testimonialSliderTrack">
-      @foreach ($testimonialGroups as $group)
+      @foreach ($textCarouselGroups as $group)
         <div class="testimonial-slide-group">
-          @foreach ($group as $testimonial)
+          @foreach ($group as $item)
             <div class="testimonial-card-item">
               <div class="testimonial-quote-box">
                 <span class="testimonial-quote-mark">&ldquo;</span>
-                <p class="testimonial-quote-text">{{ $testimonial['quote'] }}</p>
+                <p class="testimonial-quote-text">{{ data_get($item, 'quote') }}</p>
                 <div class="testimonial-stars">
                   @for ($star = 1; $star <= 5; $star++)
-                    @if ($star <= $testimonial['stars'])
+                    @if ($star <= (int) data_get($item, 'rating', 5))
                       <i class="fa fa-star"></i>
                     @else
                       <i class="fa fa-star" style="opacity:.35"></i>
@@ -281,10 +224,10 @@
               </div>
 
               <div class="testimonial-author-row">
-                <img src="{{ $testimonial['img'] }}" alt="{{ $testimonial['name'] }}" class="testimonial-author-img" />
+                <img src="{{ data_get($item, 'author_image_url', asset('images/logo.jpg')) }}" alt="{{ data_get($item, 'author_name') }}" class="testimonial-author-img" />
                 <div>
-                  <div class="testimonial-author-name">{{ $testimonial['name'] }}</div>
-                  <div class="testimonial-author-role">{{ $testimonial['role'] }}</div>
+                  <div class="testimonial-author-name">{{ data_get($item, 'author_name') }}</div>
+                  <div class="testimonial-author-role">{{ data_get($item, 'author_role') }}</div>
                 </div>
               </div>
             </div>
@@ -299,7 +242,7 @@
   </div>
 
   <div class="testimonial-dots" id="testimonialDotsWrap">
-    @foreach ($testimonialGroups as $groupIndex => $group)
+    @foreach ($textCarouselGroups as $groupIndex => $group)
       <button
         class="testimonial-dot {{ $groupIndex === 0 ? 'active' : '' }}"
         data-index="{{ $groupIndex }}"

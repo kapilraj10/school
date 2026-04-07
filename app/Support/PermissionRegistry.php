@@ -46,6 +46,14 @@ class PermissionRegistry
                 'label' => 'Blog Posts',
                 'actions' => ['list', 'view', 'create', 'edit', 'delete'],
             ],
+            'hero_slide' => [
+                'label' => 'Hero Slides',
+                'actions' => ['list', 'view', 'create', 'edit', 'delete'],
+            ],
+            'text_carousel_item' => [
+                'label' => 'Text Carousel Items',
+                'actions' => ['list', 'view', 'create', 'edit', 'delete'],
+            ],
             'contact_submission' => [
                 'label' => 'Contact Submissions',
                 'actions' => ['list', 'view', 'create', 'edit', 'delete'],
