@@ -246,4 +246,31 @@ document.addEventListener('DOMContentLoaded', () => {
     goToTestimonial(0);
     startTestimonialAuto();
   }
+
+  const eventPopupOverlay = document.getElementById('eventPopupOverlay');
+  const eventPopupClose = document.getElementById('eventPopupClose');
+
+  if (eventPopupOverlay?.dataset.popupEnabled === '1') {
+    requestAnimationFrame(() => {
+      eventPopupOverlay.classList.add('active');
+    });
+
+    const closePopup = () => {
+      eventPopupOverlay.classList.remove('active');
+    };
+
+    eventPopupClose?.addEventListener('click', closePopup);
+
+    eventPopupOverlay.addEventListener('click', (event) => {
+      if (event.target === eventPopupOverlay) {
+        closePopup();
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && eventPopupOverlay.classList.contains('active')) {
+        closePopup();
+      }
+    });
+  }
 });

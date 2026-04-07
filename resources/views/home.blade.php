@@ -85,6 +85,32 @@
       <div class="dot {{ $index === 0 ? 'active' : '' }}" onclick="goToSlide({{ $index }})"></div>
     @endforeach
   </div>
+
+  @if ($popupEvent && filled($popupEvent->popup_image_url))
+    <div
+      class="event-popup-overlay"
+      id="eventPopupOverlay"
+      data-event-id="{{ $popupEvent->id }}"
+      data-popup-enabled="1">
+      <div class="event-popup-modal" role="dialog" aria-modal="true" aria-label="Important Notice">
+        <button class="event-popup-close" id="eventPopupClose" type="button" aria-label="Close notice">
+          <i class="fa fa-times"></i>
+        </button>
+        <img src="{{ $popupEvent->popup_image_url }}" alt="{{ $popupEvent->name }}" class="event-popup-image" />
+        <div class="event-popup-content">
+          <h3>{{ $popupEvent->name }}</h3>
+          @if (filled($popupEvent->description))
+            <p>{{ $popupEvent->description }}</p>
+          @endif
+          @if (filled($popupEvent->notice_url))
+            <a href="{{ $popupEvent->notice_url }}" class="btn-gold" target="_blank" rel="noopener noreferrer">
+              {{ $popupEvent->notice_link_text ?: 'View Notice' }}
+            </a>
+          @endif
+        </div>
+      </div>
+    </div>
+  @endif
 </div>
 
 <!-- HERO FEATURES -->
@@ -282,30 +308,26 @@
     <p>Stay updated with the latest happenings at our university</p>
   </div>
   <div class="events-list" style="max-width:720px;margin:0 auto;">
-    <div class="event-item">
-      <div class="event-date"><div class="day">15</div><div class="mon">Apr</div></div>
-      <div class="event-info">
-        <h4>Annual Science & Technology Symposium</h4>
-        <p>Join leading researchers and students to discuss the future of technology and innovation.</p>
-        <div class="meta"><i class="fa fa-map-marker-alt"></i> Main Auditorium &nbsp;|&nbsp; <i class="fa fa-clock"></i> 9:00 AM – 5:00 PM</div>
+    @foreach ($upcomingEvents as $event)
+      @php
+        $eventDate = data_get($event, 'date');
+        $dayText = $eventDate ? \Illuminate\Support\Carbon::parse($eventDate)->format('d') : '--';
+        $monthText = $eventDate ? \Illuminate\Support\Carbon::parse($eventDate)->format('M') : '--';
+      @endphp
+      <div class="event-item">
+        <div class="event-date"><div class="day">{{ $dayText }}</div><div class="mon">{{ $monthText }}</div></div>
+        <div class="event-info">
+          <h4>{{ data_get($event, 'name') }}</h4>
+          <p>{{ data_get($event, 'description') }}</p>
+          <div class="meta"><i class="fa fa-map-marker-alt"></i> {{ data_get($event, 'venue', 'Venue will be announced') }} &nbsp;|&nbsp; <i class="fa fa-clock"></i> {{ data_get($event, 'event_time_text') }}</div>
+          @if (filled(data_get($event, 'notice_url')))
+            <a href="{{ data_get($event, 'notice_url') }}" class="event-notice-link" target="_blank" rel="noopener noreferrer">
+              {{ data_get($event, 'notice_link_text', 'View Notice') }}
+            </a>
+          @endif
+        </div>
       </div>
-    </div>
-    <div class="event-item">
-      <div class="event-date"><div class="day">22</div><div class="mon">Apr</div></div>
-      <div class="event-info">
-        <h4>Open Campus Day for Prospective Students</h4>
-        <p>Tour our facilities, meet faculty, and learn about admission requirements.</p>
-        <div class="meta"><i class="fa fa-map-marker-alt"></i> Campus Grounds &nbsp;|&nbsp; <i class="fa fa-clock"></i> 10:00 AM – 2:00 PM</div>
-      </div>
-    </div>
-    <div class="event-item">
-      <div class="event-date"><div class="day">05</div><div class="mon">May</div></div>
-      <div class="event-info">
-        <h4>Graduation Ceremony 2026</h4>
-        <p>Celebrating the achievements of our graduating class of 2026.</p>
-        <div class="meta"><i class="fa fa-map-marker-alt"></i> University Stadium &nbsp;|&nbsp; <i class="fa fa-clock"></i> 4:00 PM</div>
-      </div>
-    </div>
+    @endforeach
   </div>
 </section>
 

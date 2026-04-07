@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AcademicTerm;
 use App\Models\ClassRoom;
 use App\Models\HeroSlide;
+use App\Models\SpecialEvent;
 use App\Models\TextCarouselItem;
 use App\Models\TimetableSlot;
 use Illuminate\View\View;
@@ -109,6 +110,51 @@ class HomeController extends Controller
 
         $textCarouselGroups = $textCarouselItems->chunk(3)->values();
 
+        $upcomingEvents = SpecialEvent::query()
+            ->where('show_on_home', true)
+            ->whereDate('date', '>=', today())
+            ->orderBy('date')
+            ->limit(6)
+            ->get();
+
+        if ($upcomingEvents->isEmpty()) {
+            $upcomingEvents = collect([
+                [
+                    'date' => now()->setDate(2026, 4, 15),
+                    'name' => 'Annual Science & Technology Symposium',
+                    'description' => 'Join leading researchers and students to discuss the future of technology and innovation.',
+                    'venue' => 'Main Auditorium',
+                    'event_time_text' => '9:00 AM – 5:00 PM',
+                    'notice_url' => null,
+                    'notice_link_text' => 'View Notice',
+                ],
+                [
+                    'date' => now()->setDate(2026, 4, 22),
+                    'name' => 'Open Campus Day for Prospective Students',
+                    'description' => 'Tour our facilities, meet faculty, and learn about admission requirements.',
+                    'venue' => 'Campus Grounds',
+                    'event_time_text' => '10:00 AM – 2:00 PM',
+                    'notice_url' => null,
+                    'notice_link_text' => 'View Notice',
+                ],
+                [
+                    'date' => now()->setDate(2026, 5, 5),
+                    'name' => 'Graduation Ceremony 2026',
+                    'description' => 'Celebrating the achievements of our graduating class of 2026.',
+                    'venue' => 'University Stadium',
+                    'event_time_text' => '4:00 PM',
+                    'notice_url' => null,
+                    'notice_link_text' => 'View Notice',
+                ],
+            ]);
+        }
+
+        $popupEvent = SpecialEvent::query()
+            ->where('show_on_home', true)
+            ->where('show_popup', true)
+            ->orderByDesc('date')
+            ->first();
+
         return view('home', [
             'classes' => $classes,
             'currentTerm' => $currentTerm,
@@ -116,6 +162,8 @@ class HomeController extends Controller
             'timetableSlots' => $timetableSlots,
             'heroSlides' => $heroSlides,
             'textCarouselGroups' => $textCarouselGroups,
+            'upcomingEvents' => $upcomingEvents,
+            'popupEvent' => $popupEvent,
         ]);
     }
 }

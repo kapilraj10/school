@@ -9,6 +9,7 @@ use App\Models\ClassRoom;
 use App\Models\SpecialEvent;
 use App\Models\TimetableSlot;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
@@ -33,7 +34,7 @@ class SpecialEventResource extends Resource
 
     protected static ?string $navigationLabel = 'Special Events';
 
-    protected static ?string $navigationGroup = 'Academic Management';
+    protected static ?string $navigationGroup = 'Website Management';
 
     protected static ?int $navigationSort = 7;
 
@@ -94,6 +95,43 @@ class SpecialEventResource extends Resource
                                 ->columnSpanFull(),
                         ]),
                 ]),
+            Section::make('Website Display')
+                ->schema([
+                    Grid::make(2)
+                        ->schema([
+                            TextInput::make('venue')
+                                ->maxLength(255)
+                                ->placeholder('Main Auditorium'),
+
+                            Toggle::make('show_on_home')
+                                ->label('Show in homepage events section')
+                                ->default(true)
+                                ->inline(false),
+
+                            TextInput::make('notice_url')
+                                ->url()
+                                ->maxLength(255)
+                                ->placeholder('https://...'),
+
+                            TextInput::make('notice_link_text')
+                                ->maxLength(100)
+                                ->default('View Notice'),
+
+                            Toggle::make('show_popup')
+                                ->label('Show popup when website opens')
+                                ->inline(false)
+                                ->default(false),
+
+                            FileUpload::make('popup_image')
+                                ->label('Popup Image')
+                                ->image()
+                                ->disk('public')
+                                ->directory('event-popup-temp')
+                                ->visibility('public')
+                                ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
+                                ->helperText('Uploaded to Cloudinary when configured.'),
+                        ]),
+                ]),
         ]);
     }
 
@@ -115,6 +153,14 @@ class SpecialEventResource extends Resource
                 Tables\Columns\TextColumn::make('date')
                     ->date('M d, Y')
                     ->sortable(),
+                Tables\Columns\TextColumn::make('venue')
+                    ->toggleable(),
+                Tables\Columns\IconColumn::make('show_on_home')
+                    ->boolean()
+                    ->label('Home'),
+                Tables\Columns\IconColumn::make('show_popup')
+                    ->boolean()
+                    ->label('Popup'),
                 Tables\Columns\IconColumn::make('blocks_timetable')
                     ->boolean()
                     ->label('Blocks timetable'),
@@ -123,6 +169,8 @@ class SpecialEventResource extends Resource
             ->filters([
                 Tables\Filters\TernaryFilter::make('blocks_timetable')
                     ->label('Blocking events only'),
+                Tables\Filters\TernaryFilter::make('show_on_home')
+                    ->label('Shown on homepage'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
