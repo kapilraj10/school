@@ -1,0 +1,29 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "vendor/bin/pint": true,
+        "/^php artisan make:seeder CombinedPeriodSeeder --no-interaction$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^php artisan page-clicks:cleanup$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^php -r \"require 'vendor/autoload\\.php'; \\\\\\$app = require_once 'bootstrap/app\\.php'; \\\\\\$app->boot\\(\\); \\\\\\$service = new \\\\App\\\\Services\\\\GeneticAlgorithmTimetableService\\(\\); echo 'Service instantiated: ' \\. get_class\\(\\\\\\$service\\) \\. PHP_EOL;\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^php artisan route:list \\| grep -i timetable$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^php artisan test tests/Unit/Services/GeneticAlgorithmTimetableServiceTest\\.php --compact$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^php artisan timetable:resolve-conflicts 1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

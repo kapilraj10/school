@@ -1,0 +1,32 @@
+{
+  "resources/css/app.css": {
+    "file": "assets/app-BiJKdVeK.css",
+    "src": "resources/css/app.css",
+    "isEntry": true,
+    "name": "app",
+    "names": [
+      "app.css"
+    ]
+  },
+  "resources/css/home-legacy.css": {
+    "file": "assets/home-legacy-DfseR3DA.css",
+    "src": "resources/css/home-legacy.css",
+    "isEntry": true,
+    "name": "home-legacy",
+    "names": [
+      "home-legacy.css"
+    ]
+  },
+  "resources/js/app.js": {
+    "file": "assets/app-CAiCLEjY.js",
+    "name": "app",
+    "src": "resources/js/app.js",
+    "isEntry": true
+  },
+  "resources/js/pages/home.js": {
+    "file": "assets/home-DFCPf8-7.js",
+    "name": "home",
+    "src": "resources/js/pages/home.js",
+    "isEntry": true
+  }
+}

@@ -1,0 +1,30 @@
+Requirement for school timetable
+
+1. Hard Requirements (must be satisfied):
+	- There should be 8 periods per day, 48 per week.
+	- In a week there are 6 active days (Sunday to Friday).
+	- There are 3 types of subjects: compulsory, optional, and co-curricular.
+	- No two co-curricular subjects should be taught in a single day.
+	- Not more than 2 periods of 1 subject in a day.
+	- A co-curricular subject may be scheduled for at most two periods per day, and if both periods are for the same subject then they should be consecutive.
+	  For example: dance–dance is allowed; dance–math–dance is not allowed.
+	- Each subject must satisfy its minimum and maximum weekly period allocation.
+	- Subject allocations must be balanced across the week (no subject overloaded on a single day).
+	- A teacher cannot be assigned to more than one class or section in the same period.
+	- Teacher workload must not exceed maximum allowed periods per day. Max allocation is 7 periods per day.
+	- All 48 periods should be taught in a week.
+	- There should be no empty slots in the timetable.
+	- Combined subjects must be scheduled for the same grade on the same day and in the same periods.
+	  For example, if Sport is a combined subject, it should be assigned to all sections of the same grade simultaneously.
+	  ✔ Allowed: Sport on Tuesday, periods 5 and 6 for Class 1, Sections A and B
+	  ✘ Not allowed: Sport on Tuesday, periods 5 and 6 for Class 1 and Class 2
+	- No physical period (sports, taekwondo, dance) in the 5th period.
+
+2. Soft Requirements (best-effort preferences):
+	- Timetable should maintain positional consistency across days.
+	  Example: If Sunday order is English, Math, Science, Nepali, Serofero, GK, Computer, English
+	  then other days should retain the same subject order, replacing only the co-curricular subject.
+	- Not more than 1 period of 1 subject in a day (preferred).
+	- Core subjects (English, Math, Science) should preferably be scheduled in the same period slots daily.
+	- Avoid scheduling mentally heavy subjects consecutively (e.g., Math → Science → Math).
+	- Co-curricular subjects should preferably be placed in middle or last periods.
