@@ -10,6 +10,7 @@ use Filament\Tables\Actions\DeleteAction;
 use Filament\Tables\Actions\DeleteBulkAction;
 use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Actions\ViewAction;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -21,6 +22,12 @@ class TeachersTable
     {
         return $table
             ->columns([
+                ImageColumn::make('profile_image')
+                    ->label('Image')
+                    ->disk('public')
+                    ->circular()
+                    ->defaultImageUrl(asset('images/logo.png')),
+
                 TextColumn::make('name')
                     ->label('Teacher')
                     ->description(function ($record) {
@@ -36,6 +43,23 @@ class TeachersTable
                     ->sortable()
                     ->weight('bold')
                     ->icon('heroicon-m-user'),
+
+                TextColumn::make('profile_role')
+                    ->label('Role')
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'principal' => 'Principal',
+                        'vice_principal' => 'Vice Principal',
+                        'coordinator' => 'Coordinator',
+                        default => 'Teacher',
+                    })
+                    ->badge()
+                    ->color(fn (?string $state): string => match ($state) {
+                        'principal' => 'success',
+                        'vice_principal' => 'warning',
+                        'coordinator' => 'info',
+                        default => 'gray',
+                    })
+                    ->sortable(),
 
                 TextColumn::make('subject_ids')
                     ->label('Subjects')
@@ -113,6 +137,16 @@ class TeachersTable
                     ->options([
                         'active' => 'Active',
                         'inactive' => 'Inactive',
+                    ])
+                    ->native(false),
+
+                SelectFilter::make('profile_role')
+                    ->label('Role')
+                    ->options([
+                        'principal' => 'Principal',
+                        'vice_principal' => 'Vice Principal',
+                        'coordinator' => 'Coordinator',
+                        'teacher' => 'Teacher',
                     ])
                     ->native(false),
 

@@ -102,7 +102,7 @@
     <li><a href="{{ route('home') }}" class="active">Home</a></li>
   <li><a href="{{ route('about') }}">About Us</a></li>
     <li><a href="{{ route('blog') }}">Blog</a></li>
-  <li><a href="{{ route('staff') }}">Staff</a></li>
+  <li><a href="{{ route('staff') }}">Our Team</a></li>
   <li><a href="{{ route('gallery') }}">Gallery</a></li>
     <li><a href="{{ route('contact') }}">Contact Us</a></li>
   </ul>
@@ -385,7 +385,7 @@
         <li><a href="{{ route('home') }}">Home</a></li>
         <li><a href="{{ route('about') }}">About Us</a></li>
         <li><a href="{{ route('blog') }}">Blog</a></li>
-        <li><a href="{{ route('staff') }}">Staff</a></li>
+  <li><a href="{{ route('staff') }}">Our Team</a></li>
         <li><a href="{{ route('gallery') }}">Gallery</a></li>
         <li><a href="{{ route('contact') }}">Contact Us</a></li>
       </ul>

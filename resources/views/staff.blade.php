@@ -7,20 +7,131 @@
         'hours' => 'Sun - Fri : 09:00 am - 05:30 pm',
     ];
 
-  $navLinks = ['Home', 'About Us', 'Blog', 'Staff', 'Gallery', 'Contact Us'];
-    $activeNav = 'Staff';
+  $navLinks = ['Home', 'About Us', 'Blog', 'Our Team', 'Gallery', 'Contact Us'];
+  $activeNav = 'Our Team';
     $breadcrumb = ['Home', 'Our Teachers'];
 
+  $roleLabels = [
+    'principal' => 'Principal',
+    'vice_principal' => 'Vice Principal',
+    'coordinator' => 'Coordinator',
+    'teacher' => 'Teacher',
+  ];
+
+  $resolveImageUrl = static function (?string $path, string $fallback): string {
+    if (blank($path)) {
+      return $fallback;
+    }
+
+    if (\Illuminate\Support\Str::startsWith($path, ['http://', 'https://'])) {
+      return $path;
+    }
+
+    return asset('storage/'.$path);
+  };
+
+  $formatSocialUrl = static function (?string $url): ?string {
+    if (blank($url)) {
+      return null;
+    }
+
+    if (
+      \Illuminate\Support\Str::startsWith($url, ['http://', 'https://'])
+    ) {
+      return $url;
+    }
+
+    return 'https://'.$url;
+  };
+
+  $teacherRecords = \App\Models\Teacher::query()
+    ->active()
+    ->with('subjects:id,name')
+    ->orderBy('name')
+    ->get();
+
+  $leadershipFallbacks = [
+    [
+      'role' => 'principal',
+      'name' => 'Suresh Gautam',
+      'display_role' => 'Principal',
+      'img' => asset('images/slide1.png'),
+      'twitter' => '#',
+      'facebook' => '#',
+      'linkedin' => '#',
+    ],
+    [
+      'role' => 'vice_principal',
+      'name' => 'Mina Karki',
+      'display_role' => 'Vice Principal',
+      'img' => asset('images/slide-3.png'),
+      'twitter' => '#',
+      'facebook' => '#',
+      'linkedin' => '#',
+    ],
+    [
+      'role' => 'coordinator',
+      'name' => 'Rita Shrestha',
+      'display_role' => 'Coordinator',
+      'img' => asset('images/slide-2.png'),
+      'twitter' => '#',
+      'facebook' => '#',
+      'linkedin' => '#',
+    ],
+  ];
+
+  $leadershipMembers = collect($leadershipFallbacks)
+    ->map(function (array $fallback) use ($teacherRecords, $roleLabels, $resolveImageUrl, $formatSocialUrl): array {
+      $record = $teacherRecords->firstWhere('profile_role', $fallback['role']);
+
+      if (! $record) {
+        return $fallback;
+      }
+
+      return [
+        'role' => $fallback['role'],
+        'name' => $record->name,
+        'display_role' => $roleLabels[$record->profile_role] ?? 'Teacher',
+        'img' => $resolveImageUrl($record->profile_image, $fallback['img']),
+        'twitter' => $formatSocialUrl($record->twitter_url),
+        'facebook' => $formatSocialUrl($record->facebook_url),
+        'linkedin' => $formatSocialUrl($record->linkedin_url),
+      ];
+    })
+    ->values()
+    ->all();
+
+  $teachers = $teacherRecords
+    ->filter(function (\App\Models\Teacher $teacher): bool {
+      return ! in_array($teacher->profile_role, ['principal', 'vice_principal', 'coordinator'], true);
+    })
+    ->map(function (\App\Models\Teacher $teacher) use ($resolveImageUrl, $formatSocialUrl): array {
+      $primarySubject = $teacher->subjects->first()?->name;
+
+      return [
+        'name' => $teacher->name,
+        'role' => $primarySubject ? $primarySubject.' Teacher' : 'Teacher',
+        'img' => $resolveImageUrl($teacher->profile_image, asset('images/slide1.png')),
+        'twitter' => $formatSocialUrl($teacher->twitter_url),
+        'facebook' => $formatSocialUrl($teacher->facebook_url),
+        'linkedin' => $formatSocialUrl($teacher->linkedin_url),
+      ];
+    })
+    ->values()
+    ->all();
+
+  if ($teachers === []) {
     $teachers = [
-        ['name' => 'Aarati Sharma', 'role' => 'English Teacher', 'img' => asset('images/slide1.png'), 'twitter' => '#', 'facebook' => '#', 'linkedin' => '#'],
-        ['name' => 'Bikash Thapa', 'role' => 'Science Teacher', 'img' => asset('images/slide-2.png'), 'twitter' => '#', 'facebook' => '#', 'linkedin' => '#'],
-        ['name' => 'Nima Lama', 'role' => 'Math Teacher', 'img' => asset('images/slide-3.png'), 'twitter' => '#', 'facebook' => '#', 'linkedin' => '#'],
-        ['name' => 'Sujata Karki', 'role' => 'Computer Teacher', 'img' => asset('images/logo.jpg'), 'twitter' => '#', 'facebook' => '#', 'linkedin' => '#'],
-        ['name' => 'Dipesh Rai', 'role' => 'Social Teacher', 'img' => asset('images/inerpageslider.jpg'), 'twitter' => '#', 'facebook' => '#', 'linkedin' => '#'],
-        ['name' => 'Mina Gurung', 'role' => 'Nepali Teacher', 'img' => asset('images/slide1.png'), 'twitter' => '#', 'facebook' => '#', 'linkedin' => '#'],
-        ['name' => 'Rohan Shrestha', 'role' => 'Art Teacher', 'img' => asset('images/slide-2.png'), 'twitter' => '#', 'facebook' => '#', 'linkedin' => '#'],
-        ['name' => 'Pooja Adhikari', 'role' => 'Music Teacher', 'img' => asset('images/slide-3.png'), 'twitter' => '#', 'facebook' => '#', 'linkedin' => '#'],
+  ['name' => 'Aarati Sharma', 'role' => 'English Teacher', 'img' => asset('images/slide1.png'), 'twitter' => null, 'facebook' => null, 'linkedin' => null],
+  ['name' => 'Bikash Thapa', 'role' => 'Science Teacher', 'img' => asset('images/slide-2.png'), 'twitter' => null, 'facebook' => null, 'linkedin' => null],
+  ['name' => 'Nima Lama', 'role' => 'Math Teacher', 'img' => asset('images/slide-3.png'), 'twitter' => null, 'facebook' => null, 'linkedin' => null],
+  ['name' => 'Sujata Karki', 'role' => 'Computer Teacher', 'img' => asset('images/logo.jpg'), 'twitter' => null, 'facebook' => null, 'linkedin' => null],
+  ['name' => 'Dipesh Rai', 'role' => 'Social Teacher', 'img' => asset('images/inerpageslider.jpg'), 'twitter' => null, 'facebook' => null, 'linkedin' => null],
+  ['name' => 'Mina Gurung', 'role' => 'Nepali Teacher', 'img' => asset('images/slide1.png'), 'twitter' => null, 'facebook' => null, 'linkedin' => null],
+  ['name' => 'Rohan Shrestha', 'role' => 'Art Teacher', 'img' => asset('images/slide-2.png'), 'twitter' => null, 'facebook' => null, 'linkedin' => null],
+  ['name' => 'Pooja Adhikari', 'role' => 'Music Teacher', 'img' => asset('images/slide-3.png'), 'twitter' => null, 'facebook' => null, 'linkedin' => null],
     ];
+  }
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -67,7 +178,7 @@
             $url = route('about');
         } elseif ($link === 'Gallery') {
             $url = route('gallery');
-        } elseif ($link === 'Staff') {
+    } elseif ($link === 'Our Team') {
             $url = route('staff');
     } elseif ($link === 'Blog') {
       $url = route('blog');
@@ -105,44 +216,26 @@
 
 <section class="leadership-section">
   <div class="leadership-grid">
-    <article class="leadership-card">
+    @foreach ($leadershipMembers as $leader)
+    <article class="leadership-card {{ $leader['role'] === 'principal' ? 'leadership-card--center' : '' }}">
       <div class="leadership-photo-wrap">
-        <img src="{{ asset('images/slide-2.png') }}" alt="Coordinator" class="leadership-photo" />
+        <img src="{{ $leader['img'] }}" alt="{{ $leader['display_role'] }}" class="leadership-photo" />
         <div class="leadership-photo-overlay">
-          <a href="#" class="leadership-social-btn" title="Twitter" aria-label="Coordinator Twitter">𝕏</a>
-          <a href="#" class="leadership-social-btn" title="Facebook" aria-label="Coordinator Facebook">f</a>
-          <a href="#" class="leadership-social-btn" title="LinkedIn" aria-label="Coordinator LinkedIn">in</a>
+          @if ($leader['twitter'])
+            <a href="{{ $leader['twitter'] }}" class="leadership-social-btn" title="Twitter" aria-label="{{ $leader['display_role'] }} Twitter" target="_blank" rel="noopener noreferrer">𝕏</a>
+          @endif
+          @if ($leader['facebook'])
+            <a href="{{ $leader['facebook'] }}" class="leadership-social-btn" title="Facebook" aria-label="{{ $leader['display_role'] }} Facebook" target="_blank" rel="noopener noreferrer">f</a>
+          @endif
+          @if ($leader['linkedin'])
+            <a href="{{ $leader['linkedin'] }}" class="leadership-social-btn" title="LinkedIn" aria-label="{{ $leader['display_role'] }} LinkedIn" target="_blank" rel="noopener noreferrer">in</a>
+          @endif
         </div>
       </div>
-      <h3 class="leadership-name">Rita Shrestha</h3>
-      <p class="leadership-role">Coordinator</p>
+      <h3 class="leadership-name">{{ $leader['name'] }}</h3>
+      <p class="leadership-role">{{ $leader['display_role'] }}</p>
     </article>
-
-    <article class="leadership-card leadership-card--center">
-      <div class="leadership-photo-wrap">
-        <img src="{{ asset('images/slide1.png') }}" alt="Principal" class="leadership-photo" />
-        <div class="leadership-photo-overlay">
-          <a href="#" class="leadership-social-btn" title="Twitter" aria-label="Principal Twitter">𝕏</a>
-          <a href="#" class="leadership-social-btn" title="Facebook" aria-label="Principal Facebook">f</a>
-          <a href="#" class="leadership-social-btn" title="LinkedIn" aria-label="Principal LinkedIn">in</a>
-        </div>
-      </div>
-      <h3 class="leadership-name">Suresh Gautam</h3>
-      <p class="leadership-role">Principal</p>
-    </article>
-
-    <article class="leadership-card">
-      <div class="leadership-photo-wrap">
-        <img src="{{ asset('images/slide-3.png') }}" alt="Vice Principal" class="leadership-photo" />
-        <div class="leadership-photo-overlay">
-          <a href="#" class="leadership-social-btn" title="Twitter" aria-label="Vice Principal Twitter">𝕏</a>
-          <a href="#" class="leadership-social-btn" title="Facebook" aria-label="Vice Principal Facebook">f</a>
-          <a href="#" class="leadership-social-btn" title="LinkedIn" aria-label="Vice Principal LinkedIn">in</a>
-        </div>
-      </div>
-      <h3 class="leadership-name">Mina Karki</h3>
-      <p class="leadership-role">Vice Principal</p>
-    </article>
+    @endforeach
   </div>
 </section>
 
@@ -158,9 +251,15 @@
             loading="lazy"
           />
           <div class="photo-overlay">
-            <a href="{{ $teacher['twitter'] }}" class="social-btn" title="Twitter">𝕏</a>
-            <a href="{{ $teacher['facebook'] }}" class="social-btn" title="Facebook">f</a>
-            <a href="{{ $teacher['linkedin'] }}" class="social-btn" title="LinkedIn">in</a>
+            @if ($teacher['twitter'])
+              <a href="{{ $teacher['twitter'] }}" class="social-btn" title="Twitter" target="_blank" rel="noopener noreferrer">𝕏</a>
+            @endif
+            @if ($teacher['facebook'])
+              <a href="{{ $teacher['facebook'] }}" class="social-btn" title="Facebook" target="_blank" rel="noopener noreferrer">f</a>
+            @endif
+            @if ($teacher['linkedin'])
+              <a href="{{ $teacher['linkedin'] }}" class="social-btn" title="LinkedIn" target="_blank" rel="noopener noreferrer">in</a>
+            @endif
           </div>
         </div>
         <div class="teacher-name">{{ $teacher['name'] }}</div>
@@ -188,7 +287,7 @@
         <li><a href="{{ route('home') }}">Home</a></li>
         <li><a href="{{ route('about') }}">About Us</a></li>
         <li><a href="{{ route('blog') }}">Blog</a></li>
-        <li><a href="{{ route('staff') }}">Staff</a></li>
+  <li><a href="{{ route('staff') }}">Our Team</a></li>
         <li><a href="{{ route('gallery') }}">Gallery</a></li>
         <li><a href="{{ route('contact') }}">Contact Us</a></li>
       </ul>

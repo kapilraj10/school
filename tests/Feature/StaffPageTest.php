@@ -12,7 +12,9 @@ class StaffPageTest extends TestCase
 
         $response
             ->assertOk()
+            ->assertSee('Our Team')
             ->assertSee('Our Teachers')
+            ->assertSeeInOrder(['Principal', 'Vice Principal', 'Coordinator'])
             ->assertSee('YUMAK BAUDDHA MANDAL SCHOOL');
     }
 }

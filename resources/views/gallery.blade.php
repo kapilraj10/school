@@ -7,7 +7,7 @@
         'hours' => 'Sun - Fri : 09:00 am - 05:30 pm',
     ];
 
-  $navLinks = ['Home', 'About Us', 'Blog', 'Staff', 'Gallery', 'Contact Us'];
+  $navLinks = ['Home', 'About Us', 'Blog', 'Our Team', 'Gallery', 'Contact Us'];
     $activeNav = 'Gallery';
 
     $breadcrumb = ['Home', 'Gallery'];
@@ -73,7 +73,7 @@
             $url = route('about');
         } elseif ($link === 'Gallery') {
             $url = route('gallery');
-    } elseif ($link === 'Staff') {
+    } elseif ($link === 'Our Team') {
       $url = route('staff');
     } elseif ($link === 'Blog') {
       $url = route('blog');
@@ -172,7 +172,7 @@
         <li><a href="{{ route('home') }}">Home</a></li>
         <li><a href="{{ route('about') }}">About Us</a></li>
         <li><a href="{{ route('blog') }}">Blog</a></li>
-        <li><a href="{{ route('staff') }}">Staff</a></li>
+  <li><a href="{{ route('staff') }}">Our Team</a></li>
         <li><a href="{{ route('gallery') }}">Gallery</a></li>
         <li><a href="{{ route('contact') }}">Contact Us</a></li>
       </ul>

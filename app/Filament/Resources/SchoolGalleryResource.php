@@ -28,7 +28,7 @@ class SchoolGalleryResource extends Resource
 
     protected static ?string $navigationLabel = 'School Gallery';
 
-    protected static ?string $navigationGroup = 'Academic Management';
+    protected static ?string $navigationGroup = 'Website Management';
 
     protected static ?int $navigationSort = 8;
 

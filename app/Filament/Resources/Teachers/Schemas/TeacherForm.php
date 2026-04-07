@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Teachers\Schemas;
 use App\Filament\Forms\Components\AvailabilityGrid;
 use App\Models\ClassRoom;
 use App\Models\Subject;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
@@ -55,6 +56,50 @@ class TeacherForm
                                     ->prefix('+977')
                                     ->placeholder('98XXXXXXXX')
                                     ->helperText('Enter 10-digit phone number')
+                                    ->columnSpan(1),
+
+                                Select::make('profile_role')
+                                    ->label('Team Role')
+                                    ->options([
+                                        'principal' => 'Principal',
+                                        'vice_principal' => 'Vice Principal',
+                                        'coordinator' => 'Coordinator',
+                                        'teacher' => 'Teacher',
+                                    ])
+                                    ->required()
+                                    ->default('teacher')
+                                    ->native(false)
+                                    ->columnSpan(1),
+
+                                FileUpload::make('profile_image')
+                                    ->label('Profile Image')
+                                    ->image()
+                                    ->disk('public')
+                                    ->directory('teacher-profiles')
+                                    ->visibility('public')
+                                    ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
+                                    ->helperText('Optional: JPG, PNG, WEBP')
+                                    ->columnSpan(1),
+
+                                TextInput::make('twitter_url')
+                                    ->label('Twitter URL')
+                                    ->url()
+                                    ->maxLength(255)
+                                    ->placeholder('https://x.com/username')
+                                    ->columnSpan(1),
+
+                                TextInput::make('facebook_url')
+                                    ->label('Facebook URL')
+                                    ->url()
+                                    ->maxLength(255)
+                                    ->placeholder('https://facebook.com/username')
+                                    ->columnSpan(1),
+
+                                TextInput::make('linkedin_url')
+                                    ->label('LinkedIn URL')
+                                    ->url()
+                                    ->maxLength(255)
+                                    ->placeholder('https://linkedin.com/in/username')
                                     ->columnSpan(1),
 
                                 Select::make('status')
