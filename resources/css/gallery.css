@@ -218,6 +218,16 @@ nav {
   cursor: pointer;
 }
 .gallery-item.is-hidden { display: none; }
+.gallery-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 28px 14px;
+  color: var(--gray);
+  background: #fff;
+  border: 1px dashed #d9d9d9;
+  border-radius: 6px;
+  font-weight: 600;
+}
 .gallery-item img {
   width: 100%;
   height: 100%;

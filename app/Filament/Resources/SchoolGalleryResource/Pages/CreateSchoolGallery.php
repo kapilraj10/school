@@ -7,6 +7,7 @@ use App\Services\CloudinaryImageService;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
@@ -24,28 +25,90 @@ class CreateSchoolGallery extends CreateRecord
             ]);
         }
 
-        $absolutePath = Storage::disk('public')->path($photoPath);
+        $absolutePath = $this->resolvePhotoAbsolutePath($photoPath);
 
-        try {
-            $uploadResult = app(CloudinaryImageService::class)->uploadImage($absolutePath);
-        } catch (\Throwable) {
-            Storage::disk('public')->delete($photoPath);
+        $cloudinaryConfigured =
+            filled(config('services.cloudinary.cloud_name')) &&
+            filled(config('services.cloudinary.api_key')) &&
+            filled(config('services.cloudinary.api_secret'));
 
-            throw ValidationException::withMessages([
-                'photo' => 'Photo upload failed. Please check Cloudinary settings and try again.',
-            ]);
+        $imageUrl = null;
+        $cloudinaryPublicId = '';
+        $cloudinaryFolder = null;
+
+        if ($cloudinaryConfigured) {
+            try {
+                $uploadResult = app(CloudinaryImageService::class)->uploadImage($absolutePath);
+
+                $imageUrl = $uploadResult['secure_url'];
+                $cloudinaryPublicId = $uploadResult['public_id'];
+                $cloudinaryFolder = $uploadResult['folder'];
+
+                $this->cleanupTemporaryPhoto($photoPath, $absolutePath);
+            } catch (\Throwable) {
+                $imageUrl = null;
+            }
         }
 
-        Storage::disk('public')->delete($photoPath);
+        if ($imageUrl === null) {
+            $extension = pathinfo($photoPath, PATHINFO_EXTENSION) ?: 'jpg';
+            $filename = 'gallery_'.now()->format('YmdHis').'_'.bin2hex(random_bytes(4)).'.'.$extension;
+            $targetDirectory = public_path('images/school-gallery');
+
+            if (! File::exists($targetDirectory)) {
+                File::makeDirectory($targetDirectory, 0755, true);
+            }
+
+            $targetPath = $targetDirectory.DIRECTORY_SEPARATOR.$filename;
+
+            File::copy($absolutePath, $targetPath);
+            $this->cleanupTemporaryPhoto($photoPath, $absolutePath);
+
+            $imageUrl = asset('images/school-gallery/'.$filename);
+        }
 
         unset($data['photo']);
 
-        $data['image_url'] = $uploadResult['secure_url'];
-        $data['cloudinary_public_id'] = $uploadResult['public_id'];
-        $data['cloudinary_folder'] = $uploadResult['folder'];
+        $data['image_url'] = $imageUrl;
+        $data['cloudinary_public_id'] = $cloudinaryPublicId;
+        $data['cloudinary_folder'] = $cloudinaryFolder;
         $data['uploaded_by'] = Auth::id();
 
         return $data;
+    }
+
+    private function resolvePhotoAbsolutePath(string $photoPath): string
+    {
+        $publicDisk = Storage::disk('public');
+
+        if ($publicDisk->exists($photoPath)) {
+            return $publicDisk->path($photoPath);
+        }
+
+        $livewireTmpPath = storage_path('app/livewire-tmp/'.basename($photoPath));
+
+        if (File::exists($livewireTmpPath)) {
+            return $livewireTmpPath;
+        }
+
+        throw ValidationException::withMessages([
+            'photo' => 'Uploaded photo file was not found. Please upload the photo again.',
+        ]);
+    }
+
+    private function cleanupTemporaryPhoto(string $photoPath, string $absolutePath): void
+    {
+        $publicDisk = Storage::disk('public');
+
+        if ($publicDisk->exists($photoPath)) {
+            $publicDisk->delete($photoPath);
+
+            return;
+        }
+
+        if (File::exists($absolutePath)) {
+            File::delete($absolutePath);
+        }
     }
 
     protected function onValidationError(\Illuminate\Validation\ValidationException $exception): void

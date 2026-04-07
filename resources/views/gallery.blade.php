@@ -12,16 +12,20 @@
 
     $breadcrumb = ['Home', 'Gallery'];
 
-  $galleryItems = [
-    ['img' => asset('images/slide1.png'), 'caption' => 'Classroom Activity', 'category' => 'Classroom'],
-    ['img' => asset('images/slide-2.png'), 'caption' => 'Students Learning', 'category' => 'Classroom'],
-    ['img' => asset('images/slide-3.png'), 'caption' => 'Campus Event', 'category' => 'Events'],
-    ['img' => asset('images/logo.png'), 'caption' => 'School Identity', 'category' => 'Identity'],
-    ['img' => asset('images/logo.jpg'), 'caption' => 'School Branding', 'category' => 'Identity'],
-    ['img' => asset('images/inerpageslider.jpg'), 'caption' => 'School Environment', 'category' => 'Campus'],
-  ];
+  $galleryCategories = ['All', 'Activities', 'Finance', 'Administration', 'Academic'];
 
-  $galleryCategories = ['All', 'Classroom', 'Events', 'Campus', 'Identity'];
+  $galleryItems = \App\Models\SchoolGallery::query()
+    ->latest()
+    ->get(['image_url', 'category'])
+    ->map(function (\App\Models\SchoolGallery $gallery) {
+      return [
+        'img' => $gallery->image_url,
+        'caption' => ucfirst($gallery->category ?? 'Gallery') . ' Photo',
+        'category' => ucfirst($gallery->category ?? 'Academic'),
+      ];
+    })
+    ->values()
+    ->all();
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -117,22 +121,25 @@
   </div>
 
   <div class="gallery-grid">
-    @foreach ($galleryItems as $index => $item)
-      <div class="gallery-item" data-index="{{ $index }}" data-category="{{ strtolower($item['category']) }}">
-        <img
-          src="{{ $item['img'] }}"
-          alt="{{ $item['caption'] }}"
-          loading="lazy"
-        />
-        <div class="gallery-overlay">
-          <div class="overlay-icons">
-            <button class="overlay-btn" type="button" title="View">&#128269;</button>
-            <button class="overlay-btn" type="button" title="Link">&#128279;</button>
-          </div>
-          <div class="overlay-caption">{{ $item['caption'] }}</div>
+    @forelse ($galleryItems as $index => $item)
+        <div class="gallery-item" data-index="{{ $index }}" data-category="{{ strtolower($item['category']) }}">
+            <img
+                src="{{ $item['img'] }}"
+                alt="{{ $item['caption'] }}"
+                loading="lazy"
+            />
+            <div class="gallery-overlay">
+                <div class="overlay-icons">
+                    <button class="overlay-btn" type="button" title="View">&#128269;</button>
+                </div>
+                <div class="overlay-caption">{{ $item['caption'] }}</div>
+            </div>
         </div>
+    @empty
+      <div class="gallery-empty">
+        No gallery photos uploaded yet.
       </div>
-    @endforeach
+    @endforelse
   </div>
 </section>
 

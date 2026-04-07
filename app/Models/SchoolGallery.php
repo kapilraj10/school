@@ -12,8 +12,7 @@ class SchoolGallery extends Model
     use HasFactory;
 
     protected $fillable = [
-        'title',
-        'description',
+        'category',
         'image_url',
         'cloudinary_public_id',
         'cloudinary_folder',

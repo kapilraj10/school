@@ -15,6 +15,13 @@ class SchoolGalleryResource extends Resource
 {
     use HasResourcePermissions;
 
+    private const CATEGORY_OPTIONS = [
+        'activities' => 'Activities',
+        'finance' => 'Finance',
+        'administration' => 'Administration',
+        'academic' => 'Academic',
+    ];
+
     protected static ?string $model = SchoolGallery::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-photo';
@@ -36,14 +43,11 @@ class SchoolGalleryResource extends Resource
             Forms\Components\Section::make('Upload Photo')
                 ->description('Upload school gallery photos only.')
                 ->schema([
-                    Forms\Components\TextInput::make('title')
-                        ->maxLength(255)
-                        ->placeholder('Optional title'),
-
-                    Forms\Components\Textarea::make('description')
-                        ->rows(3)
-                        ->maxLength(1000)
-                        ->placeholder('Optional description'),
+                    Forms\Components\Select::make('category')
+                        ->options(self::CATEGORY_OPTIONS)
+                        ->default('academic')
+                        ->required()
+                        ->native(false),
 
                     Forms\Components\FileUpload::make('photo')
                         ->label('Photo')
@@ -67,8 +71,9 @@ class SchoolGalleryResource extends Resource
                     ->height(80)
                     ->square(),
 
-                Tables\Columns\TextColumn::make('title')
-                    ->placeholder('Untitled')
+                Tables\Columns\TextColumn::make('category')
+                    ->label('Category')
+                    ->formatStateUsing(fn (?string $state): string => self::CATEGORY_OPTIONS[$state ?? ''] ?? ucfirst((string) $state))
                     ->searchable()
                     ->sortable(),
 
