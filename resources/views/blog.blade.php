@@ -7,89 +7,39 @@
   $navLinks = ['Home', 'About Us', 'Blog', 'Our Team', 'Gallery', 'Contact Us'];
   $activeNav = 'Blog';
 
-  $posts = [
-    [
-      'id' => 1,
-      'title' => 'Students Seek Lake of Communication',
-      'slug' => 'students-seek-lake-of-communication',
-      'author' => 'Admin',
-      'date' => 'Feb 09, 2015',
-      'excerpt' => "This is Photoshop's version of Lorem Ipsum. Proin gravida nibh vel velit auctor aliquet. Aenean sollicitudin, lorem quis biben dum auctor, nisi elit consequat ipsum, nec sagittis sem nibh id elit. Duis sed odio sit amet nibh vulputate cursus a sit amet mauris.",
-      'image' => asset('images/slide1.png'),
-      'category_icon' => '👥',
-    ],
-    [
-      'id' => 2,
-      'title' => 'Students Seek Lake of Communication',
-      'slug' => 'students-seek-lake-of-communication-2',
-      'author' => 'Admin',
-      'date' => 'Feb 09, 2015',
-      'excerpt' => "This is Photoshop's version of Lorem Ipsum. Proin gravida nibh vel velit auctor aliquet. Aenean sollicitudin, lorem quis biben dum auctor, nisi elit consequat ipsum, nec sagittis sem nibh id elit. Duis sed odio sit amet nibh vulputate cursus a sit amet mauris.",
-      'image' => asset('images/slide-2.png'),
-      'category_icon' => '🎓',
-    ],
-    [
-      'id' => 3,
-      'title' => 'Students Seek Lake of Communication',
-      'slug' => 'students-seek-lake-of-communication-3',
-      'author' => 'Admin',
-      'date' => 'Feb 09, 2015',
-      'excerpt' => "This is Photoshop's version of Lorem Ipsum. Proin gravida nibh vel velit auctor aliquet. Aenean sollicitudin, lorem quis biben dum auctor, nisi elit consequat ipsum, nec sagittis sem nibh id elit. Duis sed odio sit amet nibh vulputate cursus a sit amet mauris.",
-      'image' => asset('images/slide-3.png'),
-      'category_icon' => '📚',
-    ],
-  ];
+  $posts = collect($blogPosts ?? [])
+    ->map(function ($post) {
+      if (is_array($post)) {
+        return $post;
+      }
 
-  $courses = [
-    ['name' => 'Politics & History', 'count' => '03'],
-    ['name' => 'Journalism', 'count' => '01'],
-    ['name' => 'Medical Sciences', 'count' => '03'],
-    ['name' => 'Health', 'count' => '01'],
-    ['name' => 'Sports', 'count' => '03'],
-    ['name' => 'Arts', 'count' => '02'],
-    ['name' => 'Tourism & Culture', 'count' => '06'],
-  ];
+      $image = $post->featured_image;
 
-  $popular = [
-    [
-      'title' => 'Neque Porro Quisquam Est Qui Dolorem Dolor',
-      'date' => '19 Dec, 2015',
-      'img' => asset('images/slide1.png'),
-    ],
-    [
-      'title' => 'Neque Porro Quisquam Est Qui Dolorem Dolor',
-      'date' => '19 Dec, 2015',
-      'img' => asset('images/slide-2.png'),
-    ],
-    [
-      'title' => 'Neque Porro Quisquam Est Qui Dolorem Dolor',
-      'date' => '19 Dec, 2015',
-      'img' => asset('images/slide-3.png'),
-    ],
-  ];
+      if (blank($image)) {
+        $imageUrl = asset('images/slide1.png');
+      } elseif (\Illuminate\Support\Str::startsWith($image, ['http://', 'https://'])) {
+        $imageUrl = $image;
+      } else {
+        $imageUrl = asset('storage/'.$image);
+      }
 
-  $featured = [
-    [
-      'title' => 'Professional Teaching Course',
-      'instructor' => 'Anna Doe',
-      'price' => '$99.99',
-      'img' => asset('images/slide1.png'),
-    ],
-    [
-      'title' => 'Professional Teaching Course',
-      'instructor' => 'Anna Doe',
-      'price' => '$99.99',
-      'img' => asset('images/slide-2.png'),
-    ],
-    [
-      'title' => 'Professional Teaching Course',
-      'instructor' => 'Anna Doe',
-      'price' => '$99.99',
-      'img' => asset('images/slide-3.png'),
-    ],
-  ];
+      return [
+        'id' => $post->id,
+        'title' => $post->title,
+        'slug' => $post->slug,
+        'author' => $post->author?->name ?? 'Admin',
+        'date' => $post->published_at?->format('M d, Y') ?? $post->created_at?->format('M d, Y') ?? now()->format('M d, Y'),
+        'excerpt' => $post->excerpt
+            ?? \Illuminate\Support\Str::limit(strip_tags((string) $post->content), 240),
+        'image' => $imageUrl,
+        'category_icon' => '📰',
+        'detail_url' => route('blog.show', $post->slug),
+      ];
+    })
+    ->values()
+    ->all();
 
-  $tags = ['Science', 'Knowledge', 'Courage', 'Sports', 'Impression', 'History & Politics', 'Admission', 'Arts', 'Research', 'Career', 'PHD'];
+  $tags = $blogTags ?? ['Science', 'Knowledge', 'Courage', 'Sports', 'Impression', 'History & Politics', 'Admission', 'Arts', 'Research', 'Career', 'PHD'];
 
   $totalPages = 20;
   $currentPage = (int) request()->query('page', 1);
@@ -165,14 +115,14 @@
 <div class="container blog-container">
   <div class="blog-layout">
     <main>
-      @foreach ($posts as $post)
+      @forelse ($posts as $post)
         <article class="post-item">
           <div class="post-thumb">
             <img src="{{ $post['image'] }}" alt="{{ $post['title'] }}"/>
             <div class="cat-badge">{{ $post['category_icon'] }}</div>
           </div>
 
-          <a href="#" class="post-title">{{ strtoupper($post['title']) }}</a>
+          <a href="{{ $post['detail_url'] ?? '#' }}" class="post-title">{{ strtoupper($post['title']) }}</a>
 
           <div class="post-meta">
             <span><i class="fa fa-user"></i> {{ $post['author'] }}</span>
@@ -181,9 +131,14 @@
 
           <p class="post-excerpt">{{ $post['excerpt'] }}</p>
 
-          <a href="#" class="btn-gold">READ MORE</a>
+          <a href="{{ $post['detail_url'] ?? '#' }}" class="btn-gold">READ MORE</a>
         </article>
-      @endforeach
+      @empty
+        <article class="post-item">
+          <h3 class="post-title">NO BLOG POSTS YET</h3>
+          <p class="post-excerpt">Please check back later for updates from our school.</p>
+        </article>
+      @endforelse
 
       
     </main>
@@ -193,31 +148,6 @@
         <input type="text" name="search" id="sidebarSearchInput" placeholder="Search ..." value="{{ request('search', '') }}"/>
         <button type="submit"><i class="fa fa-search"></i></button>
       </form>
-
-      <div class="widget">
-        <div class="widget-title"><em>OUR</em> COURSE</div>
-        <ul class="course-list">
-          @foreach ($courses as $course)
-            <li>
-              {{ $course['name'] }}
-              <span>{{ $course['count'] }}</span>
-            </li>
-          @endforeach
-        </ul>
-      </div>
-
-      <div class="widget">
-        <div class="widget-title"><em>POPULAR</em> COURSES</div>
-        @foreach ($popular as $item)
-          <div class="popular-item">
-            <img src="{{ $item['img'] }}" alt="Popular course"/>
-            <div class="popular-info">
-              <h5>{{ $item['title'] }}</h5>
-              <span class="date">{{ $item['date'] }}</span>
-            </div>
-          </div>
-        @endforeach
-      </div>
 
       <div class="widget">
         <div class="widget-title"><em>WORKING</em> HOURS</div>
@@ -230,23 +160,6 @@
           <li><span class="day">Saturday</span><span class="time">10:00 am - 2:00 pm</span></li>
           <li><span class="day">Sunday</span><span class="closed">Closed</span></li>
         </ul>
-      </div>
-
-      <div class="widget">
-        <div class="widget-title"><em>POPULAR</em> COURSES</div>
-        @foreach ($featured as $item)
-          <div class="featured-item">
-            <img src="{{ $item['img'] }}" alt="Featured course"/>
-            <div class="featured-info">
-              <h5>{{ $item['title'] }}</h5>
-              <div class="stars">★★★★★</div>
-              <div class="featured-bottom">
-                <span class="instructor">{{ $item['instructor'] }}</span>
-                <span class="price-badge">{{ $item['price'] }}</span>
-              </div>
-            </div>
-          </div>
-        @endforeach
       </div>
 
       <div class="widget">

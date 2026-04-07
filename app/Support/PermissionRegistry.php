@@ -42,6 +42,10 @@ class PermissionRegistry
                 'label' => 'School Gallery',
                 'actions' => ['list', 'view', 'create', 'edit', 'delete'],
             ],
+            'blog_post' => [
+                'label' => 'Blog Posts',
+                'actions' => ['list', 'view', 'create', 'edit', 'delete'],
+            ],
             'contact_submission' => [
                 'label' => 'Contact Submissions',
                 'actions' => ['list', 'view', 'create', 'edit', 'delete'],
