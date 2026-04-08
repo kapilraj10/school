@@ -21,7 +21,7 @@ class MostUsedWidget extends Widget
             return [
                 [
                     'label' => 'Timetable Designer',
-                    'url' => route('timetable-designer'),
+                    'url' => route('filament.admin.pages.timetable-designer'),
                     'icon' => 'heroicon-o-calendar-days',
                     'color' => 'primary',
                     'click_count' => 0,

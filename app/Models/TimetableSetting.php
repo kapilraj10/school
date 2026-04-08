@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 
 class TimetableSetting extends Model
 {
@@ -20,9 +22,19 @@ class TimetableSetting extends Model
      */
     public static function get(string $key, mixed $default = null): mixed
     {
-        $setting = Cache::remember("timetable_setting_{$key}", 3600, function () use ($key) {
-            return static::where('key', $key)->first();
-        });
+        try {
+            $table = (new static)->getTable();
+
+            if (! Schema::hasTable($table)) {
+                return $default;
+            }
+
+            $setting = Cache::remember("timetable_setting_{$key}", 3600, function () use ($key) {
+                return static::where('key', $key)->first();
+            });
+        } catch (QueryException) {
+            return $default;
+        }
 
         if (! $setting) {
             return $default;

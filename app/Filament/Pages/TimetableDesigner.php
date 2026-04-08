@@ -39,9 +39,9 @@ class TimetableDesigner extends Page implements HasForms
 
     protected static ?int $navigationSort = 1;
 
-    public static function getUrl(array $parameters = [], bool $isAbsolute = true, ?string $panel = null, $tenant = null): string
+    public static function canAccess(): bool
     {
-        return route('timetable-designer');
+        return auth()->check();
     }
 
     // Page properties

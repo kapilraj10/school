@@ -14,18 +14,22 @@
 
   $galleryCategories = ['All', 'Activities', 'Finance', 'Administration', 'Academic'];
 
-  $galleryItems = \App\Models\SchoolGallery::query()
-    ->latest()
-    ->get(['image_url', 'category'])
-    ->map(function (\App\Models\SchoolGallery $gallery) {
-      return [
-        'img' => $gallery->image_url,
-        'caption' => ucfirst($gallery->category ?? 'Gallery') . ' Photo',
-        'category' => ucfirst($gallery->category ?? 'Academic'),
-      ];
-    })
-    ->values()
-    ->all();
+  try {
+    $galleryItems = \App\Models\SchoolGallery::query()
+      ->latest()
+      ->get(['image_url', 'category'])
+      ->map(function (\App\Models\SchoolGallery $gallery) {
+        return [
+          'img' => $gallery->image_url,
+          'caption' => ucfirst($gallery->category ?? 'Gallery') . ' Photo',
+          'category' => ucfirst($gallery->category ?? 'Academic'),
+        ];
+      })
+      ->values()
+      ->all();
+  } catch (\Throwable $exception) {
+    $galleryItems = [];
+  }
 @endphp
 <!DOCTYPE html>
 <html lang="en">

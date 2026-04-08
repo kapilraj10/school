@@ -5,11 +5,14 @@ namespace App\Providers\Filament;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Widgets\MostUsedWidget;
 use App\Filament\Widgets\StatsOverviewWidget;
+use App\Http\Responses\FilamentLoginResponse;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Http\Responses\Auth\Contracts\LoginResponse as LoginResponseContract;
 use Filament\Navigation\NavigationGroup;
+use Filament\Navigation\NavigationItem;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -27,6 +30,8 @@ class AdminPanelProvider extends PanelProvider
 {
     public function boot(): void
     {
+        $this->app->bind(LoginResponseContract::class, FilamentLoginResponse::class);
+
         FilamentView::registerRenderHook(
             PanelsRenderHook::BODY_END,
             fn (): string => Blade::render(<<<'HTML'
@@ -96,6 +101,14 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make()->label('View Timetable'),
                 NavigationGroup::make()->label('Timetable Settings'),
                 NavigationGroup::make()->label('Website Management'),
+            ])
+            ->navigationItems([
+                NavigationItem::make('Time Management')
+                    ->group('Timetable Management')
+                    ->icon('heroicon-o-calendar-days')
+                    ->url(fn (): string => route('filament.admin.pages.timetable-designer'))
+                    ->sort(1)
+                    ->visible(fn (): bool => auth()->check()),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
