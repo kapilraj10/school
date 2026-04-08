@@ -3,7 +3,6 @@
 use App\Http\Controllers\BlogController;
 use App\Http\Controllers\ContactSubmissionController;
 use App\Http\Controllers\HomeController;
-use App\Livewire\TimetableDesigner;
 use App\Models\PageClick;
 use App\Services\TimetablePrintService;
 use Illuminate\Http\Request;
@@ -21,7 +20,7 @@ Route::post('/contact', [ContactSubmissionController::class, 'store'])->name('co
 Route::redirect('/login', '/admin/login')->name('login');
 
 Route::middleware(['auth'])->group(function () {
-    Route::get('/timetable-designer', TimetableDesigner::class)
+    Route::get('/timetable-designer', fn () => redirect()->route('filament.admin.pages.timetable-designer'))
         ->middleware('permission:timetable_designer.view')
         ->name('timetable-designer');
 

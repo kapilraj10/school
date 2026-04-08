@@ -3,12 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Models\BlogPost;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class BlogController extends Controller
 {
     public function index(): View
     {
+        if (! Schema::hasTable('blog_posts')) {
+            return view('blog', [
+                'blogPosts' => collect(),
+                'blogTags' => [],
+            ]);
+        }
+
         $tag = request('tag');
         $search = request('search');
 

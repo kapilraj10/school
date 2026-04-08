@@ -222,13 +222,13 @@
         <img src="{{ $leader['img'] }}" alt="{{ $leader['display_role'] }}" class="leadership-photo" />
         <div class="leadership-photo-overlay">
           @if ($leader['twitter'])
-            <a href="{{ $leader['twitter'] }}" class="leadership-social-btn" title="Twitter" aria-label="{{ $leader['display_role'] }} Twitter" target="_blank" rel="noopener noreferrer">𝕏</a>
+            <a href="{{ $leader['twitter'] }}" class="leadership-social-btn" title="Twitter" aria-label="{{ $leader['display_role'] }} Twitter" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i></a>
           @endif
           @if ($leader['facebook'])
-            <a href="{{ $leader['facebook'] }}" class="leadership-social-btn" title="Facebook" aria-label="{{ $leader['display_role'] }} Facebook" target="_blank" rel="noopener noreferrer">f</a>
+            <a href="{{ $leader['facebook'] }}" class="leadership-social-btn" title="Facebook" aria-label="{{ $leader['display_role'] }} Facebook" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-facebook-f" aria-hidden="true"></i></a>
           @endif
           @if ($leader['linkedin'])
-            <a href="{{ $leader['linkedin'] }}" class="leadership-social-btn" title="LinkedIn" aria-label="{{ $leader['display_role'] }} LinkedIn" target="_blank" rel="noopener noreferrer">in</a>
+            <a href="{{ $leader['linkedin'] }}" class="leadership-social-btn" title="LinkedIn" aria-label="{{ $leader['display_role'] }} LinkedIn" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-linkedin-in" aria-hidden="true"></i></a>
           @endif
         </div>
       </div>
@@ -252,13 +252,13 @@
           />
           <div class="photo-overlay">
             @if ($teacher['twitter'])
-              <a href="{{ $teacher['twitter'] }}" class="social-btn" title="Twitter" target="_blank" rel="noopener noreferrer">𝕏</a>
+              <a href="{{ $teacher['twitter'] }}" class="social-btn" title="Twitter" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i></a>
             @endif
             @if ($teacher['facebook'])
-              <a href="{{ $teacher['facebook'] }}" class="social-btn" title="Facebook" target="_blank" rel="noopener noreferrer">f</a>
+              <a href="{{ $teacher['facebook'] }}" class="social-btn" title="Facebook" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-facebook-f" aria-hidden="true"></i></a>
             @endif
             @if ($teacher['linkedin'])
-              <a href="{{ $teacher['linkedin'] }}" class="social-btn" title="LinkedIn" target="_blank" rel="noopener noreferrer">in</a>
+              <a href="{{ $teacher['linkedin'] }}" class="social-btn" title="LinkedIn" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-linkedin-in" aria-hidden="true"></i></a>
             @endif
           </div>
         </div>
