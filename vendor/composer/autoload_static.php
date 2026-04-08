@@ -924,6 +924,7 @@ class ComposerStaticInit86a06bc528b2bde2b5ea8322072d419e
         'App\\Http\\Controllers\\Controller' => __DIR__ . '/../..' . '/app/Http/Controllers/Controller.php',
         'App\\Http\\Controllers\\HomeController' => __DIR__ . '/../..' . '/app/Http/Controllers/HomeController.php',
         'App\\Http\\Requests\\StoreContactSubmissionRequest' => __DIR__ . '/../..' . '/app/Http/Requests/StoreContactSubmissionRequest.php',
+        'App\\Http\\Responses\\FilamentLoginResponse' => __DIR__ . '/../..' . '/app/Http/Responses/FilamentLoginResponse.php',
         'App\\Livewire\\TimetableDesigner' => __DIR__ . '/../..' . '/app/Livewire/TimetableDesigner.php',
         'App\\Models\\AcademicTerm' => __DIR__ . '/../..' . '/app/Models/AcademicTerm.php',
         'App\\Models\\BlogPost' => __DIR__ . '/../..' . '/app/Models/BlogPost.php',

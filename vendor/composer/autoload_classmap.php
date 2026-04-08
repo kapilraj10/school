@@ -116,6 +116,7 @@ return array(
     'App\\Http\\Controllers\\Controller' => $baseDir . '/app/Http/Controllers/Controller.php',
     'App\\Http\\Controllers\\HomeController' => $baseDir . '/app/Http/Controllers/HomeController.php',
     'App\\Http\\Requests\\StoreContactSubmissionRequest' => $baseDir . '/app/Http/Requests/StoreContactSubmissionRequest.php',
+    'App\\Http\\Responses\\FilamentLoginResponse' => $baseDir . '/app/Http/Responses/FilamentLoginResponse.php',
     'App\\Livewire\\TimetableDesigner' => $baseDir . '/app/Livewire/TimetableDesigner.php',
     'App\\Models\\AcademicTerm' => $baseDir . '/app/Models/AcademicTerm.php',
     'App\\Models\\BlogPost' => $baseDir . '/app/Models/BlogPost.php',
