@@ -4,6 +4,9 @@
     # Canonicalize URLs that include /public to clean root URLs.
     RewriteRule ^public(?:/(.*))?$ /$1 [R=301,L,NC]
 
+    # Route domain root directly to Laravel front controller.
+    RewriteRule ^$ public/index.php [L]
+
     # Keep direct existing files and directories unchanged.
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
