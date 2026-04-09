@@ -1,19 +1,30 @@
 const initMobileNav = () => {
   const navToggle = document.querySelector('.nav-toggle');
   const navLinks = document.querySelector('.nav-links');
+  const navToggleIcon = navToggle?.querySelector('i');
 
   if (!navToggle || !navLinks) {
     return;
   }
 
+  const setToggleVisualState = (isOpen) => {
+    navToggle.classList.toggle('is-open', isOpen);
+    navToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+
+    if (navToggleIcon) {
+      navToggleIcon.classList.toggle('fa-bars', !isOpen);
+      navToggleIcon.classList.toggle('fa-times', isOpen);
+    }
+  };
+
   const closeMenu = () => {
     navLinks.classList.remove('open');
-    navToggle.setAttribute('aria-expanded', 'false');
+    setToggleVisualState(false);
   };
 
   navToggle.addEventListener('click', () => {
     const isOpen = navLinks.classList.toggle('open');
-    navToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    setToggleVisualState(isOpen);
   });
 
   navLinks.querySelectorAll('a').forEach((link) => {
@@ -31,6 +42,8 @@ const initMobileNav = () => {
       closeMenu();
     }
   });
+
+  setToggleVisualState(false);
 };
 
 if (document.readyState === 'loading') {
