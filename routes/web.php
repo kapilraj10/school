@@ -6,6 +6,7 @@ use App\Http\Controllers\HomeController;
 use App\Models\PageClick;
 use App\Services\TimetablePrintService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
@@ -18,6 +19,31 @@ Route::get('/contact', [ContactSubmissionController::class, 'create'])->name('co
 Route::post('/contact', [ContactSubmissionController::class, 'store'])->name('contact.submit');
 
 Route::redirect('/login', '/admin/login')->name('login');
+
+Route::post('/admin/login', function (Request $request) {
+    $credentials = $request->input('data', []);
+
+    $email = $credentials['email'] ?? $request->string('email')->toString();
+    $password = $credentials['password'] ?? $request->string('password')->toString();
+    $remember = (bool) ($credentials['remember'] ?? $request->boolean('remember'));
+
+    $request->validate([
+        'data.email' => ['nullable', 'email'],
+        'data.password' => ['nullable', 'string'],
+        'email' => ['nullable', 'email'],
+        'password' => ['nullable', 'string'],
+    ]);
+
+    if (blank($email) || blank($password) || ! Auth::attempt(['email' => $email, 'password' => $password], $remember)) {
+        return back()->withErrors([
+            'email' => __('filament-panels::pages/auth/login.messages.failed'),
+        ])->onlyInput('email');
+    }
+
+    $request->session()->regenerate();
+
+    return redirect()->intended('/admin');
+})->middleware('guest');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('/timetable-designer', fn () => redirect()->route('filament.admin.pages.timetable-designer'))
