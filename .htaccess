@@ -14,4 +14,8 @@
 
     # Forward everything else to Laravel's public directory.
     RewriteRule ^(.*)$ public/$1 [L]
+
+
+
+    
 </IfModule>
